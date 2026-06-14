@@ -16,7 +16,7 @@ object TerminalShellAssets {
         installProotSupportLibraries(activity)
         installAidevCommandScripts(home)
         writeCanonicalRc(activity, home, rc)
-        writeShellEntry(rc, entry)
+        writeShellEntry(home, rc, entry)
         return TerminalShellAssetPaths(home, entry)
     }
 
@@ -54,7 +54,7 @@ object TerminalShellAssets {
         rc.writeText(
             """
             # AIDev canonical shell rc. 自动生成，请不要在这里保存个人配置。
-            AIDEV_VERSION="0.12.9-oobe-final-debug"
+            AIDEV_VERSION="0.12.10-auto-enter-ubuntu-debug"
             AIDEV_HOME="${home.absolutePath}"
             AIDEV_BIN="${'$'}AIDEV_HOME/dev-env/bin"
             AIDEV_ROOTFS="${'$'}AIDEV_HOME/ubuntu-rootfs"
@@ -80,7 +80,17 @@ object TerminalShellAssets {
         )
     }
 
-    private fun writeShellEntry(rc: File, entry: File) {
-        entry.writeText("export ENV=\"${rc.absolutePath}\"\nexec sh -i\n")
+    private fun writeShellEntry(home: File, rc: File, entry: File) {
+        val core = File(home, "dev-env/bin/aidev-ubuntu-core")
+        val ready = File(home, "ubuntu-rootfs/.aidev-rootfs-ready")
+        entry.writeText(
+            """
+            export ENV="${rc.absolutePath}"
+            if [ -f "${ready.absolutePath}" ] && [ -f "${core.absolutePath}" ]; then
+              /system/bin/sh "${core.absolutePath}" aidev-auto-bootstrap
+            fi
+            exec sh -i
+            """.trimIndent() + "\n"
+        )
     }
 }

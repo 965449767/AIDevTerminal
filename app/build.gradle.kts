@@ -11,8 +11,8 @@ android {
         applicationId = "com.aidev.terminal"
         minSdk = 26
         targetSdk = 34
-        versionCode = 51
-        versionName = "0.12.9-oobe-final-debug"
+        versionCode = 52
+        versionName = "0.12.10-auto-enter-ubuntu-debug"
         ndk {
             abiFilters += listOf("arm64-v8a")
         }

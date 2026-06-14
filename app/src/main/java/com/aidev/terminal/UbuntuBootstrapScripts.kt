@@ -248,7 +248,11 @@ AIDEV_APT_EOF
           ubuntu) enter_ubuntu "${'$'}@" ;;
           install-ubuntu) install_ubuntu "${'$'}@" ;;
           aidev-auto-bootstrap)
-            echo "AIDev 自动初始化/进入 Ubuntu 环境。"
+            if has_ubuntu; then
+              echo "AIDev 自动进入 Ubuntu。"
+            else
+              echo "AIDev 自动初始化/进入 Ubuntu 环境。"
+            fi
             enter_ubuntu "${'$'}@"
             ;;
           *) echo "未知命令：${'$'}cmd"; exit 2 ;;
