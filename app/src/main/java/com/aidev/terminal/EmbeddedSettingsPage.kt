@@ -231,18 +231,18 @@ class EmbeddedSettingsPage : ShellPage {
 
     private fun terminalFontDialog() {
         val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val current = prefs.getFloat("font_sp", 16f).toInt().coerceIn(8, 24)
+        val current = prefs.getFloat("font_sp", 15f).toInt().coerceIn(10, 24)
         val box = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(ui.dp(20), ui.dp(10), ui.dp(20), 0)
         }
         val value = ui.text("${current}sp", 18f, ui.palette.text, bold = true)
         val seek = SeekBar(activity).apply {
-            max = 16
-            progress = current - 8
+            max = 14
+            progress = current - 10
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    value.text = "${8 + progress}sp"
+                    value.text = "${10 + progress}sp"
                 }
                 override fun onStartTrackingTouch(seekBar: SeekBar?) {}
                 override fun onStopTrackingTouch(seekBar: SeekBar?) {}
@@ -254,7 +254,7 @@ class EmbeddedSettingsPage : ShellPage {
             .setTitle("终端字号")
             .setView(box)
             .setPositiveButton("应用") { _, _ ->
-                prefs.edit().putFloat("font_sp", (8 + seek.progress).toFloat()).apply()
+                prefs.edit().putFloat("font_sp", (10 + seek.progress).toFloat()).apply()
                 toast("终端字号已更新，终端页可用字号按钮立即刷新")
             }
             .setNegativeButton("取消", null)

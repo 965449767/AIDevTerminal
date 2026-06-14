@@ -48,6 +48,12 @@ private data class EmbeddedVirtualKey(
 )
 
 class EmbeddedTerminalPage : ShellPage {
+    private companion object {
+        const val DEFAULT_FONT_SP = 15f
+        const val MIN_FONT_SP = 10f
+        const val MAX_FONT_SP = 24f
+    }
+
     private var activity: Activity? = null
     private var ui: AIDevUi? = null
     private var terminalView: TerminalView? = null
@@ -58,6 +64,8 @@ class EmbeddedTerminalPage : ShellPage {
     private val sessions = mutableListOf<EmbeddedTermSession>()
     private var ctrlLatched = false
     private var autoBootstrapDispatched = false
+    private var pendingFontSp = DEFAULT_FONT_SP
+    private var fontApplyScheduled = false
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
@@ -80,6 +88,7 @@ class EmbeddedTerminalPage : ShellPage {
             setBackgroundColor(Color.BLACK)
             isFocusable = true
             isFocusableInTouchMode = true
+            pendingFontSp = currentFontSp(activity)
             setTextSize(fontPx(activity))
             setTerminalViewClient(viewClient(activity))
         }
@@ -253,8 +262,9 @@ class EmbeddedTerminalPage : ShellPage {
             ?.takeIf { it.isDirectory }
 
     private fun applyFontPreset(activity: Activity, sp: Float) {
-        val value = sp.coerceIn(8f, 24f)
+        val value = sp.coerceIn(MIN_FONT_SP, MAX_FONT_SP)
         activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).edit().putFloat("font_sp", value).apply()
+        pendingFontSp = value
         terminalView?.setTextSize((value * activity.resources.displayMetrics.scaledDensity).toInt())
         terminalView?.onScreenUpdated()
     }
@@ -400,11 +410,16 @@ class EmbeddedTerminalPage : ShellPage {
         input.replace("\\n", "\n").replace("\\t", "\t").replace("\\e", "\u001b")
 
     private fun fontPx(activity: Activity): Int =
-        (activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).getFloat("font_sp", 16f).coerceIn(8f, 24f) * activity.resources.displayMetrics.scaledDensity).toInt()
+        (currentFontSp(activity) * activity.resources.displayMetrics.scaledDensity).toInt()
+
+    private fun currentFontSp(activity: Activity): Float =
+        activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+            .getFloat("font_sp", DEFAULT_FONT_SP)
+            .coerceIn(MIN_FONT_SP, MAX_FONT_SP)
 
     private fun showFontDialog(activity: Activity) {
         val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val current = prefs.getFloat("font_sp", 16f).coerceIn(8f, 24f)
+        val current = currentFontSp(activity)
         val box = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(ui?.dp(20) ?: 20, ui?.dp(10) ?: 10, ui?.dp(20) ?: 20, 0)
@@ -415,11 +430,11 @@ class EmbeddedTerminalPage : ShellPage {
             setTextColor(ui?.palette?.text ?: Color.WHITE)
         }
         val seek = SeekBar(activity).apply {
-            max = 16
-            progress = current.toInt() - 8
+            max = (MAX_FONT_SP - MIN_FONT_SP).toInt()
+            progress = current.toInt() - MIN_FONT_SP.toInt()
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    value.text = "${8 + progress}sp"
+                    value.text = "${MIN_FONT_SP.toInt() + progress}sp"
                 }
                 override fun onStartTrackingTouch(seekBar: SeekBar?) {}
                 override fun onStopTrackingTouch(seekBar: SeekBar?) {}
@@ -431,8 +446,9 @@ class EmbeddedTerminalPage : ShellPage {
             .setTitle("终端字号")
             .setView(box)
             .setPositiveButton("应用") { _, _ ->
-                val sp = (8 + seek.progress).toFloat()
+                val sp = (MIN_FONT_SP.toInt() + seek.progress).toFloat()
                 prefs.edit().putFloat("font_sp", sp).apply()
+                pendingFontSp = sp
                 terminalView?.setTextSize((sp * activity.resources.displayMetrics.scaledDensity).toInt())
                 terminalView?.onScreenUpdated()
             }
@@ -694,7 +710,6 @@ class EmbeddedTerminalPage : ShellPage {
     private fun maybeAutoBootstrapUbuntu(activity: Activity) {
         if (autoBootstrapDispatched) return
         autoBootstrapDispatched = true
-        session?.write("\n# AIDev 自动初始化/进入 Ubuntu 环境\n")
         session?.write("aidev-auto-bootstrap\n")
         terminalView?.requestFocus()
     }
@@ -726,7 +741,24 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun viewClient(activity: Activity): TerminalViewClient =
         object : TerminalViewClient {
-            override fun onScale(scale: Float): Float = 1f
+            override fun onScale(scale: Float): Float {
+                val damped = 1f + (scale - 1f) * 0.55f
+                pendingFontSp = (pendingFontSp * damped).coerceIn(MIN_FONT_SP, MAX_FONT_SP)
+                if (!fontApplyScheduled) {
+                    fontApplyScheduled = true
+                    terminalView?.post {
+                        fontApplyScheduled = false
+                        val next = pendingFontSp.coerceIn(MIN_FONT_SP, MAX_FONT_SP)
+                        val current = currentFontSp(activity)
+                        if (kotlin.math.abs(next - current) >= 0.2f) {
+                            activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).edit().putFloat("font_sp", next).apply()
+                            terminalView?.setTextSize((next * activity.resources.displayMetrics.scaledDensity).toInt())
+                            terminalView?.onScreenUpdated()
+                        }
+                    }
+                }
+                return 1f
+            }
             override fun onSingleTapUp(e: MotionEvent) {
                 terminalView?.requestFocus()
                 (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT)

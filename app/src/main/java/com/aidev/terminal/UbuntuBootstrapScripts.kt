@@ -245,12 +245,20 @@ AIDEV_APT_EOF
           done
         }
 
+        ubuntu_logo() {
+          status="${'$'}1"
+          printf '%s\n' \
+            '╭────────────────────╮' \
+            '│   AIDev Ubuntu     │' \
+            "│   ${'$'}status" \
+            '╰────────────────────╯'
+        }
+
         enter_ubuntu() {
           has_ubuntu || install_ubuntu --fast || return ${'$'}?
           ensure_android_groups "${'$'}AIDEV_ROOTFS"
           shell="/bin/bash"
           [ -x "${'$'}AIDEV_ROOTFS/bin/bash" ] || shell="/bin/sh"
-          echo "进入 Ubuntu：${'$'}AIDEV_ROOTFS"
           cd "${'$'}AIDEV_HOME" || exit 1
           exec "${'$'}AIDEV_PROOT" --link2symlink -0 -r "${'$'}AIDEV_ROOTFS" \
             -b /dev -b /proc -b /sys -b /sdcard -b "${'$'}AIDEV_HOME:/host-home" \
@@ -264,9 +272,9 @@ AIDEV_APT_EOF
           install-ubuntu) install_ubuntu "${'$'}@" ;;
           aidev-auto-bootstrap)
             if has_ubuntu; then
-              echo "AIDev 自动进入 Ubuntu。"
+              ubuntu_logo "自动进入环境     │"
             else
-              echo "AIDev 自动初始化/进入 Ubuntu 环境。"
+              ubuntu_logo "正在初始化环境   │"
             fi
             enter_ubuntu "${'$'}@"
             ;;

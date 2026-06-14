@@ -11,8 +11,8 @@ android {
         applicationId = "com.aidev.terminal"
         minSdk = 26
         targetSdk = 34
-        versionCode = 53
-        versionName = "0.12.11-keyboard-group-cleanup-debug"
+        versionCode = 54
+        versionName = "0.12.12-terminal-polish-debug"
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
