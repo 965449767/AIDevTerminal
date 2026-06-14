@@ -16,7 +16,9 @@ Local commit identity:
 AIDev Harness <aidev-harness@example.local>
 ```
 
-Do not run `git commit`, `git tag`, `git reset`, `git clean`, `git push`, or any remote operation unless the user explicitly confirms.
+Git commits are allowed automatically when a phase is complete, validation passes, and the change is worth preserving.
+
+Do not run `git tag`, `git reset`, `git clean`, `git push`, or any remote operation unless the user explicitly confirms.
 
 ## Purpose
 
@@ -47,9 +49,12 @@ If Git is unavailable, record the limitation in `.harness/session-log.md`.
 
 ## Commit Policy
 
-Do not commit automatically.
+Commit automatically when:
 
-Only commit after the user explicitly says to commit.
+- the phase is complete
+- validation passed
+- the working tree contains scoped changes
+- the commit message can be stated clearly
 
 Recommended message style:
 
@@ -92,7 +97,6 @@ Never run these without explicit confirmation:
 git reset --hard
 git clean -fd
 git push --force
-git commit
 git tag
 ```
 

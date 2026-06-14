@@ -81,10 +81,11 @@ Use `scripts/safe_bash_guard.sh` when evaluating risky shell commands.
 ## Git Backup Policy
 
 - Check Git status before and after each phase when Git is available.
-- Do not run `git init`, `git commit`, `git tag`, `git reset --hard`, `git clean -fd`, or `git push --force` unless the user explicitly approves.
+- Git commits are allowed automatically when a phase is complete, validation passes, and the change is worth preserving.
+- Do not run `git init`, `git tag`, `git reset --hard`, `git clean -fd`, `git push`, or `git push --force` unless the user explicitly approves.
 - If the project is not a Git repository, report it briefly and continue only within the approved file scope.
 - Use `docs/git-workflow.md` for backup and rollback rules.
-- If an operation requires approval, give the exact recommended command and the reason before asking.
+- If an operation still requires approval, give the exact recommended command and the reason before asking.
 
 ## Handoff Policy
 

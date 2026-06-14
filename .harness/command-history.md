@@ -15,6 +15,42 @@ Result:
 passed
 ```
 
+## 2026-06-14 - 0.13.2-c
+
+Commands:
+
+```bash
+git status --short
+bash scripts/harness_check.sh
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 /data/user/work/gradle/gradle-8.14.5/bin/gradle -p "/workspace/AIDevTerminal" :app:assembleDebug --no-daemon
+git diff --stat
+```
+
+Result:
+
+```text
+passed
+```
+
+## 2026-06-14 - 0.13.2-b
+
+Commands:
+
+```bash
+git add .
+git commit -m "refactor(terminal): extract ubuntu bootstrap scripts"
+git status --short
+bash scripts/harness_check.sh
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 /data/user/work/gradle/gradle-8.14.5/bin/gradle -p "/workspace/AIDevTerminal" :app:assembleDebug --no-daemon
+git diff --stat
+```
+
+Result:
+
+```text
+passed
+```
+
 ## 2026-06-14 - Git initialization
 
 Commands:

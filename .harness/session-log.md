@@ -118,6 +118,86 @@ Changes are not committed.
 下一步：商量 0.13.2-b
 ```
 
+## 2026-06-14 - 0.13.2-b Terminal Shell Assets Extraction
+
+### Summary
+
+Committed `0.13.2-a`, then moved terminal shell asset setup out of `EmbeddedShellPages.kt` into `TerminalShellAssets.kt`.
+
+### Files Created or Updated
+
+- `app/src/main/java/com/aidev/terminal/TerminalShellAssets.kt`
+- `app/src/main/java/com/aidev/terminal/EmbeddedShellPages.kt`
+- `current-task.md`
+- `.harness/session-state.json`
+- `.harness/session-log.md`
+- `.harness/progress-map.md`
+
+### Validation
+
+Passed:
+
+```bash
+bash scripts/harness_check.sh
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 /data/user/work/gradle/gradle-8.14.5/bin/gradle -p "/workspace/AIDevTerminal" :app:assembleDebug --no-daemon
+```
+
+### Git Status
+
+`0.13.2-b` changes are not committed.
+
+### Progress Report
+
+```text
+已完成：0.13.2-b
+本次完成：抽出终端启动资产逻辑
+总体进度：66%
+剩余：1 小阶段
+验证：通过
+下一步：商量 0.13.2-c
+```
+
+## 2026-06-14 - 0.13.2-c Embedded Page Split
+
+### Summary
+
+Moved file, task, and settings pages out of `EmbeddedShellPages.kt` into separate files.
+
+### Files Created or Updated
+
+- `app/src/main/java/com/aidev/terminal/EmbeddedFilesPage.kt`
+- `app/src/main/java/com/aidev/terminal/EmbeddedTasksPage.kt`
+- `app/src/main/java/com/aidev/terminal/EmbeddedSettingsPage.kt`
+- `app/src/main/java/com/aidev/terminal/EmbeddedShellPages.kt`
+- `current-task.md`
+- `.harness/session-state.json`
+- `.harness/session-log.md`
+- `.harness/progress-map.md`
+
+### Validation
+
+Passed:
+
+```bash
+bash scripts/harness_check.sh
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 /data/user/work/gradle/gradle-8.14.5/bin/gradle -p "/workspace/AIDevTerminal" :app:assembleDebug --no-daemon
+```
+
+### Git Status
+
+`0.13.2-b/c` changes are not committed.
+
+### Progress Report
+
+```text
+已完成：0.13.2-c
+本次完成：拆分文件页、任务页、设置页
+总体进度：100%
+剩余：0 小阶段
+验证：通过
+下一步：提交或导出 APK
+```
+
 ## 2026-06-14 - Android and Git Guidelines
 
 ### Summary

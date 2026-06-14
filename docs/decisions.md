@@ -93,3 +93,18 @@ Initialize Git, rename the default branch to `main`, configure local commit iden
 - Future phases can use `git status`, `git diff`, and commits for backup and rollback.
 - Destructive Git operations still require explicit user approval.
 - Remote push remains out of scope until the user provides a remote repository.
+
+## 2026-06-14 - Allow automatic Git commits after validated phases
+
+### Context
+
+The user gave standing approval for automatic Git commits when the agent believes a completed phase should be preserved.
+
+### Decision
+
+Automatically commit scoped phase changes after validation passes.
+
+### Consequences
+
+- The agent no longer needs to ask before normal `git commit`.
+- `git tag`, `git reset`, `git clean`, `git push`, and remote configuration still require explicit user approval.

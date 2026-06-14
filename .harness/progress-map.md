@@ -7,8 +7,8 @@
 | `0.13.0` Harness initialization | complete | 100% |
 | `0.13.1` Android and Git guidelines | complete | 100% |
 | `0.13.2-a` Ubuntu script extraction | complete | 100% |
-| `0.13.2-b` Terminal shell assets extraction | pending | 0% |
-| `0.13.2-c` Page split review | pending | 0% |
+| `0.13.2-b` Terminal shell assets extraction | complete | 100% |
+| `0.13.2-c` Page split | complete | 100% |
 
 ## Reporting Rule
 

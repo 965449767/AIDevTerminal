@@ -1,26 +1,30 @@
 {
-  "task_id": "0.13.2-a-ubuntu-script-extraction",
+  "task_id": "0.13.2-c-embedded-page-split",
   "status": "complete",
   "current_phase": "handoff",
   "last_updated": "2026-06-14",
   "overall_progress_percent": 100,
   "active_plan": [
-    "Inspect EmbeddedShellPages.kt",
-    "Extract Ubuntu script generation",
-    "Keep behavior-compatible call sites",
+    "Continue after 0.13.2-b",
+    "Inspect embedded page class boundaries",
+    "Split files, tasks, and settings pages",
+    "Keep class names and package unchanged",
     "Run harness validation",
     "Run Android debug build",
     "Record handoff"
   ],
   "next_3_steps": [
-    "Review 0.13.2-a diff",
-    "Discuss 0.13.2-b",
-    "Ask before any commit or tag"
+    "Review 0.13.2 diff",
+    "Decide whether to commit 0.13.2-b/c",
+    "Build and export APK if requested"
   ],
   "changed_files": [
     "current-task.md",
     "app/src/main/java/com/aidev/terminal/EmbeddedShellPages.kt",
-    "app/src/main/java/com/aidev/terminal/UbuntuBootstrapScripts.kt",
+    "app/src/main/java/com/aidev/terminal/TerminalShellAssets.kt",
+    "app/src/main/java/com/aidev/terminal/EmbeddedFilesPage.kt",
+    "app/src/main/java/com/aidev/terminal/EmbeddedTasksPage.kt",
+    "app/src/main/java/com/aidev/terminal/EmbeddedSettingsPage.kt",
     ".harness/session-log.md",
     ".harness/progress-map.md",
     ".harness/command-history.md",
@@ -43,7 +47,7 @@
     "blocked_on": null
   },
   "handoff": {
-    "last_summary": "0.13.2-a completed. Ubuntu script generation moved from EmbeddedShellPages.kt into UbuntuBootstrapScripts.kt. Harness check and debug build passed.",
-    "resume_from": "Run /start, review 0.13.2-a diff, then discuss 0.13.2-b."
+    "last_summary": "0.13.2-c completed. File, task, and settings pages moved out of EmbeddedShellPages.kt. Harness check and debug build passed.",
+    "resume_from": "Run /start, review 0.13.2 diff, then decide commit and APK export."
   }
 }
