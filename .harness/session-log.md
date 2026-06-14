@@ -79,6 +79,45 @@ git log --oneline -1
 下一步：商量 0.13.2 工程结构整理
 ```
 
+## 2026-06-14 - 0.13.2-a Ubuntu Script Extraction
+
+### Summary
+
+Moved Ubuntu script generation out of `EmbeddedShellPages.kt` into `UbuntuBootstrapScripts.kt`.
+
+### Files Created or Updated
+
+- `app/src/main/java/com/aidev/terminal/UbuntuBootstrapScripts.kt`
+- `app/src/main/java/com/aidev/terminal/EmbeddedShellPages.kt`
+- `current-task.md`
+- `.harness/session-state.json`
+- `.harness/session-log.md`
+- `.harness/progress-map.md`
+
+### Validation
+
+Passed:
+
+```bash
+bash scripts/harness_check.sh
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 /data/user/work/gradle/gradle-8.14.5/bin/gradle -p "/workspace/AIDevTerminal" :app:assembleDebug --no-daemon
+```
+
+### Git Status
+
+Changes are not committed.
+
+### Progress Report
+
+```text
+已完成：0.13.2-a
+本次完成：抽出 Ubuntu 脚本生成逻辑
+总体进度：33%
+剩余：2 小阶段
+验证：通过
+下一步：商量 0.13.2-b
+```
+
 ## 2026-06-14 - Android and Git Guidelines
 
 ### Summary

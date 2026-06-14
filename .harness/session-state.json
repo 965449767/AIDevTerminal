@@ -1,61 +1,49 @@
 {
-  "task_id": "git-initial-baseline",
+  "task_id": "0.13.2-a-ubuntu-script-extraction",
   "status": "complete",
   "current_phase": "handoff",
   "last_updated": "2026-06-14",
   "overall_progress_percent": 100,
   "active_plan": [
-    "Create .gitignore",
-    "Initialize Git",
-    "Rename branch to main",
-    "Configure local Git identity",
+    "Inspect EmbeddedShellPages.kt",
+    "Extract Ubuntu script generation",
+    "Keep behavior-compatible call sites",
     "Run harness validation",
-    "Create initial snapshot commit",
+    "Run Android debug build",
     "Record handoff"
   ],
   "next_3_steps": [
-    "Ask before creating any tag or remote",
-    "Discuss 0.13.2 engineering cleanup plan",
-    "Use Git status before and after future phases"
+    "Review 0.13.2-a diff",
+    "Discuss 0.13.2-b",
+    "Ask before any commit or tag"
   ],
   "changed_files": [
-    "AGENTS.md",
     "current-task.md",
-    "docs/android-guidelines.md",
-    "docs/git-workflow.md",
-    "docs/verification.md",
-    "docs/coding-guidelines.md",
-    "docs/decisions.md",
-    "docs/error-journal.md",
+    "app/src/main/java/com/aidev/terminal/EmbeddedShellPages.kt",
+    "app/src/main/java/com/aidev/terminal/UbuntuBootstrapScripts.kt",
     ".harness/session-log.md",
     ".harness/progress-map.md",
     ".harness/command-history.md",
-    "AGENTS.md",
-    ".gitignore"
+    ".harness/session-state.json"
   ],
   "validation": {
     "last_commands": [
-      "git init",
-      "git branch -m main",
-      "git config user.name \"AIDev Harness\"",
-      "git config user.email \"aidev-harness@example.local\"",
       "git status --short",
       "bash scripts/harness_check.sh",
-      "git add .",
-      "git commit -m \"chore: initial aidev terminal snapshot\"",
-      "git log --oneline -1"
+      "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 /data/user/work/gradle/gradle-8.14.5/bin/gradle -p \"/workspace/AIDevTerminal\" :app:assembleDebug --no-daemon",
+      "git diff --stat"
     ],
     "last_result": "passed",
     "known_failures": []
   },
   "cognitive_state": {
     "failure_count": 0,
-    "current_mode": "git-initialization",
+    "current_mode": "structure-cleanup",
     "tried_approaches": [],
     "blocked_on": null
   },
   "handoff": {
-    "last_summary": "Git initialized on main branch. Initial snapshot commit created: 9a1b229 chore: initial aidev terminal snapshot.",
-    "resume_from": "Run /start, check git status, then discuss 0.13.2 engineering cleanup."
+    "last_summary": "0.13.2-a completed. Ubuntu script generation moved from EmbeddedShellPages.kt into UbuntuBootstrapScripts.kt. Harness check and debug build passed.",
+    "resume_from": "Run /start, review 0.13.2-a diff, then discuss 0.13.2-b."
   }
 }
