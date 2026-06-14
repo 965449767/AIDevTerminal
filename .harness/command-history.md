@@ -33,6 +33,22 @@ Result:
 repository initialized on main branch
 ```
 
+Commands:
+
+```bash
+bash scripts/harness_check.sh
+git add .
+git commit -m "chore: initial aidev terminal snapshot"
+git status --short
+git log --oneline -1
+```
+
+Result:
+
+```text
+commit 9a1b229 created
+```
+
 ## 2026-06-14 - 0.13.1
 
 Command:

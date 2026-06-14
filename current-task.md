@@ -6,7 +6,7 @@ Initialize Git baseline after `0.13.1`.
 
 ## Current Status
 
-Git initialization is in progress after explicit user approval.
+Git initialization is complete after explicit user approval.
 
 ## Scope
 
@@ -73,9 +73,9 @@ git log --oneline -1
 
 ## Next 3 Steps
 
-1. Verify initial commit.
-2. Ask before creating any tag or remote.
-3. Discuss `0.13.2` engineering cleanup before implementation.
+1. Ask before creating any tag or remote.
+2. Discuss `0.13.2` engineering cleanup before implementation.
+3. Use Git status before and after each future phase.
 
 ## Last Updated
 
