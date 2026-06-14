@@ -1,0 +1,2 @@
+-keep class com.aidev.terminal.** { *; }
+-keep class rikka.shizuku.** { *; }

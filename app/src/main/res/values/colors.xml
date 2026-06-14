@@ -1,0 +1,12 @@
+<resources>
+    <color name="bg_app">#0B0F14</color>
+    <color name="bg_surface">#111827</color>
+    <color name="bg_surface_alt">#172033</color>
+    <color name="terminal_bg">#050A0E</color>
+    <color name="text_primary">#E5E7EB</color>
+    <color name="text_secondary">#9CA3AF</color>
+    <color name="primary">#7C3AED</color>
+    <color name="success">#22C55E</color>
+    <color name="warning">#F59E0B</color>
+    <color name="danger">#EF4444</color>
+</resources>
