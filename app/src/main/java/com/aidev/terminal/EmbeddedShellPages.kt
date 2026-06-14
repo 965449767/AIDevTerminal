@@ -44,7 +44,8 @@ private data class EmbeddedTermSession(
 private data class EmbeddedVirtualKey(
     val label: String,
     val input: String,
-    val swipeCommand: String = ""
+    val swipeCommand: String = "",
+    val id: String = label
 )
 
 class EmbeddedTerminalPage : ShellPage {
@@ -58,6 +59,7 @@ class EmbeddedTerminalPage : ShellPage {
     private var ui: AIDevUi? = null
     private var terminalView: TerminalView? = null
     private lateinit var tabBar: LinearLayout
+    private lateinit var statusText: TextView
     private var session: TerminalSession? = null
     private var current: EmbeddedTermSession? = null
     private var homeDir: File? = null
@@ -84,6 +86,7 @@ class EmbeddedTerminalPage : ShellPage {
             setBackgroundColor(0xFF0B0E12.toInt())
             addView(tabBar)
         }, LinearLayout.LayoutParams(-1, ui.dp(32)))
+        root.addView(statusBar(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(24)))
         terminalView = TerminalView(activity, null).apply {
             setBackgroundColor(Color.BLACK)
             isFocusable = true
@@ -100,6 +103,37 @@ class EmbeddedTerminalPage : ShellPage {
             maybeAutoBootstrapUbuntu(activity)
         }, 600)
         return root
+    }
+
+    private fun statusBar(activity: Activity, ui: AIDevUi): View =
+        TextView(activity).apply {
+            statusText = this
+            text = terminalStatus(activity)
+            textSize = 11f
+            gravity = Gravity.CENTER_VERTICAL
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            setTextColor(0xFF9CA3AF.toInt())
+            setBackgroundColor(0xFF0A0D12.toInt())
+            setPadding(ui.dp(12), 0, ui.dp(12), 0)
+            setOnClickListener {
+                AlertDialog.Builder(activity)
+                    .setTitle("终端状态")
+                    .setMessage("Ubuntu：自动进入已开启\n字号：${currentFontSp(activity).toInt()}sp\n运行：PRoot\n手势：双指缩放已开启\n虚拟键：点击为主功能，上滑为拓展功能，长按可自定义")
+                    .setPositiveButton("知道了", null)
+                    .show()
+            }
+            setOnLongClickListener {
+                showFontDialog(activity)
+                true
+            }
+        }
+
+    private fun terminalStatus(activity: Activity): String =
+        "Ubuntu · ${currentFontSp(activity).toInt()}sp · PRoot · Auto"
+
+    private fun refreshStatus(activity: Activity) {
+        if (::statusText.isInitialized) statusText.text = terminalStatus(activity)
     }
 
     override fun onSelected(activity: Activity, view: View) {
@@ -267,6 +301,7 @@ class EmbeddedTerminalPage : ShellPage {
         pendingFontSp = value
         terminalView?.setTextSize((value * activity.resources.displayMetrics.scaledDensity).toInt())
         terminalView?.onScreenUpdated()
+        refreshStatus(activity)
     }
 
     private fun keys(activity: Activity, ui: AIDevUi): View =
@@ -289,22 +324,23 @@ class EmbeddedTerminalPage : ShellPage {
     private fun embeddedKeys(activity: Activity): List<EmbeddedVirtualKey> {
         val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
         val defaults = listOf(
-            EmbeddedVirtualKey("ESC", "\u001B", "clear"),
-            EmbeddedVirtualKey("CTRL", "__CTRL__", ""),
-            EmbeddedVirtualKey("↑", "\u001B[A", "history"),
-            EmbeddedVirtualKey("TAB", "\t", "help"),
-            EmbeddedVirtualKey("/", "/", "cd /"),
-            EmbeddedVirtualKey("-", "-", "cd -"),
-            EmbeddedVirtualKey("C", "c", ""),
-            EmbeddedVirtualKey("←", "\u001B[D", ""),
-            EmbeddedVirtualKey("↓", "\u001B[B", ""),
-            EmbeddedVirtualKey("→", "\u001B[C", ""),
-            EmbeddedVirtualKey("|", "|", ""),
-            EmbeddedVirtualKey("Clear", "clear\n", "")
+            EmbeddedVirtualKey("ESC", "\u001B", "clear", "esc"),
+            EmbeddedVirtualKey("CTRL", "__CTRL__", "", "ctrl"),
+            EmbeddedVirtualKey("↑", "\u001B[A", "history", "up"),
+            EmbeddedVirtualKey("TAB", "\t", "help", "tab"),
+            EmbeddedVirtualKey("/", "/", "cd /", "slash"),
+            EmbeddedVirtualKey("-", "-", "cd -", "dash"),
+            EmbeddedVirtualKey("C", "c", "clear", "c"),
+            EmbeddedVirtualKey("←", "\u001B[D", "\u001B[H", "left"),
+            EmbeddedVirtualKey("↓", "\u001B[B", "ls", "down"),
+            EmbeddedVirtualKey("→", "\u001B[C", "\u001B[F", "right"),
+            EmbeddedVirtualKey("|", "|", "grep ", "pipe"),
+            EmbeddedVirtualKey("SPC", " ", "pwd", "space")
         )
+        val overrides = parseKeyOverrides(prefs.getString("terminal_key_overrides", "") ?: "")
+        val customizedDefaults = defaults.map { key -> overrides[key.id] ?: key }
         val custom = parseCustomKeys(prefs.getString("terminal_custom_keys", "") ?: "")
-            .map { EmbeddedVirtualKey(it.first, it.second, "") }
-        return (defaults + custom).take(12)
+        return (customizedDefaults + custom).take(12)
     }
 
     private fun shortcutKey(activity: Activity, ui: AIDevUi, key: EmbeddedVirtualKey): TextView =
@@ -328,7 +364,7 @@ class EmbeddedTerminalPage : ShellPage {
                     MotionEvent.ACTION_UP -> {
                         val swipeUp = downY - event.rawY > ui.dp(24)
                         if (swipeUp && key.swipeCommand.isNotBlank()) {
-                            send(key.swipeCommand)
+                            sendSwipeAction(key.swipeCommand)
                             true
                         } else false
                     }
@@ -337,7 +373,7 @@ class EmbeddedTerminalPage : ShellPage {
             }
             setOnClickListener { handleVirtualKeyTap(activity, key) }
             setOnLongClickListener {
-                showExtraKeysMenu(activity)
+                showVirtualKeyMenu(activity, key)
                 true
             }
         }
@@ -367,6 +403,15 @@ class EmbeddedTerminalPage : ShellPage {
         }
     }
 
+    private fun sendSwipeAction(action: String) {
+        if (action.isEmpty()) return
+        if (action.startsWith("\u001B")) {
+            session?.write(action)
+        } else {
+            send(action)
+        }
+    }
+
     private fun refreshKeyboard(activity: Activity) {
         val uiRef = ui ?: return
         val parent = terminalView?.parent as? LinearLayout ?: return
@@ -381,33 +426,120 @@ class EmbeddedTerminalPage : ShellPage {
     private fun showExtraKeysMenu(activity: Activity) {
         val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
         val keys = listOf(
-            "HOME" to "\u001b[H",
-            "END" to "\u001b[F",
-            "PGUP" to "\u001b[5~",
-            "PGDN" to "\u001b[6~",
-            "~" to "~",
-            "清屏" to "clear\n",
-            "Ubuntu" to "ubuntu\n",
-            "OpenCode CLI" to "aidev-opencode\n",
-            "任务" to "task-list\n"
+            EmbeddedVirtualKey("HOME", "\u001b[H"),
+            EmbeddedVirtualKey("END", "\u001b[F"),
+            EmbeddedVirtualKey("PGUP", "\u001b[5~"),
+            EmbeddedVirtualKey("PGDN", "\u001b[6~"),
+            EmbeddedVirtualKey("~", "~"),
+            EmbeddedVirtualKey("清屏", "clear\n"),
+            EmbeddedVirtualKey("Ubuntu", "ubuntu\n"),
+            EmbeddedVirtualKey("OpenCode CLI", "aidev-opencode\n"),
+            EmbeddedVirtualKey("任务", "task-list\n")
         ).toMutableList()
         keys.addAll(parseCustomKeys(prefs.getString("terminal_custom_keys", "") ?: ""))
         AlertDialog.Builder(activity)
             .setTitle("扩展键盘更多")
-            .setItems(keys.map { it.first }.toTypedArray()) { _, which -> session?.write(keys[which].second) }
+            .setItems(keys.map { it.label }.toTypedArray()) { _, which -> session?.write(keys[which].input) }
             .show()
     }
 
-    private fun parseCustomKeys(raw: String): List<Pair<String, String>> =
+    private fun showVirtualKeyMenu(activity: Activity, key: EmbeddedVirtualKey) {
+        val swipe = key.swipeCommand.ifBlank { "未设置" }
+        AlertDialog.Builder(activity)
+            .setTitle("${key.label} 键")
+            .setItems(arrayOf("执行上滑功能：$swipe", "自定义此键", "更多快捷键")) { _, which ->
+                when (which) {
+                    0 -> sendSwipeAction(key.swipeCommand)
+                    1 -> editVirtualKey(activity, key)
+                    2 -> showExtraKeysMenu(activity)
+                }
+            }
+            .show()
+    }
+
+    private fun editVirtualKey(activity: Activity, key: EmbeddedVirtualKey) {
+        val box = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(ui?.dp(20) ?: 20, ui?.dp(10) ?: 10, ui?.dp(20) ?: 20, 0)
+        }
+        val label = EditText(activity).apply {
+            hint = "按钮名称"
+            setText(key.label)
+        }
+        val tap = EditText(activity).apply {
+            hint = "点击输入，例如 c、\\t、\\e[A"
+            setText(encodeKeyInput(key.input))
+        }
+        val swipe = EditText(activity).apply {
+            hint = "上滑命令，例如 clear、pwd、grep "
+            setText(encodeKeyInput(key.swipeCommand))
+        }
+        box.addView(label)
+        box.addView(tap)
+        box.addView(swipe)
+        AlertDialog.Builder(activity)
+            .setTitle("自定义虚拟键")
+            .setView(box)
+            .setPositiveButton("保存") { _, _ ->
+                saveKeyOverride(
+                    activity,
+                    key.id,
+                    EmbeddedVirtualKey(
+                        label.text.toString().trim().ifBlank { key.label }.take(8),
+                        decodeKeyInput(tap.text.toString()),
+                        decodeKeyInput(swipe.text.toString()),
+                        key.id
+                    )
+                )
+                refreshKeyboard(activity)
+            }
+            .setNeutralButton("恢复默认") { _, _ ->
+                removeKeyOverride(activity, key.id)
+                refreshKeyboard(activity)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun parseCustomKeys(raw: String): List<EmbeddedVirtualKey> =
         raw.lines().mapNotNull { line ->
-            val parts = line.split("\t", limit = 2)
+            val parts = line.split("\t")
             val label = parts.getOrNull(0)?.trim().orEmpty()
             val input = parts.getOrNull(1).orEmpty()
-            if (label.isEmpty() || input.isEmpty()) null else label.take(8) to decodeKeyInput(input)
+            val swipe = parts.getOrNull(2).orEmpty()
+            if (label.isEmpty() || input.isEmpty()) null else EmbeddedVirtualKey(label.take(8), decodeKeyInput(input), decodeKeyInput(swipe), "custom_$label")
         }.take(8)
+
+    private fun parseKeyOverrides(raw: String): Map<String, EmbeddedVirtualKey> =
+        raw.lines().mapNotNull { line ->
+            val parts = line.split("\t")
+            val id = parts.getOrNull(0)?.trim().orEmpty()
+            val label = parts.getOrNull(1)?.trim().orEmpty()
+            val input = parts.getOrNull(2).orEmpty()
+            val swipe = parts.getOrNull(3).orEmpty()
+            if (id.isEmpty() || label.isEmpty()) null else id to EmbeddedVirtualKey(label.take(8), decodeKeyInput(input), decodeKeyInput(swipe), id)
+        }.toMap()
+
+    private fun saveKeyOverride(activity: Activity, id: String, key: EmbeddedVirtualKey) {
+        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+        val old = prefs.getString("terminal_key_overrides", "") ?: ""
+        val lines = old.lines().filter { it.isNotBlank() && it.substringBefore("\t") != id }
+        val line = listOf(id, key.label, encodeKeyInput(key.input), encodeKeyInput(key.swipeCommand)).joinToString("\t")
+        prefs.edit().putString("terminal_key_overrides", (lines + line).joinToString("\n")).apply()
+    }
+
+    private fun removeKeyOverride(activity: Activity, id: String) {
+        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+        val old = prefs.getString("terminal_key_overrides", "") ?: ""
+        val lines = old.lines().filter { it.isNotBlank() && it.substringBefore("\t") != id }
+        prefs.edit().putString("terminal_key_overrides", lines.joinToString("\n")).apply()
+    }
 
     private fun decodeKeyInput(input: String): String =
         input.replace("\\n", "\n").replace("\\t", "\t").replace("\\e", "\u001b")
+
+    private fun encodeKeyInput(input: String): String =
+        input.replace("\u001b", "\\e").replace("\n", "\\n").replace("\t", "\\t")
 
     private fun fontPx(activity: Activity): Int =
         (currentFontSp(activity) * activity.resources.displayMetrics.scaledDensity).toInt()
@@ -451,6 +583,7 @@ class EmbeddedTerminalPage : ShellPage {
                 pendingFontSp = sp
                 terminalView?.setTextSize((sp * activity.resources.displayMetrics.scaledDensity).toInt())
                 terminalView?.onScreenUpdated()
+                refreshStatus(activity)
             }
             .setNegativeButton("取消", null)
             .show()
@@ -754,6 +887,7 @@ class EmbeddedTerminalPage : ShellPage {
                             activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).edit().putFloat("font_sp", next).apply()
                             terminalView?.setTextSize((next * activity.resources.displayMetrics.scaledDensity).toInt())
                             terminalView?.onScreenUpdated()
+                            refreshStatus(activity)
                         }
                     }
                 }

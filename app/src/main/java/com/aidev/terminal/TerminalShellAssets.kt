@@ -54,7 +54,7 @@ object TerminalShellAssets {
         rc.writeText(
             """
             # AIDev canonical shell rc. 自动生成，请不要在这里保存个人配置。
-            AIDEV_VERSION="0.12.12-terminal-polish-debug"
+            AIDEV_VERSION="0.12.13-virtual-key-swipe-debug"
             AIDEV_HOME="${home.absolutePath}"
             AIDEV_BIN="${'$'}AIDEV_HOME/dev-env/bin"
             AIDEV_ROOTFS="${'$'}AIDEV_HOME/ubuntu-rootfs"

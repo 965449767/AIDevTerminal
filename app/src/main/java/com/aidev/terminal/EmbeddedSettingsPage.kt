@@ -165,11 +165,12 @@ class EmbeddedSettingsPage : ShellPage {
                         .remove("terminal_custom_key_label")
                         .remove("terminal_custom_key_input")
                         .remove("terminal_custom_keys")
+                        .remove("terminal_key_overrides")
                         .apply()
                     toast("已清除自定义快捷键")
                 }
                 4 -> host.switchTab(ShellActivity.TAB_TERMINAL)
-                5 -> detail("快捷键说明", "内嵌终端已提供 ESC、TAB、CTRL-C、方向键、HOME、END、/、-、|、~、清屏。\n\n现在可配置最多 8 个自定义快捷键；输入内容支持 \\n、\\t 和 \\e 转义。")
+                5 -> detail("快捷键说明", "内嵌终端保持两行六列：点击是主功能，上滑是拓展功能，长按可自定义单个键。\n\n例如 C 点击输入 c，上滑 clear；SPC 点击空格，上滑 pwd。\n\n自定义输入支持 \\n、\\t 和 \\e 转义。")
                 6 -> detail("会话说明", "终端 Tab 支持多会话标签、新建会话、关闭当前会话、点击标签切换、长按标签重命名。关闭最后一个会话时会自动创建新会话。")
             }
         }.show()
@@ -187,8 +188,12 @@ class EmbeddedSettingsPage : ShellPage {
         val input = EditText(activity).apply {
             hint = "输入内容，例如 npm run dev\\n"
         }
+        val swipe = EditText(activity).apply {
+            hint = "上滑命令，可选，例如 pwd"
+        }
         box.addView(label)
         box.addView(input)
+        box.addView(swipe)
         AlertDialog.Builder(activity)
             .setTitle("自定义快捷键")
             .setView(box)
@@ -198,7 +203,7 @@ class EmbeddedSettingsPage : ShellPage {
                 if (name.isNotEmpty() && value.isNotEmpty()) {
                     val old = prefs.getString("terminal_custom_keys", "") ?: ""
                     val lines = old.lines().filter { it.isNotBlank() }.toMutableList()
-                    lines.add("$name\t$value")
+                    lines.add("$name\t$value\t${swipe.text}")
                     prefs.edit().putString("terminal_custom_keys", lines.takeLast(8).joinToString("\n")).apply()
                     toast("已保存，重新进入终端页后显示")
                 }
@@ -217,7 +222,9 @@ class EmbeddedSettingsPage : ShellPage {
             .setItems(labels) { _, which ->
                 AlertDialog.Builder(activity)
                     .setTitle(labels[which])
-                    .setMessage(lines[which].substringAfter("\t", ""))
+                    .setMessage(lines[which].split("\t").let { parts ->
+                        "点击：${parts.getOrNull(1).orEmpty()}\n上滑：${parts.getOrNull(2).orEmpty().ifBlank { "未设置" }}"
+                    })
                     .setPositiveButton("删除") { _, _ ->
                         val next = lines.toMutableList().also { it.removeAt(which) }
                         prefs.edit().putString("terminal_custom_keys", next.joinToString("\n")).apply()

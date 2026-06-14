@@ -11,8 +11,8 @@ android {
         applicationId = "com.aidev.terminal"
         minSdk = 26
         targetSdk = 34
-        versionCode = 54
-        versionName = "0.12.12-terminal-polish-debug"
+        versionCode = 55
+        versionName = "0.12.13-virtual-key-swipe-debug"
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
