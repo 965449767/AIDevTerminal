@@ -11,8 +11,8 @@ android {
         applicationId = "com.aidev.terminal"
         minSdk = 26
         targetSdk = 34
-        versionCode = 52
-        versionName = "0.12.10-auto-enter-ubuntu-debug"
+        versionCode = 53
+        versionName = "0.12.11-keyboard-group-cleanup-debug"
         ndk {
             abiFilters += listOf("arm64-v8a")
         }

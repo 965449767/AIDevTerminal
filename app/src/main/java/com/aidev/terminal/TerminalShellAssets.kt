@@ -54,7 +54,7 @@ object TerminalShellAssets {
         rc.writeText(
             """
             # AIDev canonical shell rc. 自动生成，请不要在这里保存个人配置。
-            AIDEV_VERSION="0.12.10-auto-enter-ubuntu-debug"
+            AIDEV_VERSION="0.12.11-keyboard-group-cleanup-debug"
             AIDEV_HOME="${home.absolutePath}"
             AIDEV_BIN="${'$'}AIDEV_HOME/dev-env/bin"
             AIDEV_ROOTFS="${'$'}AIDEV_HOME/ubuntu-rootfs"

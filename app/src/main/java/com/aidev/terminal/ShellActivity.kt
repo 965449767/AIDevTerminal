@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowManager
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -45,6 +46,7 @@ class ShellActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         prefs = getSharedPreferences("aidev_ui", MODE_PRIVATE)
         ui = AIDevUi(this, prefs)
         if (prefs.getBoolean("keepalive_auto", true)) runCatching { KeepAliveService.start(this) }

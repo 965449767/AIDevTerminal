@@ -226,13 +226,28 @@ deb http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/ noble-updates main univers
 deb http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports/ noble-security main universe multiverse restricted
 AIDEV_APT_EOF
           echo "nameserver 223.5.5.5" > "${'$'}AIDEV_ROOTFS.tmp/etc/resolv.conf"
+          ensure_android_groups "${'$'}AIDEV_ROOTFS.tmp"
           date '+%F %T' > "${'$'}AIDEV_ROOTFS.tmp/.aidev-rootfs-ready"
           mv "${'$'}AIDEV_ROOTFS.tmp" "${'$'}AIDEV_ROOTFS"
           echo "Ubuntu 初始化完成。"
         }
 
+        ensure_android_groups() {
+          target_root="${'$'}{1:-${'$'}AIDEV_ROOTFS}"
+          group_file="${'$'}target_root/etc/group"
+          [ -f "${'$'}group_file" ] || return 0
+          for gid in ${'$'}(id -G 2>/dev/null); do
+            case "${'$'}gid" in
+              ''|*[!0-9]*) continue ;;
+            esac
+            grep -q "^[^:]*:[^:]*:${'$'}gid:" "${'$'}group_file" 2>/dev/null && continue
+            echo "android_gid_${'$'}gid:x:${'$'}gid:" >> "${'$'}group_file"
+          done
+        }
+
         enter_ubuntu() {
           has_ubuntu || install_ubuntu --fast || return ${'$'}?
+          ensure_android_groups "${'$'}AIDEV_ROOTFS"
           shell="/bin/bash"
           [ -x "${'$'}AIDEV_ROOTFS/bin/bash" ] || shell="/bin/sh"
           echo "进入 Ubuntu：${'$'}AIDEV_ROOTFS"

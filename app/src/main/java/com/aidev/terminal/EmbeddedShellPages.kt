@@ -290,7 +290,7 @@ class EmbeddedTerminalPage : ShellPage {
             EmbeddedVirtualKey("↓", "\u001B[B", ""),
             EmbeddedVirtualKey("→", "\u001B[C", ""),
             EmbeddedVirtualKey("|", "|", ""),
-            EmbeddedVirtualKey("SPC", " ", "pwd")
+            EmbeddedVirtualKey("Clear", "clear\n", "")
         )
         val custom = parseCustomKeys(prefs.getString("terminal_custom_keys", "") ?: "")
             .map { EmbeddedVirtualKey(it.first, it.second, "") }
