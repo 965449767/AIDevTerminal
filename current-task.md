@@ -2,51 +2,43 @@
 
 ## Goal
 
-Complete `0.13.2-c` terminal structure cleanup.
+Complete `0.12.16-terminal-completion-lite`.
 
 ## Current Status
 
-`0.13.2-c` is complete.
+`0.12.16` is in progress.
 
 ## Scope
 
 Allowed:
 
-- split embedded non-terminal pages from `EmbeddedShellPages.kt`
-- create `EmbeddedFilesPage.kt`
-- create `EmbeddedTasksPage.kt`
-- create `EmbeddedSettingsPage.kt`
-- update `.harness/*`
+- add terminal command completion suggestion bar
+- track lightweight command input buffer
+- add built-in command completions
+- add recent command history completions
+- keep terminal enhancement roadmap focused on performance, diagnostics, sessions, clipboard, virtual keys, and completion
 
 Not allowed in this phase:
 
-- business logic changes
-- terminal behavior changes
-- Android UI refactors
 - dependency changes
-- build configuration changes
-- UI behavior changes
-- Ubuntu bootstrap behavior changes
-- version bump
-- Git commit, tag, reset, clean, push, or remote configuration
+- PRoot launch behavior changes
+- Ubuntu rootfs reinstall logic
+- Git tag, reset, clean, push, or remote configuration
 
 ## Relevant Files
 
 - `app/src/main/java/com/aidev/terminal/EmbeddedShellPages.kt`
-- `app/src/main/java/com/aidev/terminal/EmbeddedFilesPage.kt`
-- `app/src/main/java/com/aidev/terminal/EmbeddedTasksPage.kt`
-- `app/src/main/java/com/aidev/terminal/EmbeddedSettingsPage.kt`
-- `.harness/session-state.json`
-- `.harness/session-log.md`
+- `app/src/main/java/com/aidev/terminal/TerminalShellAssets.kt`
+- `app/build.gradle.kts`
 
 ## Plan
 
-1. Inspect class boundaries in `EmbeddedShellPages.kt`.
-2. Move file, task, and settings pages into separate files.
-3. Keep class names and package unchanged.
-4. Run harness check.
-5. Run Android debug build.
-6. Record handoff state.
+1. Add suggestion bar between terminal content and virtual keyboard.
+2. Add command completion model and built-in command dictionary.
+3. Track virtual key, paste, menu, and common keyboard input.
+4. Add recent command history suggestions.
+5. Build and export debug APK.
+6. Auto commit after validation.
 
 ## Validation Commands
 
@@ -58,25 +50,24 @@ JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 /data/user/work/gradle/gradle-8.14.
 
 ## Acceptance Criteria
 
-- `EmbeddedFilesPage.kt` contains file page logic.
-- `EmbeddedTasksPage.kt` contains task page logic.
-- `EmbeddedSettingsPage.kt` contains settings page logic.
-- `EmbeddedShellPages.kt` keeps terminal page logic.
-- Function calls remain behavior-compatible.
-- `.harness/session-state.json` is valid JSON.
+- suggestion bar appears above virtual keyboard
+- click suggestion completes text without Enter
+- long press suggestion executes the command
+- Enter records command history
 - `scripts/harness_check.sh` passes.
 - Android debug build passes.
 
 ## Risks
 
-- This is a code move; runtime behavior still needs device smoke testing in a later APK test.
-- Some imports may remain broader than ideal and can be cleaned later.
+- system IME composition may not be perfectly tracked in this first version
+- cursor-middle editing is approximate
+- path completion is intentionally deferred
 
 ## Next 3 Steps
 
-1. Review `0.13.2` diff.
-2. Commit if approved.
-3. Build and export APK if requested.
+1. Test command suggestion click/long-press behavior.
+2. Decide whether to add path completion.
+3. Continue with clipboard/session enhancements.
 
 ## Last Updated
 

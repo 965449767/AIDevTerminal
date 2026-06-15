@@ -48,6 +48,12 @@ private data class EmbeddedVirtualKey(
     val id: String = label
 )
 
+private data class TerminalCompletion(
+    val label: String,
+    val insertText: String = label,
+    val kind: String = "CMD"
+)
+
 class EmbeddedTerminalPage : ShellPage {
     private companion object {
         const val DEFAULT_FONT_SP = 15f
@@ -60,6 +66,7 @@ class EmbeddedTerminalPage : ShellPage {
     private var terminalView: TerminalView? = null
     private lateinit var tabBar: LinearLayout
     private lateinit var statusText: TextView
+    private lateinit var completionRow: LinearLayout
     private var session: TerminalSession? = null
     private var current: EmbeddedTermSession? = null
     private var homeDir: File? = null
@@ -68,6 +75,7 @@ class EmbeddedTerminalPage : ShellPage {
     private var autoBootstrapDispatched = false
     private var pendingFontSp = DEFAULT_FONT_SP
     private var fontApplyScheduled = false
+    private var inputBuffer = ""
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
@@ -96,6 +104,7 @@ class EmbeddedTerminalPage : ShellPage {
             setTerminalViewClient(viewClient(activity))
         }
         root.addView(terminalView, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(completionBar(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(32)))
         root.addView(keys(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(70)))
         ensureSession(activity)
         terminalView?.postDelayed({
@@ -135,6 +144,52 @@ class EmbeddedTerminalPage : ShellPage {
     private fun refreshStatus(activity: Activity) {
         if (::statusText.isInitialized) statusText.text = terminalStatus(activity)
     }
+
+    private fun completionBar(activity: Activity, ui: AIDevUi): View =
+        HorizontalScrollView(activity).apply {
+            isHorizontalScrollBarEnabled = false
+            setBackgroundColor(0xFF0D1117.toInt())
+            completionRow = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(ui.dp(6), ui.dp(3), ui.dp(6), ui.dp(3))
+            }
+            addView(completionRow)
+            post { refreshCompletions(activity) }
+        }
+
+    private fun refreshCompletions(activity: Activity) {
+        if (!::completionRow.isInitialized) return
+        val uiRef = ui ?: return
+        completionRow.removeAllViews()
+        completionSuggestions(activity).take(8).forEach { item ->
+            completionRow.addView(completionChip(activity, uiRef, item), LinearLayout.LayoutParams(-2, -1).apply {
+                setMargins(0, 0, uiRef.dp(5), 0)
+            })
+        }
+    }
+
+    private fun completionChip(activity: Activity, ui: AIDevUi, item: TerminalCompletion): TextView =
+        TextView(activity).apply {
+            text = item.label
+            textSize = 11f
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            setTextColor(0xFFD1D5DB.toInt())
+            setPadding(ui.dp(10), 0, ui.dp(10), 0)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xFF172033.toInt())
+                cornerRadius = ui.dp(12).toFloat()
+                setStroke(ui.dp(1), 0xFF2B3650.toInt())
+            }
+            setOnClickListener { applyCompletion(item) }
+            setOnLongClickListener {
+                executeCompletion(activity, item)
+                true
+            }
+        }
 
     override fun onSelected(activity: Activity, view: View) {
         this.activity = activity
@@ -289,6 +344,112 @@ class EmbeddedTerminalPage : ShellPage {
         if (dir != null) send("cd \"${dir.absolutePath}\" && $command") else send(command)
     }
 
+    private fun completionSuggestions(activity: Activity): List<TerminalCompletion> {
+        val prefix = inputBuffer.trimStart()
+        val history = recentCommandHistory(activity).map { TerminalCompletion(it, it, "HIST") }
+        val builtIns = builtinCompletions()
+        val source = (history + builtIns).distinctBy { it.insertText }
+        if (prefix.isBlank()) return source.take(8)
+        return source
+            .filter { it.insertText.startsWith(prefix, ignoreCase = true) || it.label.startsWith(prefix, ignoreCase = true) }
+            .ifEmpty {
+                source.filter { it.insertText.contains(prefix, ignoreCase = true) || it.label.contains(prefix, ignoreCase = true) }
+            }
+            .take(8)
+    }
+
+    private fun builtinCompletions(): List<TerminalCompletion> =
+        listOf(
+            "aidev-doctor",
+            "aidev-agent-context",
+            "aidev-agent-context-file",
+            "aidev-opencode",
+            "aidev-opencode-preflight",
+            "ubuntu",
+            "pwd",
+            "clear",
+            "ls -la",
+            "cd /root/projects",
+            "apt update",
+            "apt install ",
+            "apt search ",
+            "apt list --installed",
+            "python3",
+            "python3 -m pip install ",
+            "python3 -m venv .venv",
+            "pip install ",
+            "node --version",
+            "npm install",
+            "npm run dev",
+            "npm test",
+            "npm run build",
+            "git status",
+            "git status --short",
+            "git add .",
+            "git commit -m \"\"",
+            "git diff --stat",
+            "git log --oneline -10",
+            "git pull",
+            "git switch ",
+            "git checkout ",
+            "grep -R ",
+            "find . -maxdepth 2 -type f",
+            "df -h",
+            "ps aux",
+            "env | sort",
+            "whoami",
+            "cat /etc/os-release",
+            "task-list",
+            "list-listen-ports"
+        ).map { TerminalCompletion(it) }
+
+    private fun applyCompletion(item: TerminalCompletion) {
+        val current = inputBuffer
+        val target = item.insertText
+        val insert = if (target.startsWith(current)) target.removePrefix(current) else target
+        session?.write(insert)
+        updateInputBuffer(insert)
+        terminalView?.requestFocus()
+    }
+
+    private fun executeCompletion(activity: Activity, item: TerminalCompletion) {
+        session?.write(item.insertText.trimEnd() + "\n")
+        rememberCommand(activity, item.insertText.trim())
+        inputBuffer = ""
+        refreshCompletions(activity)
+        terminalView?.requestFocus()
+    }
+
+    private fun updateInputBuffer(text: String) {
+        text.forEach { ch ->
+            when (ch) {
+                '\r', '\n' -> {
+                    activity?.let { rememberCommand(it, inputBuffer.trim()) }
+                    inputBuffer = ""
+                }
+                '\b', '\u007F' -> inputBuffer = inputBuffer.dropLast(1)
+                else -> if (!ch.isISOControl()) inputBuffer += ch
+            }
+        }
+        activity?.let { refreshCompletions(it) }
+    }
+
+    private fun rememberCommand(activity: Activity, command: String) {
+        if (command.isBlank()) return
+        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+        val old = prefs.getString("terminal_command_history", "")?.lines()?.filter { it.isNotBlank() && it != command }.orEmpty()
+        prefs.edit().putString("terminal_command_history", (old + command).takeLast(40).joinToString("\n")).apply()
+    }
+
+    private fun recentCommandHistory(activity: Activity): List<String> =
+        activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+            .getString("terminal_command_history", "")
+            ?.lines()
+            ?.filter { it.isNotBlank() }
+            ?.takeLast(12)
+            ?.reversed()
+            .orEmpty()
+
     private fun currentProjectDir(): File? =
         activity?.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
             ?.getString("current_project_path", "")
@@ -398,6 +559,7 @@ class EmbeddedTerminalPage : ShellPage {
             }
         }
         session?.write(input)
+        updateInputBuffer(input)
         if (ctrlLatched) {
             ctrlLatched = false
             refreshKeyboard(activity)
@@ -826,9 +988,13 @@ class EmbeddedTerminalPage : ShellPage {
         }
     }
 
-    private fun send(command: String) {
+    private fun send(command: String, remember: Boolean = true) {
         ensureSession(activity ?: return)
-        session?.write(command.trimEnd() + "\n")
+        val finalCommand = command.trimEnd()
+        session?.write(finalCommand + "\n")
+        if (remember) activity?.let { rememberCommand(it, finalCommand) }
+        inputBuffer = ""
+        activity?.let { refreshCompletions(it) }
         terminalView?.requestFocus()
     }
 
@@ -837,7 +1003,7 @@ class EmbeddedTerminalPage : ShellPage {
         if (command.isNotEmpty()) {
             TerminalCommandBus.pending = ""
             if (command == "aidev-auto-bootstrap") autoBootstrapDispatched = true
-            send(command)
+            send(command, remember = false)
         }
     }
 
@@ -858,7 +1024,10 @@ class EmbeddedTerminalPage : ShellPage {
             }
             override fun onPasteTextFromClipboard(session: TerminalSession) {
                 val text = (activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(activity)?.toString()
-                if (!text.isNullOrEmpty()) session.write(text)
+                if (!text.isNullOrEmpty()) {
+                    session.write(text)
+                    updateInputBuffer(text)
+                }
             }
             override fun onBell(session: TerminalSession) { terminalView?.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
             override fun onColorsChanged(session: TerminalSession) { terminalView?.invalidate() }
@@ -903,7 +1072,19 @@ class EmbeddedTerminalPage : ShellPage {
             override fun shouldUseCtrlSpaceWorkaround(): Boolean = false
             override fun isTerminalViewSelected(): Boolean = terminalView?.hasFocus() == true
             override fun copyModeChanged(copyMode: Boolean) {}
-            override fun onKeyDown(keyCode: Int, e: KeyEvent, session: TerminalSession): Boolean = false
+            override fun onKeyDown(keyCode: Int, e: KeyEvent, session: TerminalSession): Boolean {
+                when (keyCode) {
+                    KeyEvent.KEYCODE_ENTER -> updateInputBuffer("\n")
+                    KeyEvent.KEYCODE_DEL -> updateInputBuffer("\b")
+                    else -> {
+                        val unicode = e.unicodeChar
+                        if (unicode > 0 && !e.isCtrlPressed && !e.isAltPressed) {
+                            updateInputBuffer(String(Character.toChars(unicode)))
+                        }
+                    }
+                }
+                return false
+            }
             override fun onKeyUp(keyCode: Int, e: KeyEvent): Boolean = false
             override fun onLongPress(event: MotionEvent): Boolean = false
             override fun readControlKey(): Boolean = false
