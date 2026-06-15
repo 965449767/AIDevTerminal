@@ -312,6 +312,7 @@ class EmbeddedTerminalPage : ShellPage {
             text = when (item.kind) {
                 "PIN" -> "固定 ${item.label}"
                 "ENV" -> "环境 ${item.label}"
+                "PATH" -> "路径 ${item.label}"
                 else -> item.label
             }
             textSize = 11f
@@ -322,6 +323,7 @@ class EmbeddedTerminalPage : ShellPage {
             setTextColor(when (item.kind) {
                 "PIN" -> 0xFFA7F3D0.toInt()
                 "ENV" -> 0xFFBFDBFE.toInt()
+                "PATH" -> 0xFFFDE68A.toInt()
                 else -> 0xFFD1D5DB.toInt()
             })
             setPadding(ui.dp(10), 0, ui.dp(10), 0)
@@ -329,12 +331,14 @@ class EmbeddedTerminalPage : ShellPage {
                 setColor(when (item.kind) {
                     "PIN" -> 0xFF0F2A22.toInt()
                     "ENV" -> 0xFF111D35.toInt()
+                    "PATH" -> 0xFF2A220C.toInt()
                     else -> 0xFF172033.toInt()
                 })
                 cornerRadius = ui.dp(12).toFloat()
                 setStroke(ui.dp(1), when (item.kind) {
                     "PIN" -> 0xFF059669.toInt()
                     "ENV" -> 0xFF2563EB.toInt()
+                    "PATH" -> 0xFFD97706.toInt()
                     else -> 0xFF2B3650.toInt()
                 })
             }
@@ -505,9 +509,10 @@ class EmbeddedTerminalPage : ShellPage {
     private fun completionSuggestions(activity: Activity): List<TerminalCompletion> {
         val prefix = completionInput().trimStart()
         val pinned = pinnedCompletions(activity)
+        val paths = pathCompletions(prefix)
         val runtime = runtimeCompletions()
         val builtIns = builtinCompletions()
-        val source = (pinned + runtime + builtIns).distinctBy { it.insertText }
+        val source = (paths + pinned + runtime + builtIns).distinctBy { it.insertText }
         if (prefix.isBlank()) return source.take(8)
         val direct = source.filter { it.insertText.startsWith(prefix, ignoreCase = true) || it.label.startsWith(prefix, ignoreCase = true) }
         val matches = direct.ifEmpty { source.filter { fuzzyCompletionMatch(prefix, it) } }
@@ -523,6 +528,7 @@ class EmbeddedTerminalPage : ShellPage {
         val text = item.insertText.lowercase()
         val kindBase = when (item.kind) {
             "PIN" -> 0
+            "PATH" -> 10
             "ENV" -> 20
             else -> 40
         }
@@ -618,6 +624,54 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun commandIndexFile(): File? =
         homeDir?.let { File(it, ".aidev-command-index") }
+
+    private fun pathCompletions(input: String): List<TerminalCompletion> {
+        val home = homeDir ?: return emptyList()
+        val token = input.substringAfterLast(' ', "")
+        val command = input.substringBefore(' ', "").lowercase()
+        val pathMode = input.contains(' ') && command in setOf("cd", "ls", "cat", "less", "tail", "head", "nano", "vim", "rm", "cp", "mv", "mkdir", "touch", "grep") ||
+            token.startsWith("/") || token.startsWith("./") || token.startsWith("../") || token.startsWith("~")
+        if (!pathMode) return emptyList()
+        val root = File(home, "ubuntu-rootfs/root")
+        val hostHome = home
+        val (baseDir, typedPrefix, displayPrefix) = when {
+            token.startsWith("/root/") -> {
+                val relative = token.removePrefix("/root/")
+                val slash = relative.lastIndexOf('/')
+                val dirPart = if (slash >= 0) relative.substring(0, slash) else ""
+                val namePart = if (slash >= 0) relative.substring(slash + 1) else relative
+                Triple(File(root, dirPart), namePart, "/root/" + dirPart.let { if (it.isBlank()) "" else "$it/" })
+            }
+            token == "/root" || token == "~" || token == "~/" -> Triple(root, "", if (token.startsWith("~")) "~/" else "/root/")
+            token.startsWith("/host-home/") -> {
+                val relative = token.removePrefix("/host-home/")
+                val slash = relative.lastIndexOf('/')
+                val dirPart = if (slash >= 0) relative.substring(0, slash) else ""
+                val namePart = if (slash >= 0) relative.substring(slash + 1) else relative
+                Triple(File(hostHome, dirPart), namePart, "/host-home/" + dirPart.let { if (it.isBlank()) "" else "$it/" })
+            }
+            token.contains('/') -> {
+                val slash = token.lastIndexOf('/')
+                val dirPart = token.substring(0, slash)
+                val namePart = token.substring(slash + 1)
+                Triple(File(root, dirPart), namePart, if (dirPart.isBlank()) "" else "$dirPart/")
+            }
+            else -> Triple(root, token, "")
+        }
+        if (!baseDir.isDirectory) return emptyList()
+        val beforeToken = input.dropLast(token.length)
+        return baseDir.listFiles().orEmpty()
+            .asSequence()
+            .filter { it.name.startsWith(typedPrefix, ignoreCase = true) }
+            .sortedWith(compareBy<File> { !it.isDirectory }.thenBy { it.name.lowercase() })
+            .take(8)
+            .map { file ->
+                val suffix = if (file.isDirectory) "/" else ""
+                val path = displayPrefix + file.name + suffix
+                TerminalCompletion(path, beforeToken + path, "PATH")
+            }
+            .toList()
+    }
 
     private fun applyCompletion(item: TerminalCompletion) {
         val target = item.insertText
