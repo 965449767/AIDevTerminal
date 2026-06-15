@@ -213,9 +213,11 @@ class EmbeddedTerminalPage : ShellPage {
         root.addView(completionBar(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(32)))
         root.addView(keys(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(70)))
         ensureSession(activity)
+        root.postDelayed({ focusTerminalInput(activity) }, 250)
         terminalView?.postDelayed({
             consumePendingCommand()
             maybeAutoBootstrapUbuntu(activity)
+            focusTerminalInput(activity)
         }, 600)
         return root
     }
@@ -316,9 +318,12 @@ class EmbeddedTerminalPage : ShellPage {
     override fun onSelected(activity: Activity, view: View) {
         this.activity = activity
         ensureSession(activity)
-        terminalView?.requestFocus()
+        focusTerminalInput(activity)
         consumePendingCommand()
-        terminalView?.postDelayed({ maybeAutoBootstrapUbuntu(activity) }, 600)
+        terminalView?.postDelayed({
+            maybeAutoBootstrapUbuntu(activity)
+            focusTerminalInput(activity)
+        }, 600)
     }
 
     private fun topBar(activity: Activity, ui: AIDevUi, host: ShellHost): View =
