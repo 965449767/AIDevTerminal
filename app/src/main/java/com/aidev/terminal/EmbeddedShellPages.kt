@@ -286,7 +286,8 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun completionHintChip(activity: Activity, ui: AIDevUi): TextView =
         TextView(activity).apply {
-            text = if (runtimeCompletions().isEmpty()) "输入命令，或运行 aidev-index-commands 刷新环境命令" else "继续输入以筛选命令"
+            val hasIndex = commandIndexFile()?.isFile == true
+            text = if (hasIndex) "没有匹配命令，长按刷新环境索引" else "索引未生成，点击刷新环境命令"
             textSize = 11f
             gravity = Gravity.CENTER
             includeFontPadding = false
@@ -299,7 +300,17 @@ class EmbeddedTerminalPage : ShellPage {
                 cornerRadius = ui.dp(12).toFloat()
                 setStroke(ui.dp(1), 0xFF374151.toInt())
             }
-            setOnClickListener { send("aidev-index-commands") }
+            setOnClickListener {
+                if (hasIndex) {
+                    focusTerminalInput(activity)
+                } else {
+                    refreshCommandIndex(activity)
+                }
+            }
+            setOnLongClickListener {
+                refreshCommandIndex(activity)
+                true
+            }
         }
 
     private fun completionChip(activity: Activity, ui: AIDevUi, item: TerminalCompletion): TextView =
@@ -602,8 +613,7 @@ class EmbeddedTerminalPage : ShellPage {
             .orEmpty()
 
     private fun runtimeCompletions(): List<TerminalCompletion> {
-        val home = homeDir ?: return emptyList()
-        val index = File(home, ".aidev-command-index")
+        val index = commandIndexFile() ?: return emptyList()
         if (!index.isFile) return emptyList()
         return index.readLines()
             .map { it.trim() }
@@ -611,6 +621,9 @@ class EmbeddedTerminalPage : ShellPage {
             .take(300)
             .map { TerminalCompletion(it, it, "ENV") }
     }
+
+    private fun commandIndexFile(): File? =
+        homeDir?.let { File(it, ".aidev-command-index") }
 
     private fun applyCompletion(item: TerminalCompletion) {
         val target = item.insertText
@@ -1280,13 +1293,18 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun maybeAutoRefreshCommandIndex(activity: Activity) {
         if (autoIndexDispatched) return
-        val home = homeDir ?: return
-        val index = File(home, ".aidev-command-index")
+        val index = commandIndexFile() ?: return
         val stale = !index.isFile || System.currentTimeMillis() - index.lastModified() > 24L * 60L * 60L * 1000L
         if (!stale) return
         autoIndexDispatched = true
+        refreshCommandIndex(activity)
+    }
+
+    private fun refreshCommandIndex(activity: Activity) {
         session?.write("aidev-index-commands\n")
         terminalView?.postDelayed({ refreshCompletions(activity) }, 2500)
+        terminalView?.postDelayed({ refreshCompletions(activity) }, 5000)
+        focusTerminalInput(activity)
     }
 
     private fun sessionClient(activity: Activity): TerminalSessionClient =

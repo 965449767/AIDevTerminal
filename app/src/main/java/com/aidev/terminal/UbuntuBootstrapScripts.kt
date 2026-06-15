@@ -314,21 +314,19 @@ tmp="${'$'}{out}.tmp"
   echo "# AIDev command index"
   echo "# generated: ${'$'}(date '+%F %T' 2>/dev/null || true)"
   alias 2>/dev/null | sed -n "s/^alias \([^=]*\)=.*/\1/p"
-  if command -v compgen >/dev/null 2>&1; then
-    compgen -c 2>/dev/null
-  else
-    oldifs="${'$'}IFS"; IFS=:
-    for dir in ${'$'}PATH; do
-      [ -d "${'$'}dir" ] || continue
-      for file in "${'$'}dir"/*; do
-        [ -x "${'$'}file" ] && [ -f "${'$'}file" ] && basename "${'$'}file"
-      done
+  for dir in /usr/local/bin /usr/bin /bin /usr/local/sbin /usr/sbin /sbin; do
+    [ -d "${'$'}dir" ] || continue
+    count=0
+    for file in "${'$'}dir"/*; do
+      [ "${'$'}count" -ge 80 ] && break
+      [ -x "${'$'}file" ] && [ -f "${'$'}file" ] || continue
+      basename "${'$'}file"
+      count=${'$'}((count + 1))
     done
-    IFS="${'$'}oldifs"
-  fi
-} | sed '/^${'$'}/d' | sort -u | head -300 > "${'$'}tmp"
+  done
+} | sed '/^${'$'}/d' | sort -u | head -220 > "${'$'}tmp"
 mv "${'$'}tmp" "${'$'}out"
-echo "已刷新命令索引：${'$'}out"
+echo "命令索引已刷新"
 AIDEV_INDEX_EOF
           chmod 755 "${'$'}AIDEV_ROOTFS/usr/local/bin/aidev-index-commands" 2>/dev/null || true
           cat > "${'$'}AIDEV_ROOTFS/usr/local/bin/ubuntu" <<'AIDEV_UBUNTU_EOF'
