@@ -366,6 +366,10 @@ class EmbeddedTerminalPage : ShellPage {
     private fun initPwdObserver(activity: Activity) {
         val home = homeDir ?: return
         val pwdFile = File(home, ".aidev-current-pwd")
+        if (!pwdFile.isFile) {
+            android.util.Log.d("AIDEV_SYNC", "pwd file not found: ${pwdFile.absolutePath}")
+            return
+        }
         pwdObserver?.stop()
         pwdObserver = PwdFileObserver(pwdFile) { ubuntuPwd ->
             if (ubuntuPwd == lastSyncedPwd) return@PwdFileObserver
@@ -373,6 +377,7 @@ class EmbeddedTerminalPage : ShellPage {
             val act = this.activity ?: return@PwdFileObserver
             val prefs = act.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
             SyncCoordinator.onTerminalPwdChanged(ubuntuPwd, home, prefs) { targetDir ->
+                android.util.Log.d("AIDEV_SYNC", "L1 sync: $ubuntuPwd -> ${targetDir.absolutePath}, isDir=${targetDir.isDirectory}")
                 if (act is ShellActivity) act.syncBrowserToDir(targetDir)
             }
         }
@@ -385,7 +390,9 @@ class EmbeddedTerminalPage : ShellPage {
         return button(activity, ui, if (on) "⟷" else "⟷") {
             val current = SyncCoordinator.isEnabled(prefs)
             SyncCoordinator.setEnabled(prefs, !current)
-            Toast.makeText(activity, if (!current) "终端-文件联动已开启" else "终端-文件联动已关闭", Toast.LENGTH_SHORT).show()
+            val nowOn = !current
+            Toast.makeText(activity, if (nowOn) "联动已开启" else "联动已关闭", Toast.LENGTH_LONG).show()
+            android.util.Log.d("AIDEV_SYNC", "toggle: $current -> $nowOn")
         }.apply {
             setTextColor(if (on) 0xFF22D3A7.toInt() else 0xFF9CA3AF.toInt())
         }

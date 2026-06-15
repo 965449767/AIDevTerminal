@@ -234,6 +234,7 @@ class EmbeddedFilesPage : ShellPage {
     private fun otherDir(): File = if (activeLeft) rightDir else leftDir
 
     fun syncNavigateTo(targetDir: File) {
+        android.util.Log.d("AIDEV_SYNC", "syncNavigateTo: ${targetDir.absolutePath}, exists=${targetDir.exists()}, isDir=${targetDir.isDirectory}")
         if (!targetDir.isDirectory) return
         if (activeLeft) { leftDir = targetDir; leftSelected = null }
         else { rightDir = targetDir; rightSelected = null }
