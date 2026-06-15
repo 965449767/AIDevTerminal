@@ -13,12 +13,16 @@ import android.os.Build
 import android.os.Environment
 import android.os.PowerManager
 import android.provider.Settings
+import android.text.InputType
 import android.text.TextUtils
 import android.util.Log
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
+import android.view.inputmethod.InputConnectionWrapper
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.HorizontalScrollView
@@ -54,6 +58,87 @@ private data class TerminalCompletion(
     val kind: String = "CMD"
 )
 
+private class TerminalImeProxyEditText(context: Context) : EditText(context) {
+    var onComposingChanged: (String) -> Unit = {}
+    var onCommittedText: (String) -> Unit = {}
+    var onBackspace: () -> Unit = {}
+    var onEnter: () -> Unit = {}
+    private var clearing = false
+    private var currentComposing = ""
+
+    init {
+        setSingleLine(true)
+        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        imeOptions = EditorInfo.IME_ACTION_NONE or EditorInfo.IME_FLAG_NO_EXTRACT_UI
+        setTextColor(Color.TRANSPARENT)
+        setBackgroundColor(Color.TRANSPARENT)
+        isCursorVisible = false
+        alpha = 0.01f
+    }
+
+    override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
+        val base = super.onCreateInputConnection(outAttrs)
+        return object : InputConnectionWrapper(base, true) {
+            override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
+                currentComposing = text?.toString().orEmpty()
+                onComposingChanged(currentComposing)
+                return super.setComposingText(text, newCursorPosition)
+            }
+
+            override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
+                val committed = text?.toString().orEmpty()
+                if (committed.isNotEmpty()) onCommittedText(committed)
+                currentComposing = ""
+                onComposingChanged("")
+                val result = super.commitText(text, newCursorPosition)
+                clearProxyText()
+                return result
+            }
+
+            override fun finishComposingText(): Boolean {
+                currentComposing = ""
+                onComposingChanged("")
+                return super.finishComposingText()
+            }
+
+            override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
+                if (currentComposing.isNotEmpty()) {
+                    currentComposing = currentComposing.dropLast(beforeLength.coerceAtLeast(1))
+                    onComposingChanged(currentComposing)
+                } else {
+                    repeat(beforeLength.coerceAtLeast(1)) { onBackspace() }
+                }
+                return super.deleteSurroundingText(beforeLength, afterLength)
+            }
+
+            override fun sendKeyEvent(event: KeyEvent): Boolean {
+                if (event.action == KeyEvent.ACTION_DOWN) {
+                    when (event.keyCode) {
+                        KeyEvent.KEYCODE_DEL -> {
+                            onBackspace()
+                            return true
+                        }
+                        KeyEvent.KEYCODE_ENTER -> {
+                            onEnter()
+                            return true
+                        }
+                    }
+                }
+                return super.sendKeyEvent(event)
+            }
+        }
+    }
+
+    fun clearProxyText() {
+        if (clearing) return
+        clearing = true
+        post {
+            text?.clear()
+            clearing = false
+        }
+    }
+}
+
 class EmbeddedTerminalPage : ShellPage {
     private companion object {
         const val DEFAULT_FONT_SP = 15f
@@ -64,6 +149,7 @@ class EmbeddedTerminalPage : ShellPage {
     private var activity: Activity? = null
     private var ui: AIDevUi? = null
     private var terminalView: TerminalView? = null
+    private var inputProxy: TerminalImeProxyEditText? = null
     private lateinit var tabBar: LinearLayout
     private lateinit var statusText: TextView
     private lateinit var completionRow: LinearLayout
@@ -76,6 +162,7 @@ class EmbeddedTerminalPage : ShellPage {
     private var pendingFontSp = DEFAULT_FONT_SP
     private var fontApplyScheduled = false
     private var inputBuffer = ""
+    private var composingBuffer = ""
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
@@ -103,7 +190,26 @@ class EmbeddedTerminalPage : ShellPage {
             setTextSize(fontPx(activity))
             setTerminalViewClient(viewClient(activity))
         }
+        inputProxy = TerminalImeProxyEditText(activity).apply {
+            onComposingChanged = { text ->
+                composingBuffer = text
+                refreshCompletions(activity)
+            }
+            onCommittedText = { text ->
+                session?.write(text)
+                updateInputBuffer(text)
+            }
+            onBackspace = {
+                session?.write("\u007F")
+                updateInputBuffer("\b")
+            }
+            onEnter = {
+                session?.write("\n")
+                updateInputBuffer("\n")
+            }
+        }
         root.addView(terminalView, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(inputProxy, LinearLayout.LayoutParams(1, 1))
         root.addView(completionBar(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(32)))
         root.addView(keys(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(70)))
         ensureSession(activity)
@@ -356,7 +462,7 @@ class EmbeddedTerminalPage : ShellPage {
             .take(8)
     }
 
-    private fun completionInput(): String = inputBuffer
+    private fun completionInput(): String = inputBuffer + composingBuffer
 
     private fun fuzzyCompletionMatch(prefix: String, item: TerminalCompletion): Boolean {
         if (prefix.length < 2) return false
@@ -421,14 +527,16 @@ class EmbeddedTerminalPage : ShellPage {
     private fun applyCompletion(item: TerminalCompletion) {
         val target = item.insertText
         val committed = inputBuffer
-        val insert = if (target.equals(completionInput(), ignoreCase = true) || target.equals(committed, ignoreCase = true)) {
+        val current = completionInput()
+        val insert = if (target.equals(current, ignoreCase = true) || target.equals(committed, ignoreCase = true)) {
             ""
-        } else if (target.startsWith(committed, ignoreCase = true)) {
+        } else if (target.startsWith(committed, ignoreCase = true) && composingBuffer.isEmpty()) {
             target.drop(committed.length)
         } else {
             "\u007F".repeat(committed.length) + target
         }
         if (insert.isEmpty()) return
+        clearComposingInput()
         session?.write(insert)
         inputBuffer = target
         val currentActivity = activity ?: return
@@ -439,6 +547,7 @@ class EmbeddedTerminalPage : ShellPage {
     private fun executeCompletion(activity: Activity, item: TerminalCompletion) {
         session?.write(item.insertText.trimEnd() + "\n")
         inputBuffer = ""
+        clearComposingInput()
         refreshCompletions(activity)
         focusTerminalInput(activity)
     }
@@ -488,6 +597,7 @@ class EmbeddedTerminalPage : ShellPage {
             when (ch) {
                 '\r', '\n' -> {
                     inputBuffer = ""
+                    composingBuffer = ""
                 }
                 '\b', '\u007F' -> inputBuffer = inputBuffer.dropLast(1)
                 else -> if (!ch.isISOControl()) inputBuffer += ch
@@ -496,10 +606,25 @@ class EmbeddedTerminalPage : ShellPage {
         activity?.let { refreshCompletions(it) }
     }
 
+    private fun clearComposingInput() {
+        composingBuffer = ""
+        inputProxy?.clearProxyText()
+        inputProxy?.let { proxy ->
+            (activity?.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)?.restartInput(proxy)
+        }
+    }
+
     private fun focusTerminalInput(activity: Activity) {
-        terminalView?.requestFocus()
-        (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-            .showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT)
+        val proxy = inputProxy
+        if (proxy != null) {
+            proxy.requestFocus()
+            (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                .showSoftInput(proxy, InputMethodManager.SHOW_IMPLICIT)
+        } else {
+            terminalView?.requestFocus()
+            (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                .showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT)
+        }
     }
 
     private fun currentProjectDir(): File? =
@@ -1120,7 +1245,7 @@ class EmbeddedTerminalPage : ShellPage {
             override fun shouldBackButtonBeMappedToEscape(): Boolean = true
             override fun shouldEnforceCharBasedInput(): Boolean = false
             override fun shouldUseCtrlSpaceWorkaround(): Boolean = false
-            override fun isTerminalViewSelected(): Boolean = terminalView?.hasFocus() == true
+            override fun isTerminalViewSelected(): Boolean = terminalView?.hasFocus() == true || inputProxy?.hasFocus() == true
             override fun copyModeChanged(copyMode: Boolean) {}
             override fun onKeyDown(keyCode: Int, e: KeyEvent, session: TerminalSession): Boolean {
                 when (keyCode) {
