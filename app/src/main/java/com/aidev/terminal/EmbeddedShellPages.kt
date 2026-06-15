@@ -13,16 +13,12 @@ import android.os.Build
 import android.os.Environment
 import android.os.PowerManager
 import android.provider.Settings
-import android.text.InputType
 import android.text.TextUtils
 import android.util.Log
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
-import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputConnection
-import android.view.inputmethod.InputConnectionWrapper
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.HorizontalScrollView
@@ -58,87 +54,6 @@ private data class TerminalCompletion(
     val kind: String = "CMD"
 )
 
-private class TerminalImeProxyEditText(context: Context) : EditText(context) {
-    var onComposingChanged: (String) -> Unit = {}
-    var onCommittedText: (String) -> Unit = {}
-    var onBackspace: () -> Unit = {}
-    var onEnter: () -> Unit = {}
-    private var clearing = false
-    private var currentComposing = ""
-
-    init {
-        setSingleLine(true)
-        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-        imeOptions = EditorInfo.IME_ACTION_NONE or EditorInfo.IME_FLAG_NO_EXTRACT_UI
-        setTextColor(Color.TRANSPARENT)
-        setBackgroundColor(Color.TRANSPARENT)
-        isCursorVisible = false
-        alpha = 0.01f
-    }
-
-    override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
-        val base = super.onCreateInputConnection(outAttrs)
-        return object : InputConnectionWrapper(base, true) {
-            override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
-                currentComposing = text?.toString().orEmpty()
-                onComposingChanged(currentComposing)
-                return super.setComposingText(text, newCursorPosition)
-            }
-
-            override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
-                val committed = text?.toString().orEmpty()
-                if (committed.isNotEmpty()) onCommittedText(committed)
-                currentComposing = ""
-                onComposingChanged("")
-                val result = super.commitText(text, newCursorPosition)
-                clearProxyText()
-                return result
-            }
-
-            override fun finishComposingText(): Boolean {
-                currentComposing = ""
-                onComposingChanged("")
-                return super.finishComposingText()
-            }
-
-            override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
-                if (currentComposing.isNotEmpty()) {
-                    currentComposing = currentComposing.dropLast(beforeLength.coerceAtLeast(1))
-                    onComposingChanged(currentComposing)
-                } else {
-                    repeat(beforeLength.coerceAtLeast(1)) { onBackspace() }
-                }
-                return super.deleteSurroundingText(beforeLength, afterLength)
-            }
-
-            override fun sendKeyEvent(event: KeyEvent): Boolean {
-                if (event.action == KeyEvent.ACTION_DOWN) {
-                    when (event.keyCode) {
-                        KeyEvent.KEYCODE_DEL -> {
-                            onBackspace()
-                            return true
-                        }
-                        KeyEvent.KEYCODE_ENTER -> {
-                            onEnter()
-                            return true
-                        }
-                    }
-                }
-                return super.sendKeyEvent(event)
-            }
-        }
-    }
-
-    fun clearProxyText() {
-        if (clearing) return
-        clearing = true
-        post {
-            text?.clear()
-            clearing = false
-        }
-    }
-}
-
 class EmbeddedTerminalPage : ShellPage {
     private companion object {
         const val DEFAULT_FONT_SP = 15f
@@ -149,7 +64,6 @@ class EmbeddedTerminalPage : ShellPage {
     private var activity: Activity? = null
     private var ui: AIDevUi? = null
     private var terminalView: TerminalView? = null
-    private var inputProxy: TerminalImeProxyEditText? = null
     private lateinit var tabBar: LinearLayout
     private lateinit var statusText: TextView
     private lateinit var completionRow: LinearLayout
@@ -162,7 +76,6 @@ class EmbeddedTerminalPage : ShellPage {
     private var pendingFontSp = DEFAULT_FONT_SP
     private var fontApplyScheduled = false
     private var inputBuffer = ""
-    private var composingBuffer = ""
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
@@ -190,26 +103,7 @@ class EmbeddedTerminalPage : ShellPage {
             setTextSize(fontPx(activity))
             setTerminalViewClient(viewClient(activity))
         }
-        inputProxy = TerminalImeProxyEditText(activity).apply {
-            onComposingChanged = { text ->
-                composingBuffer = text
-                refreshCompletions(activity)
-            }
-            onCommittedText = { text ->
-                session?.write(text)
-                updateInputBuffer(text)
-            }
-            onBackspace = {
-                session?.write("\u007F")
-                updateInputBuffer("\b")
-            }
-            onEnter = {
-                session?.write("\n")
-                updateInputBuffer("\n")
-            }
-        }
         root.addView(terminalView, LinearLayout.LayoutParams(-1, 0, 1f))
-        root.addView(inputProxy, LinearLayout.LayoutParams(1, 1))
         root.addView(completionBar(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(32)))
         root.addView(keys(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(70)))
         ensureSession(activity)
@@ -277,55 +171,22 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun completionChip(activity: Activity, ui: AIDevUi, item: TerminalCompletion): TextView =
         TextView(activity).apply {
-            text = if (item.kind == "HIST") "历史 ${item.label}" else item.label
+            text = if (item.kind == "PIN") "固定 ${item.label}" else item.label
             textSize = 11f
             gravity = Gravity.CENTER
             includeFontPadding = false
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
-            setTextColor(if (item.kind == "HIST") 0xFFFBBF24.toInt() else 0xFFD1D5DB.toInt())
+            setTextColor(if (item.kind == "PIN") 0xFFA7F3D0.toInt() else 0xFFD1D5DB.toInt())
             setPadding(ui.dp(10), 0, ui.dp(10), 0)
             background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(if (item.kind == "HIST") 0xFF2A1F09.toInt() else 0xFF172033.toInt())
+                setColor(if (item.kind == "PIN") 0xFF0F2A22.toInt() else 0xFF172033.toInt())
                 cornerRadius = ui.dp(12).toFloat()
-                setStroke(ui.dp(1), if (item.kind == "HIST") 0xFFB45309.toInt() else 0xFF2B3650.toInt())
-            }
-            var downY = 0f
-            setOnTouchListener { _, event ->
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> {
-                        downY = event.rawY
-                        false
-                    }
-                    MotionEvent.ACTION_UP -> {
-                        val dy = event.rawY - downY
-                        when {
-                            dy < -ui.dp(18) -> {
-                                executeCompletion(activity, item)
-                                true
-                            }
-                            dy > ui.dp(18) -> {
-                                if (item.kind == "HIST") {
-                                    deleteHistoryCompletion(activity, item)
-                                } else {
-                                    Toast.makeText(activity, "内置命令不能删除", Toast.LENGTH_SHORT).show()
-                                }
-                                true
-                            }
-                            else -> false
-                        }
-                    }
-                    else -> false
-                }
+                setStroke(ui.dp(1), if (item.kind == "PIN") 0xFF059669.toInt() else 0xFF2B3650.toInt())
             }
             setOnClickListener { applyCompletion(item) }
             setOnLongClickListener {
-                AlertDialog.Builder(activity)
-                    .setTitle(item.label)
-                    .setMessage(if (item.kind == "HIST") "这是历史输入建议。\n\n点击：补全/替换当前输入\n上滑：执行并回车\n下滑：删除这条历史建议" else "这是内置正确命令。\n\n点击：补全/替换当前输入\n上滑：执行并回车\n下滑：不会删除内置命令")
-                    .setPositiveButton("执行") { _, _ -> executeCompletion(activity, item) }
-                    .setNegativeButton("关闭", null)
-                    .show()
+                showCompletionMenu(activity, item)
                 true
             }
         }
@@ -485,10 +346,9 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun completionSuggestions(activity: Activity): List<TerminalCompletion> {
         val prefix = completionInput().trimStart()
-        val history = recentCommandHistory(activity).map { TerminalCompletion(it, it, "HIST") }
+        val pinned = pinnedCompletions(activity)
         val builtIns = builtinCompletions()
-        val builtInTexts = builtIns.map { it.insertText }.toSet()
-        val source = (builtIns + history.filterNot { it.insertText in builtInTexts }).distinctBy { it.insertText }
+        val source = (pinned + builtIns).distinctBy { it.insertText }
         if (prefix.isBlank()) return source.take(8)
         return source
             .filter { it.insertText.startsWith(prefix, ignoreCase = true) || it.label.startsWith(prefix, ignoreCase = true) }
@@ -496,7 +356,7 @@ class EmbeddedTerminalPage : ShellPage {
             .take(8)
     }
 
-    private fun completionInput(): String = inputBuffer + composingBuffer
+    private fun completionInput(): String = inputBuffer
 
     private fun fuzzyCompletionMatch(prefix: String, item: TerminalCompletion): Boolean {
         if (prefix.length < 2) return false
@@ -550,18 +410,25 @@ class EmbeddedTerminalPage : ShellPage {
             "list-listen-ports"
         ).map { TerminalCompletion(it) }
 
+    private fun pinnedCompletions(activity: Activity): List<TerminalCompletion> =
+        activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+            .getString("terminal_pinned_completions", "")
+            ?.lines()
+            ?.filter { it.isNotBlank() }
+            ?.map { TerminalCompletion(it, it, "PIN") }
+            .orEmpty()
+
     private fun applyCompletion(item: TerminalCompletion) {
         val target = item.insertText
         val committed = inputBuffer
         val insert = if (target.equals(completionInput(), ignoreCase = true) || target.equals(committed, ignoreCase = true)) {
             ""
-        } else if (target.startsWith(committed, ignoreCase = true) && composingBuffer.isEmpty()) {
+        } else if (target.startsWith(committed, ignoreCase = true)) {
             target.drop(committed.length)
         } else {
             "\u007F".repeat(committed.length) + target
         }
         if (insert.isEmpty()) return
-        clearComposingInput()
         session?.write(insert)
         inputBuffer = target
         val currentActivity = activity ?: return
@@ -571,29 +438,56 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun executeCompletion(activity: Activity, item: TerminalCompletion) {
         session?.write(item.insertText.trimEnd() + "\n")
-        rememberCommand(activity, item.insertText.trim())
         inputBuffer = ""
-        clearComposingInput()
         refreshCompletions(activity)
         focusTerminalInput(activity)
     }
 
-    private fun deleteHistoryCompletion(activity: Activity, item: TerminalCompletion) {
+    private fun showCompletionMenu(activity: Activity, item: TerminalCompletion) {
+        val options = if (item.kind == "PIN") {
+            arrayOf("补全", "执行并回车", "复制命令", "取消固定")
+        } else {
+            arrayOf("补全", "执行并回车", "复制命令", "固定到常用")
+        }
+        AlertDialog.Builder(activity)
+            .setTitle(item.label)
+            .setItems(options) { _, which ->
+                when (options[which]) {
+                    "补全" -> applyCompletion(item)
+                    "执行并回车" -> executeCompletion(activity, item)
+                    "复制命令" -> {
+                        (activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                            .setPrimaryClip(ClipData.newPlainText("AIDev command", item.insertText))
+                        Toast.makeText(activity, "已复制命令", Toast.LENGTH_SHORT).show()
+                    }
+                    "固定到常用" -> pinCompletion(activity, item)
+                    "取消固定" -> unpinCompletion(activity, item)
+                }
+            }
+            .show()
+    }
+
+    private fun pinCompletion(activity: Activity, item: TerminalCompletion) {
         val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val old = prefs.getString("terminal_command_history", "")?.lines().orEmpty()
-        val next = old.filter { it.isNotBlank() && it != item.insertText }
-        prefs.edit().putString("terminal_command_history", next.joinToString("\n")).apply()
+        val old = prefs.getString("terminal_pinned_completions", "")?.lines()?.filter { it.isNotBlank() && it != item.insertText }.orEmpty()
+        prefs.edit().putString("terminal_pinned_completions", (listOf(item.insertText) + old).take(12).joinToString("\n")).apply()
         refreshCompletions(activity)
-        Toast.makeText(activity, "已删除历史建议", Toast.LENGTH_SHORT).show()
+        Toast.makeText(activity, "已固定到常用", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun unpinCompletion(activity: Activity, item: TerminalCompletion) {
+        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+        val old = prefs.getString("terminal_pinned_completions", "")?.lines().orEmpty()
+        prefs.edit().putString("terminal_pinned_completions", old.filter { it.isNotBlank() && it != item.insertText }.joinToString("\n")).apply()
+        refreshCompletions(activity)
+        Toast.makeText(activity, "已取消固定", Toast.LENGTH_SHORT).show()
     }
 
     private fun updateInputBuffer(text: String) {
         text.forEach { ch ->
             when (ch) {
                 '\r', '\n' -> {
-                    activity?.let { rememberCommand(it, inputBuffer.trim()) }
                     inputBuffer = ""
-                    composingBuffer = ""
                 }
                 '\b', '\u007F' -> inputBuffer = inputBuffer.dropLast(1)
                 else -> if (!ch.isISOControl()) inputBuffer += ch
@@ -602,39 +496,11 @@ class EmbeddedTerminalPage : ShellPage {
         activity?.let { refreshCompletions(it) }
     }
 
-    private fun clearComposingInput() {
-        composingBuffer = ""
-        inputProxy?.clearProxyText()
-        inputProxy?.let { proxy ->
-            (activity?.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)?.restartInput(proxy)
-        }
-    }
-
     private fun focusTerminalInput(activity: Activity) {
-        val proxy = inputProxy
-        if (proxy != null) {
-            proxy.requestFocus()
-            (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(proxy, InputMethodManager.SHOW_IMPLICIT)
-        } else {
-            terminalView?.requestFocus()
-        }
+        terminalView?.requestFocus()
+        (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+            .showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT)
     }
-
-    private fun rememberCommand(activity: Activity, command: String) {
-        if (command.isBlank()) return
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val old = prefs.getString("terminal_command_history", "")?.lines()?.filter { it.isNotBlank() && it != command }.orEmpty()
-        prefs.edit().putString("terminal_command_history", (old + command).takeLast(40).joinToString("\n")).apply()
-    }
-
-    private fun recentCommandHistory(activity: Activity): List<String> =
-        activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-            .getString("terminal_command_history", "")
-            ?.lines()
-            ?.filter { it.isNotBlank() }
-            ?.takeLast(12)
-            ?.reversed()
-            .orEmpty()
 
     private fun currentProjectDir(): File? =
         activity?.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
@@ -1178,7 +1044,6 @@ class EmbeddedTerminalPage : ShellPage {
         ensureSession(activity ?: return)
         val finalCommand = command.trimEnd()
         session?.write(finalCommand + "\n")
-        if (remember) activity?.let { rememberCommand(it, finalCommand) }
         inputBuffer = ""
         activity?.let { refreshCompletions(it) }
         activity?.let { focusTerminalInput(it) }
@@ -1255,7 +1120,7 @@ class EmbeddedTerminalPage : ShellPage {
             override fun shouldBackButtonBeMappedToEscape(): Boolean = true
             override fun shouldEnforceCharBasedInput(): Boolean = false
             override fun shouldUseCtrlSpaceWorkaround(): Boolean = false
-            override fun isTerminalViewSelected(): Boolean = terminalView?.hasFocus() == true || inputProxy?.hasFocus() == true
+            override fun isTerminalViewSelected(): Boolean = terminalView?.hasFocus() == true
             override fun copyModeChanged(copyMode: Boolean) {}
             override fun onKeyDown(keyCode: Int, e: KeyEvent, session: TerminalSession): Boolean {
                 when (keyCode) {
