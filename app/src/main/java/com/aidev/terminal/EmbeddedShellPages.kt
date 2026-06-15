@@ -197,6 +197,7 @@ class EmbeddedTerminalPage : ShellPage {
             "会话 · 关闭当前会话" to { closeCurrent(activity) },
             "导航 · 退出到工作台" to { host.switchTab(ShellActivity.TAB_DASHBOARD) },
             "终端 · 进入 Ubuntu" to { send("ubuntu") },
+            "终端 · 诊断 Doctor" to { send("aidev-doctor") },
             "终端 · 清屏" to { send("clear") },
             "OpenCode · CLI 界面" to { sendAgentCommand("aidev-opencode") },
             "OpenCode · Serve 后台服务" to { sendAgentCommand("task-run opencode-serve 'opencode serve --port 4096 --hostname 127.0.0.1'") },

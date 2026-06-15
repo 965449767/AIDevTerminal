@@ -254,22 +254,77 @@ AIDEV_APT_EOF
             '╰────────────────────╯'
         }
 
+        aidev_doctor_android() {
+          echo "== AIDev Doctor =="
+          echo "mode: Android shell"
+          echo "version: ${'$'}{AIDEV_VERSION:-unknown}"
+          echo "time: ${'$'}(date '+%F %T' 2>/dev/null || echo unknown)"
+          echo
+          [ -d "${'$'}AIDEV_HOME" ] && echo "[OK] AIDEV_HOME: ${'$'}AIDEV_HOME" || echo "[FAIL] AIDEV_HOME missing: ${'$'}AIDEV_HOME"
+          [ -f "${'$'}AIDEV_ROOTFS/.aidev-rootfs-ready" ] && echo "[OK] Ubuntu ready marker" || echo "[WARN] Ubuntu ready marker missing"
+          [ -f "${'$'}AIDEV_ROOTFS/etc/os-release" ] && echo "[OK] Ubuntu os-release" || echo "[WARN] Ubuntu os-release missing"
+          [ -x "${'$'}AIDEV_PROOT" ] && echo "[OK] PRoot: ${'$'}AIDEV_PROOT" || echo "[FAIL] PRoot missing: ${'$'}AIDEV_PROOT"
+          [ -f "${'$'}AIDEV_PROOT_LOADER" ] && echo "[OK] PRoot loader" || echo "[WARN] PRoot loader missing"
+          [ -f "${'$'}AIDEV_ROOTFS/etc/resolv.conf" ] && echo "[OK] DNS config" || echo "[WARN] DNS config missing"
+          [ -f "${'$'}AIDEV_ROOTFS/etc/apt/sources.list" ] && echo "[OK] apt sources" || echo "[WARN] apt sources missing"
+          command -v tar >/dev/null 2>&1 && echo "[OK] Android tar available" || echo "[WARN] Android tar missing"
+          command -v curl >/dev/null 2>&1 && echo "[OK] curl available" || echo "[INFO] curl unavailable"
+          command -v wget >/dev/null 2>&1 && echo "[OK] wget available" || echo "[INFO] wget unavailable"
+          echo "groups: ${'$'}(id -G 2>/dev/null || echo unknown)"
+          echo "disk:"
+          df -h "${'$'}AIDEV_HOME" 2>/dev/null | tail -1 || true
+          echo
+          echo "如果已经在 Ubuntu 内，请直接运行：aidev-doctor"
+        }
+
+        ensure_ubuntu_helpers() {
+          has_ubuntu || return 0
+          mkdir -p "${'$'}AIDEV_ROOTFS/usr/local/bin"
+          cat > "${'$'}AIDEV_ROOTFS/usr/local/bin/aidev-doctor" <<'AIDEV_DOCTOR_EOF'
+#!/bin/sh
+echo "== AIDev Doctor =="
+echo "mode: Ubuntu PRoot"
+echo "time: $(date '+%F %T' 2>/dev/null || echo unknown)"
+echo
+if [ -f /etc/os-release ]; then
+  . /etc/os-release
+  echo "[OK] Ubuntu: ${'$'}{PRETTY_NAME:-unknown}"
+else
+  echo "[FAIL] /etc/os-release missing"
+fi
+[ -f /.aidev-rootfs-ready ] && echo "[OK] rootfs ready marker" || echo "[WARN] rootfs ready marker missing"
+[ -d /host-home ] && echo "[OK] host home mounted: /host-home" || echo "[WARN] /host-home missing"
+[ -f /host-home/dev-env/bin/aidev-ubuntu-core ] && echo "[OK] host command core" || echo "[WARN] host command core missing"
+[ -r /etc/resolv.conf ] && echo "[OK] DNS config" || echo "[WARN] DNS config missing"
+[ -r /etc/apt/sources.list ] && echo "[OK] apt sources" || echo "[WARN] apt sources missing"
+command -v apt-get >/dev/null 2>&1 && echo "[OK] apt-get available" || echo "[WARN] apt-get missing"
+command -v bash >/dev/null 2>&1 && echo "[OK] bash available" || echo "[WARN] bash missing"
+echo "user: $(id 2>/dev/null || echo unknown)"
+echo "pwd: $(pwd)"
+echo "disk:"
+df -h / 2>/dev/null | tail -1 || true
+AIDEV_DOCTOR_EOF
+          chmod 755 "${'$'}AIDEV_ROOTFS/usr/local/bin/aidev-doctor" 2>/dev/null || true
+        }
+
         enter_ubuntu() {
           has_ubuntu || install_ubuntu --fast || return ${'$'}?
           ensure_android_groups "${'$'}AIDEV_ROOTFS"
+          ensure_ubuntu_helpers
           shell="/bin/bash"
           [ -x "${'$'}AIDEV_ROOTFS/bin/bash" ] || shell="/bin/sh"
           cd "${'$'}AIDEV_HOME" || exit 1
           exec "${'$'}AIDEV_PROOT" --link2symlink -0 -r "${'$'}AIDEV_ROOTFS" \
             -b /dev -b /proc -b /sys -b /sdcard -b "${'$'}AIDEV_HOME:/host-home" \
             -w /root /usr/bin/env -i \
-            HOME=/root PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            HOME=/root AIDEV_HOME=/host-home PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
             TERM="${'$'}{TERM:-xterm-256color}" "${'$'}shell" -l
         }
 
         case "${'$'}cmd" in
           ubuntu) enter_ubuntu "${'$'}@" ;;
           install-ubuntu) install_ubuntu "${'$'}@" ;;
+          aidev-doctor) aidev_doctor_android ;;
           aidev-auto-bootstrap)
             if has_ubuntu; then
               ubuntu_logo "自动进入环境     │"

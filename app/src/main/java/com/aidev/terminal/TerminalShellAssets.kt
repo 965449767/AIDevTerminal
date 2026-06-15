@@ -9,14 +9,26 @@ data class TerminalShellAssetPaths(
 )
 
 object TerminalShellAssets {
+    private const val ASSET_VERSION = "0.12.14-terminal-foundation-debug"
+
     fun ensure(activity: Activity): TerminalShellAssetPaths {
         val home = File(activity.filesDir, "home").apply { mkdirs() }
         val rc = File(home, ".aidevrc")
         val entry = File(home, ".aidev_shell_entry")
+        val core = File(home, "dev-env/bin/aidev-ubuntu-core")
+        val marker = File(home, ".aidev-shell-assets-version")
         installProotSupportLibraries(activity)
-        installAidevCommandScripts(home)
-        writeCanonicalRc(activity, home, rc)
-        writeShellEntry(home, rc, entry)
+        val assetsReady = marker.exists() &&
+            marker.readText().trim() == ASSET_VERSION &&
+            rc.exists() &&
+            entry.exists() &&
+            core.exists()
+        if (!assetsReady) {
+            installAidevCommandScripts(home)
+            writeCanonicalRc(activity, home, rc)
+            writeShellEntry(home, rc, entry)
+            marker.writeText("$ASSET_VERSION\n")
+        }
         return TerminalShellAssetPaths(home, entry)
     }
 
@@ -41,7 +53,7 @@ object TerminalShellAssets {
         val core = File(bin, "aidev-ubuntu-core")
         core.writeText(UbuntuBootstrapScripts.aidevUbuntuCommandScript(home.absolutePath))
         core.setReadable(true, false)
-        listOf("ubuntu", "install-ubuntu", "aidev-auto-bootstrap").forEach { name ->
+        listOf("ubuntu", "install-ubuntu", "aidev-auto-bootstrap", "aidev-doctor").forEach { name ->
             val out = File(bin, name)
             out.writeText("# AIDev command marker. Android 私有目录禁止直接执行脚本；实际入口由 .aidevrc 函数转发。\n")
             out.setReadable(true, false)
@@ -54,7 +66,7 @@ object TerminalShellAssets {
         rc.writeText(
             """
             # AIDev canonical shell rc. 自动生成，请不要在这里保存个人配置。
-            AIDEV_VERSION="0.12.13-virtual-key-swipe-debug"
+            AIDEV_VERSION="$ASSET_VERSION"
             AIDEV_HOME="${home.absolutePath}"
             AIDEV_BIN="${'$'}AIDEV_HOME/dev-env/bin"
             AIDEV_ROOTFS="${'$'}AIDEV_HOME/ubuntu-rootfs"
@@ -75,6 +87,7 @@ object TerminalShellAssets {
             ubuntu() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" ubuntu "${'$'}@"; }
             install-ubuntu() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" install-ubuntu "${'$'}@"; }
             aidev-auto-bootstrap() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-auto-bootstrap "${'$'}@"; }
+            aidev-doctor() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-doctor "${'$'}@"; }
             ${UbuntuBootstrapScripts.agentShellFunctions()}
             """.trimIndent() + "\n"
         )
