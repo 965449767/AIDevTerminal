@@ -406,7 +406,7 @@ class EmbeddedTerminalPage : ShellPage {
     private fun applyCompletion(item: TerminalCompletion) {
         val current = inputBuffer
         val target = item.insertText
-        val insert = if (target.startsWith(current)) target.removePrefix(current) else target
+        val insert = if (target.startsWith(current, ignoreCase = true)) target.drop(current.length) else target
         session?.write(insert)
         updateInputBuffer(insert)
         terminalView?.requestFocus()
@@ -1076,12 +1076,6 @@ class EmbeddedTerminalPage : ShellPage {
                 when (keyCode) {
                     KeyEvent.KEYCODE_ENTER -> updateInputBuffer("\n")
                     KeyEvent.KEYCODE_DEL -> updateInputBuffer("\b")
-                    else -> {
-                        val unicode = e.unicodeChar
-                        if (unicode > 0 && !e.isCtrlPressed && !e.isAltPressed) {
-                            updateInputBuffer(String(Character.toChars(unicode)))
-                        }
-                    }
                 }
                 return false
             }
@@ -1091,7 +1085,12 @@ class EmbeddedTerminalPage : ShellPage {
             override fun readAltKey(): Boolean = false
             override fun readShiftKey(): Boolean = false
             override fun readFnKey(): Boolean = false
-            override fun onCodePoint(codePoint: Int, ctrlDown: Boolean, session: TerminalSession): Boolean = false
+            override fun onCodePoint(codePoint: Int, ctrlDown: Boolean, session: TerminalSession): Boolean {
+                if (!ctrlDown && codePoint > 0) {
+                    updateInputBuffer(String(Character.toChars(codePoint)))
+                }
+                return false
+            }
             override fun onEmulatorSet() { terminalView?.onScreenUpdated() }
             override fun logError(tag: String, message: String) { Log.e(tag, message) }
             override fun logWarn(tag: String, message: String) { Log.w(tag, message) }
