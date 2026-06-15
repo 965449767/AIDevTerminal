@@ -11,8 +11,8 @@ android {
         applicationId = "com.aidev.terminal"
         minSdk = 26
         targetSdk = 34
-        versionCode = 68
-        versionName = "0.12.26-terminal-autofocus-debug"
+        versionCode = 69
+        versionName = "0.12.27-completion-polish-debug"
         ndk {
             abiFilters += listOf("arm64-v8a")
         }

@@ -159,6 +159,7 @@ class EmbeddedTerminalPage : ShellPage {
     private val sessions = mutableListOf<EmbeddedTermSession>()
     private var ctrlLatched = false
     private var autoBootstrapDispatched = false
+    private var autoIndexDispatched = false
     private var pendingFontSp = DEFAULT_FONT_SP
     private var fontApplyScheduled = false
     private var inputBuffer = ""
@@ -219,6 +220,7 @@ class EmbeddedTerminalPage : ShellPage {
             maybeAutoBootstrapUbuntu(activity)
             focusTerminalInput(activity)
         }, 600)
+        terminalView?.postDelayed({ maybeAutoRefreshCommandIndex(activity) }, 1800)
         return root
     }
 
@@ -270,12 +272,35 @@ class EmbeddedTerminalPage : ShellPage {
         if (!::completionRow.isInitialized) return
         val uiRef = ui ?: return
         completionRow.removeAllViews()
-        completionSuggestions(activity).take(8).forEach { item ->
+        val suggestions = completionSuggestions(activity).take(8)
+        if (suggestions.isEmpty()) {
+            completionRow.addView(completionHintChip(activity, uiRef), LinearLayout.LayoutParams(-2, -1))
+            return
+        }
+        suggestions.forEach { item ->
             completionRow.addView(completionChip(activity, uiRef, item), LinearLayout.LayoutParams(-2, -1).apply {
                 setMargins(0, 0, uiRef.dp(5), 0)
             })
         }
     }
+
+    private fun completionHintChip(activity: Activity, ui: AIDevUi): TextView =
+        TextView(activity).apply {
+            text = if (runtimeCompletions().isEmpty()) "输入命令，或运行 aidev-index-commands 刷新环境命令" else "继续输入以筛选命令"
+            textSize = 11f
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            setTextColor(0xFF9CA3AF.toInt())
+            setPadding(ui.dp(10), 0, ui.dp(10), 0)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xFF111827.toInt())
+                cornerRadius = ui.dp(12).toFloat()
+                setStroke(ui.dp(1), 0xFF374151.toInt())
+            }
+            setOnClickListener { send("aidev-index-commands") }
+        }
 
     private fun completionChip(activity: Activity, ui: AIDevUi, item: TerminalCompletion): TextView =
         TextView(activity).apply {
@@ -479,13 +504,30 @@ class EmbeddedTerminalPage : ShellPage {
         val builtIns = builtinCompletions()
         val source = (pinned + runtime + builtIns).distinctBy { it.insertText }
         if (prefix.isBlank()) return source.take(8)
-        return source
-            .filter { it.insertText.startsWith(prefix, ignoreCase = true) || it.label.startsWith(prefix, ignoreCase = true) }
-            .ifEmpty { source.filter { fuzzyCompletionMatch(prefix, it) } }
+        val direct = source.filter { it.insertText.startsWith(prefix, ignoreCase = true) || it.label.startsWith(prefix, ignoreCase = true) }
+        val matches = direct.ifEmpty { source.filter { fuzzyCompletionMatch(prefix, it) } }
+        return matches
+            .sortedWith(compareBy<TerminalCompletion> { completionRank(prefix, it) }.thenBy { it.insertText.length }.thenBy { it.insertText })
             .take(8)
     }
 
     private fun completionInput(): String = inputBuffer + composingBuffer
+
+    private fun completionRank(prefix: String, item: TerminalCompletion): Int {
+        val p = prefix.lowercase()
+        val text = item.insertText.lowercase()
+        val kindBase = when (item.kind) {
+            "PIN" -> 0
+            "ENV" -> 20
+            else -> 40
+        }
+        return when {
+            text == p -> kindBase
+            text.startsWith(p) -> kindBase + 1
+            text.split(Regex("[^\\p{L}\\p{N}]+")).any { it.startsWith(p) } -> kindBase + 4
+            else -> kindBase + 9
+        }
+    }
 
     private fun fuzzyCompletionMatch(prefix: String, item: TerminalCompletion): Boolean {
         if (prefix.length < 2) return false
@@ -1234,6 +1276,17 @@ class EmbeddedTerminalPage : ShellPage {
         autoBootstrapDispatched = true
         session?.write("aidev-auto-bootstrap\n")
         focusTerminalInput(activity)
+    }
+
+    private fun maybeAutoRefreshCommandIndex(activity: Activity) {
+        if (autoIndexDispatched) return
+        val home = homeDir ?: return
+        val index = File(home, ".aidev-command-index")
+        val stale = !index.isFile || System.currentTimeMillis() - index.lastModified() > 24L * 60L * 60L * 1000L
+        if (!stale) return
+        autoIndexDispatched = true
+        session?.write("aidev-index-commands\n")
+        terminalView?.postDelayed({ refreshCompletions(activity) }, 2500)
     }
 
     private fun sessionClient(activity: Activity): TerminalSessionClient =
