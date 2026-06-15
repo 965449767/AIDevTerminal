@@ -632,31 +632,28 @@ class EmbeddedTerminalPage : ShellPage {
         val pathMode = input.contains(' ') && command in setOf("cd", "ls", "cat", "less", "tail", "head", "nano", "vim", "rm", "cp", "mv", "mkdir", "touch", "grep") ||
             token.startsWith("/") || token.startsWith("./") || token.startsWith("../") || token.startsWith("~")
         if (!pathMode) return emptyList()
-        val root = File(home, "ubuntu-rootfs/root")
+        val currentDir = currentUbuntuDirFile(home)
         val hostHome = home
         val (baseDir, typedPrefix, displayPrefix) = when {
             token.startsWith("/root/") -> {
-                val relative = token.removePrefix("/root/")
-                val slash = relative.lastIndexOf('/')
-                val dirPart = if (slash >= 0) relative.substring(0, slash) else ""
-                val namePart = if (slash >= 0) relative.substring(slash + 1) else relative
-                Triple(File(root, dirPart), namePart, "/root/" + dirPart.let { if (it.isBlank()) "" else "$it/" })
+                pathParts(token.removePrefix("/root/"), "/root/", File(home, "ubuntu-rootfs/root"))
             }
-            token == "/root" || token == "~" || token == "~/" -> Triple(root, "", if (token.startsWith("~")) "~/" else "/root/")
+            token == "/root" || token == "~" || token == "~/" -> Triple(File(home, "ubuntu-rootfs/root"), "", if (token.startsWith("~")) "~/" else "/root/")
             token.startsWith("/host-home/") -> {
-                val relative = token.removePrefix("/host-home/")
-                val slash = relative.lastIndexOf('/')
-                val dirPart = if (slash >= 0) relative.substring(0, slash) else ""
-                val namePart = if (slash >= 0) relative.substring(slash + 1) else relative
-                Triple(File(hostHome, dirPart), namePart, "/host-home/" + dirPart.let { if (it.isBlank()) "" else "$it/" })
+                pathParts(token.removePrefix("/host-home/"), "/host-home/", hostHome)
+            }
+            token.startsWith("/") -> {
+                val relative = token.removePrefix("/")
+                pathParts(relative, "/", File(home, "ubuntu-rootfs"))
             }
             token.contains('/') -> {
                 val slash = token.lastIndexOf('/')
                 val dirPart = token.substring(0, slash)
                 val namePart = token.substring(slash + 1)
-                Triple(File(root, dirPart), namePart, if (dirPart.isBlank()) "" else "$dirPart/")
+                val cleanDir = dirPart.removePrefix("./")
+                Triple(File(currentDir, cleanDir), namePart, if (dirPart.isBlank()) "" else "$dirPart/")
             }
-            else -> Triple(root, token, "")
+            else -> Triple(currentDir, token, "")
         }
         if (!baseDir.isDirectory) return emptyList()
         val beforeToken = input.dropLast(token.length)
@@ -671,6 +668,25 @@ class EmbeddedTerminalPage : ShellPage {
                 TerminalCompletion(path, beforeToken + path, "PATH")
             }
             .toList()
+    }
+
+    private fun pathParts(relative: String, displayRoot: String, hostRoot: File): Triple<File, String, String> {
+        val slash = relative.lastIndexOf('/')
+        val dirPart = if (slash >= 0) relative.substring(0, slash) else ""
+        val namePart = if (slash >= 0) relative.substring(slash + 1) else relative
+        return Triple(File(hostRoot, dirPart), namePart, displayRoot + dirPart.let { if (it.isBlank()) "" else "$it/" })
+    }
+
+    private fun currentUbuntuDirFile(home: File): File {
+        val pwd = File(home, ".aidev-current-pwd").takeIf { it.isFile }?.readText()?.trim().orEmpty().ifBlank { "/root" }
+        return when {
+            pwd == "/host-home" -> home
+            pwd.startsWith("/host-home/") -> File(home, pwd.removePrefix("/host-home/"))
+            pwd == "/root" -> File(home, "ubuntu-rootfs/root")
+            pwd.startsWith("/root/") -> File(home, "ubuntu-rootfs/root/${pwd.removePrefix("/root/")}")
+            pwd.startsWith("/") -> File(home, "ubuntu-rootfs/${pwd.removePrefix("/")}")
+            else -> File(home, "ubuntu-rootfs/root")
+        }
     }
 
     private fun applyCompletion(item: TerminalCompletion) {

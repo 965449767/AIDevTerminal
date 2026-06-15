@@ -347,6 +347,23 @@ AIDEV_INSTALL_EOF
 ubuntu "$@"
 AIDEV_BOOTSTRAP_EOF
           chmod 755 "${'$'}AIDEV_ROOTFS/usr/local/bin/aidev-auto-bootstrap" 2>/dev/null || true
+          mkdir -p "${'$'}AIDEV_ROOTFS/root"
+          touch "${'$'}AIDEV_ROOTFS/root/.bashrc" 2>/dev/null || true
+          if ! grep -q "AIDEV_PWD_HOOK_BEGIN" "${'$'}AIDEV_ROOTFS/root/.bashrc" 2>/dev/null; then
+            cat >> "${'$'}AIDEV_ROOTFS/root/.bashrc" <<'AIDEV_PWD_HOOK_EOF'
+
+# AIDEV_PWD_HOOK_BEGIN
+aidev_write_pwd() {
+  pwd > /host-home/.aidev-current-pwd 2>/dev/null || true
+}
+case "${'$'}{PROMPT_COMMAND:-}" in
+  *aidev_write_pwd*) ;;
+  *) PROMPT_COMMAND="aidev_write_pwd${'$'}{PROMPT_COMMAND:+;${'$'}PROMPT_COMMAND}" ;;
+esac
+aidev_write_pwd
+# AIDEV_PWD_HOOK_END
+AIDEV_PWD_HOOK_EOF
+          fi
         }
 
         enter_ubuntu() {
