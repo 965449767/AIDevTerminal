@@ -284,6 +284,7 @@ AIDEV_APT_EOF
 #!/bin/sh
 echo "== AIDev Doctor =="
 echo "mode: Ubuntu PRoot"
+echo "version: ${'$'}{AIDEV_VERSION:-unknown}"
 echo "time: $(date '+%F %T' 2>/dev/null || echo unknown)"
 echo
 if [ -f /etc/os-release ]; then
@@ -305,6 +306,24 @@ echo "disk:"
 df -h / 2>/dev/null | tail -1 || true
 AIDEV_DOCTOR_EOF
           chmod 755 "${'$'}AIDEV_ROOTFS/usr/local/bin/aidev-doctor" 2>/dev/null || true
+          cat > "${'$'}AIDEV_ROOTFS/usr/local/bin/ubuntu" <<'AIDEV_UBUNTU_EOF'
+#!/bin/sh
+echo "已经在 AIDev Ubuntu 环境中。"
+echo "当前目录：$(pwd)"
+echo "诊断命令：aidev-doctor"
+AIDEV_UBUNTU_EOF
+          chmod 755 "${'$'}AIDEV_ROOTFS/usr/local/bin/ubuntu" 2>/dev/null || true
+          cat > "${'$'}AIDEV_ROOTFS/usr/local/bin/install-ubuntu" <<'AIDEV_INSTALL_EOF'
+#!/bin/sh
+echo "当前已经在 Ubuntu 内。"
+echo "如需清理或重装 rootfs，请先退出 Ubuntu，再在 AIDev Android shell 中运行：install-ubuntu --clean"
+AIDEV_INSTALL_EOF
+          chmod 755 "${'$'}AIDEV_ROOTFS/usr/local/bin/install-ubuntu" 2>/dev/null || true
+          cat > "${'$'}AIDEV_ROOTFS/usr/local/bin/aidev-auto-bootstrap" <<'AIDEV_BOOTSTRAP_EOF'
+#!/bin/sh
+ubuntu "$@"
+AIDEV_BOOTSTRAP_EOF
+          chmod 755 "${'$'}AIDEV_ROOTFS/usr/local/bin/aidev-auto-bootstrap" 2>/dev/null || true
         }
 
         enter_ubuntu() {
@@ -317,7 +336,7 @@ AIDEV_DOCTOR_EOF
           exec "${'$'}AIDEV_PROOT" --link2symlink -0 -r "${'$'}AIDEV_ROOTFS" \
             -b /dev -b /proc -b /sys -b /sdcard -b "${'$'}AIDEV_HOME:/host-home" \
             -w /root /usr/bin/env -i \
-            HOME=/root AIDEV_HOME=/host-home PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            HOME=/root AIDEV_HOME=/host-home AIDEV_VERSION="${'$'}{AIDEV_VERSION:-unknown}" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
             TERM="${'$'}{TERM:-xterm-256color}" "${'$'}shell" -l
         }
 
