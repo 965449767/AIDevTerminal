@@ -466,9 +466,13 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun fuzzyCompletionMatch(prefix: String, item: TerminalCompletion): Boolean {
         if (prefix.length < 2) return false
-        val compactPrefix = prefix.lowercase()
-        val compactTarget = item.insertText.lowercase().filter { it.isLetterOrDigit() }
-        return compactTarget.contains(compactPrefix)
+        val normalizedPrefix = prefix.lowercase().filter { it.isLetterOrDigit() }
+        if (normalizedPrefix.length < 2) return false
+        return item.insertText
+            .lowercase()
+            .split(Regex("[^a-z0-9]+"))
+            .filter { it.isNotBlank() }
+            .any { it.startsWith(normalizedPrefix) }
     }
 
     private fun builtinCompletions(): List<TerminalCompletion> =
@@ -479,6 +483,8 @@ class EmbeddedTerminalPage : ShellPage {
             "aidev-opencode",
             "aidev-opencode-preflight",
             "ubuntu",
+            "help",
+            "history",
             "pwd",
             "clear",
             "ls -la",
