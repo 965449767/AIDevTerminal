@@ -306,6 +306,31 @@ echo "disk:"
 df -h / 2>/dev/null | tail -1 || true
 AIDEV_DOCTOR_EOF
           chmod 755 "${'$'}AIDEV_ROOTFS/usr/local/bin/aidev-doctor" 2>/dev/null || true
+          cat > "${'$'}AIDEV_ROOTFS/usr/local/bin/aidev-index-commands" <<'AIDEV_INDEX_EOF'
+#!/bin/sh
+out="${'$'}{AIDEV_HOME:-/host-home}/.aidev-command-index"
+tmp="${'$'}{out}.tmp"
+{
+  echo "# AIDev command index"
+  echo "# generated: ${'$'}(date '+%F %T' 2>/dev/null || true)"
+  alias 2>/dev/null | sed -n "s/^alias \([^=]*\)=.*/\1/p"
+  if command -v compgen >/dev/null 2>&1; then
+    compgen -c 2>/dev/null
+  else
+    oldifs="${'$'}IFS"; IFS=:
+    for dir in ${'$'}PATH; do
+      [ -d "${'$'}dir" ] || continue
+      for file in "${'$'}dir"/*; do
+        [ -x "${'$'}file" ] && [ -f "${'$'}file" ] && basename "${'$'}file"
+      done
+    done
+    IFS="${'$'}oldifs"
+  fi
+} | sed '/^${'$'}/d' | sort -u | head -300 > "${'$'}tmp"
+mv "${'$'}tmp" "${'$'}out"
+echo "已刷新命令索引：${'$'}out"
+AIDEV_INDEX_EOF
+          chmod 755 "${'$'}AIDEV_ROOTFS/usr/local/bin/aidev-index-commands" 2>/dev/null || true
           cat > "${'$'}AIDEV_ROOTFS/usr/local/bin/ubuntu" <<'AIDEV_UBUNTU_EOF'
 #!/bin/sh
 echo "已经在 AIDev Ubuntu 环境中。"
@@ -340,10 +365,23 @@ AIDEV_BOOTSTRAP_EOF
             TERM="${'$'}{TERM:-xterm-256color}" LANG=C.UTF-8 LC_ALL=C.UTF-8 "${'$'}shell" -l
         }
 
+        run_ubuntu_command() {
+          has_ubuntu || install_ubuntu --fast || return ${'$'}?
+          ensure_android_groups "${'$'}AIDEV_ROOTFS"
+          ensure_ubuntu_helpers
+          cd "${'$'}AIDEV_HOME" || exit 1
+          exec "${'$'}AIDEV_PROOT" --link2symlink -0 -r "${'$'}AIDEV_ROOTFS" \
+            -b /dev -b /proc -b /sys -b /sdcard -b "${'$'}AIDEV_HOME:/host-home" \
+            -w /root /usr/bin/env -i \
+            HOME=/root AIDEV_HOME=/host-home AIDEV_VERSION="${'$'}{AIDEV_VERSION:-unknown}" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            TERM="${'$'}{TERM:-xterm-256color}" LANG=C.UTF-8 LC_ALL=C.UTF-8 /bin/sh -lc "${'$'}*"
+        }
+
         case "${'$'}cmd" in
           ubuntu) enter_ubuntu "${'$'}@" ;;
           install-ubuntu) install_ubuntu "${'$'}@" ;;
           aidev-doctor) aidev_doctor_android ;;
+          aidev-index-commands) run_ubuntu_command aidev-index-commands ;;
           aidev-auto-bootstrap)
             if has_ubuntu; then
               ubuntu_logo "自动进入环境     │"

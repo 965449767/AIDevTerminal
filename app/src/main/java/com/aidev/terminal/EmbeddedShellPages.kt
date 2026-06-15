@@ -277,18 +277,34 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun completionChip(activity: Activity, ui: AIDevUi, item: TerminalCompletion): TextView =
         TextView(activity).apply {
-            text = if (item.kind == "PIN") "固定 ${item.label}" else item.label
+            text = when (item.kind) {
+                "PIN" -> "固定 ${item.label}"
+                "ENV" -> "环境 ${item.label}"
+                else -> item.label
+            }
             textSize = 11f
             gravity = Gravity.CENTER
             includeFontPadding = false
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
-            setTextColor(if (item.kind == "PIN") 0xFFA7F3D0.toInt() else 0xFFD1D5DB.toInt())
+            setTextColor(when (item.kind) {
+                "PIN" -> 0xFFA7F3D0.toInt()
+                "ENV" -> 0xFFBFDBFE.toInt()
+                else -> 0xFFD1D5DB.toInt()
+            })
             setPadding(ui.dp(10), 0, ui.dp(10), 0)
             background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(if (item.kind == "PIN") 0xFF0F2A22.toInt() else 0xFF172033.toInt())
+                setColor(when (item.kind) {
+                    "PIN" -> 0xFF0F2A22.toInt()
+                    "ENV" -> 0xFF111D35.toInt()
+                    else -> 0xFF172033.toInt()
+                })
                 cornerRadius = ui.dp(12).toFloat()
-                setStroke(ui.dp(1), if (item.kind == "PIN") 0xFF059669.toInt() else 0xFF2B3650.toInt())
+                setStroke(ui.dp(1), when (item.kind) {
+                    "PIN" -> 0xFF059669.toInt()
+                    "ENV" -> 0xFF2563EB.toInt()
+                    else -> 0xFF2B3650.toInt()
+                })
             }
             setOnClickListener { applyCompletion(item) }
             setOnLongClickListener {
@@ -359,6 +375,7 @@ class EmbeddedTerminalPage : ShellPage {
             "导航 · 退出到工作台" to { host.switchTab(ShellActivity.TAB_DASHBOARD) },
             "终端 · 进入 Ubuntu" to { send("ubuntu") },
             "终端 · 诊断 Doctor" to { send("aidev-doctor") },
+            "终端 · 刷新命令索引" to { send("aidev-index-commands") },
             "终端 · 清屏" to { send("clear") },
             "OpenCode · CLI 界面" to { sendAgentCommand("aidev-opencode") },
             "OpenCode · Serve 后台服务" to { sendAgentCommand("task-run opencode-serve 'opencode serve --port 4096 --hostname 127.0.0.1'") },
@@ -453,8 +470,9 @@ class EmbeddedTerminalPage : ShellPage {
     private fun completionSuggestions(activity: Activity): List<TerminalCompletion> {
         val prefix = completionInput().trimStart()
         val pinned = pinnedCompletions(activity)
+        val runtime = runtimeCompletions()
         val builtIns = builtinCompletions()
-        val source = (pinned + builtIns).distinctBy { it.insertText }
+        val source = (pinned + runtime + builtIns).distinctBy { it.insertText }
         if (prefix.isBlank()) return source.take(8)
         return source
             .filter { it.insertText.startsWith(prefix, ignoreCase = true) || it.label.startsWith(prefix, ignoreCase = true) }
@@ -482,6 +500,7 @@ class EmbeddedTerminalPage : ShellPage {
             "aidev-agent-context-file",
             "aidev-opencode",
             "aidev-opencode-preflight",
+            "aidev-index-commands",
             "ubuntu",
             "help",
             "history",
@@ -534,6 +553,17 @@ class EmbeddedTerminalPage : ShellPage {
             ?.filter { it.isNotBlank() }
             ?.map { TerminalCompletion(it, it, "PIN") }
             .orEmpty()
+
+    private fun runtimeCompletions(): List<TerminalCompletion> {
+        val home = homeDir ?: return emptyList()
+        val index = File(home, ".aidev-command-index")
+        if (!index.isFile) return emptyList()
+        return index.readLines()
+            .map { it.trim() }
+            .filter { it.isNotBlank() && !it.startsWith("#") }
+            .take(300)
+            .map { TerminalCompletion(it, it, "ENV") }
+    }
 
     private fun applyCompletion(item: TerminalCompletion) {
         val target = item.insertText

@@ -9,7 +9,7 @@ data class TerminalShellAssetPaths(
 )
 
 object TerminalShellAssets {
-    private const val ASSET_VERSION = "0.12.24-completion-alias-unicode-debug"
+    private const val ASSET_VERSION = "0.12.25-runtime-command-index-debug"
 
     fun ensure(activity: Activity): TerminalShellAssetPaths {
         val home = File(activity.filesDir, "home").apply { mkdirs() }
@@ -53,7 +53,7 @@ object TerminalShellAssets {
         val core = File(bin, "aidev-ubuntu-core")
         core.writeText(UbuntuBootstrapScripts.aidevUbuntuCommandScript(home.absolutePath))
         core.setReadable(true, false)
-        listOf("ubuntu", "install-ubuntu", "aidev-auto-bootstrap", "aidev-doctor").forEach { name ->
+        listOf("ubuntu", "install-ubuntu", "aidev-auto-bootstrap", "aidev-doctor", "aidev-index-commands").forEach { name ->
             val out = File(bin, name)
             out.writeText("# AIDev command marker. Android 私有目录禁止直接执行脚本；实际入口由 .aidevrc 函数转发。\n")
             out.setReadable(true, false)
@@ -90,6 +90,7 @@ object TerminalShellAssets {
             install-ubuntu() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" install-ubuntu "${'$'}@"; }
             aidev-auto-bootstrap() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-auto-bootstrap "${'$'}@"; }
             aidev-doctor() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-doctor "${'$'}@"; }
+            aidev-index-commands() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-index-commands "${'$'}@"; }
             ${UbuntuBootstrapScripts.agentShellFunctions()}
             """.trimIndent() + "\n"
         )
