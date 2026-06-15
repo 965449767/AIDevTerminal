@@ -382,7 +382,7 @@ class EmbeddedTerminalPage : ShellPage {
     private fun syncToggleButton(activity: Activity, ui: AIDevUi): View {
         val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
         val on = SyncCoordinator.isEnabled(prefs)
-        return button(activity, ui, if (on) "联动ON" else "联动OFF") {
+        return button(activity, ui, if (on) "⟷" else "⟷") {
             val current = SyncCoordinator.isEnabled(prefs)
             SyncCoordinator.setEnabled(prefs, !current)
             Toast.makeText(activity, if (!current) "终端-文件联动已开启" else "终端-文件联动已关闭", Toast.LENGTH_SHORT).show()
@@ -408,6 +408,7 @@ class EmbeddedTerminalPage : ShellPage {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(ui.dp(12), 0, ui.dp(8), 0)
             setBackgroundColor(0xFF111418.toInt())
+            addView(syncToggleButton(activity, ui), LinearLayout.LayoutParams(ui.dp(42), ui.dp(30)))
             addView(ui.text("终端", 15f, Color.WHITE, bold = true).apply {
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
@@ -417,9 +418,6 @@ class EmbeddedTerminalPage : ShellPage {
                 leftMargin = ui.dp(4)
             })
             addView(button(activity, ui, "更多") { showTerminalTopMore(activity, host) }, LinearLayout.LayoutParams(ui.dp(54), ui.dp(30)).apply {
-                leftMargin = ui.dp(4)
-            })
-            addView(syncToggleButton(activity, ui), LinearLayout.LayoutParams(ui.dp(42), ui.dp(30)).apply {
                 leftMargin = ui.dp(4)
             })
         }

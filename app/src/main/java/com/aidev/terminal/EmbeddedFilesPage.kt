@@ -74,6 +74,15 @@ class EmbeddedFilesPage : ShellPage {
     private fun toolbar(host: ShellHost): View =
         LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
+            addView(action(if (syncEnabled) "⟷" else "⟷") {
+                val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+                val current = SyncCoordinator.isEnabled(prefs)
+                SyncCoordinator.setEnabled(prefs, !current)
+                syncEnabled = !current
+                Toast.makeText(activity, if (!current) "终端-文件联动已开启" else "终端-文件联动已关闭", Toast.LENGTH_SHORT).show()
+            }.apply {
+                setTextColor(if (syncEnabled) 0xFF22D3A7.toInt() else 0xFF9CA3AF.toInt())
+            })
             addView(action("复制") { copyToOther(false) })
             addView(action("移动") { copyToOther(true) })
             addView(action("新建") { newFolder() })
@@ -85,15 +94,6 @@ class EmbeddedFilesPage : ShellPage {
             })
             addView(action("搜索") { searchActiveDir() })
             addView(action("更多") { showFileMoreMenu(host) })
-            addView(action(if (syncEnabled) "联动ON" else "联动OFF") {
-                val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-                val current = SyncCoordinator.isEnabled(prefs)
-                SyncCoordinator.setEnabled(prefs, !current)
-                syncEnabled = !current
-                Toast.makeText(activity, if (!current) "终端-文件联动已开启" else "终端-文件联动已关闭", Toast.LENGTH_SHORT).show()
-            }.apply {
-                setTextColor(if (syncEnabled) 0xFF22D3A7.toInt() else 0xFF9CA3AF.toInt())
-            })
         }
 
     private fun showFileMoreMenu(host: ShellHost) {
