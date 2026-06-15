@@ -337,7 +337,7 @@ AIDEV_BOOTSTRAP_EOF
             -b /dev -b /proc -b /sys -b /sdcard -b "${'$'}AIDEV_HOME:/host-home" \
             -w /root /usr/bin/env -i \
             HOME=/root AIDEV_HOME=/host-home AIDEV_VERSION="${'$'}{AIDEV_VERSION:-unknown}" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-            TERM="${'$'}{TERM:-xterm-256color}" "${'$'}shell" -l
+            TERM="${'$'}{TERM:-xterm-256color}" LANG=C.UTF-8 LC_ALL=C.UTF-8 "${'$'}shell" -l
         }
 
         case "${'$'}cmd" in

@@ -470,7 +470,7 @@ class EmbeddedTerminalPage : ShellPage {
         if (normalizedPrefix.length < 2) return false
         return item.insertText
             .lowercase()
-            .split(Regex("[^a-z0-9]+"))
+            .split(Regex("[^\\p{L}\\p{N}]+"))
             .filter { it.isNotBlank() }
             .any { it.startsWith(normalizedPrefix) }
     }
@@ -487,7 +487,12 @@ class EmbeddedTerminalPage : ShellPage {
             "history",
             "pwd",
             "clear",
+            "alias",
+            "alias ll='ls -lah'",
+            "ll",
+            "ls",
             "ls -la",
+            "la",
             "cd /root/projects",
             "apt update",
             "apt install ",

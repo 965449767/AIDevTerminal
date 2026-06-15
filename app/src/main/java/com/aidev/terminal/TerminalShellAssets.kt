@@ -9,7 +9,7 @@ data class TerminalShellAssetPaths(
 )
 
 object TerminalShellAssets {
-    private const val ASSET_VERSION = "0.12.23-completion-match-fix-debug"
+    private const val ASSET_VERSION = "0.12.24-completion-alias-unicode-debug"
 
     fun ensure(activity: Activity): TerminalShellAssetPaths {
         val home = File(activity.filesDir, "home").apply { mkdirs() }
@@ -76,6 +76,8 @@ object TerminalShellAssets {
             PROOT_LOADER="${'$'}AIDEV_PROOT_LOADER"
             PROOT_TMP_DIR="${'$'}AIDEV_HOME/proot-tmp"
             export AIDEV_VERSION AIDEV_HOME AIDEV_BIN AIDEV_ROOTFS AIDEV_NATIVE AIDEV_PROOT AIDEV_PROOT_LOADER PROOT_LOADER PROOT_TMP_DIR
+            export LANG=C.UTF-8
+            export LC_ALL=C.UTF-8
             export PATH="${'$'}AIDEV_BIN:/system/bin:/system/xbin:${'$'}PATH"
             export PS1='aidev:${'$'}{PWD##*/}# '
             alias ll='ls -lah'
