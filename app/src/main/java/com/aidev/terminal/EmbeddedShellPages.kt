@@ -172,22 +172,55 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun completionChip(activity: Activity, ui: AIDevUi, item: TerminalCompletion): TextView =
         TextView(activity).apply {
-            text = item.label
+            text = if (item.kind == "HIST") "历史 ${item.label}" else item.label
             textSize = 11f
             gravity = Gravity.CENTER
             includeFontPadding = false
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
-            setTextColor(0xFFD1D5DB.toInt())
+            setTextColor(if (item.kind == "HIST") 0xFFFBBF24.toInt() else 0xFFD1D5DB.toInt())
             setPadding(ui.dp(10), 0, ui.dp(10), 0)
             background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(0xFF172033.toInt())
+                setColor(if (item.kind == "HIST") 0xFF2A1F09.toInt() else 0xFF172033.toInt())
                 cornerRadius = ui.dp(12).toFloat()
-                setStroke(ui.dp(1), 0xFF2B3650.toInt())
+                setStroke(ui.dp(1), if (item.kind == "HIST") 0xFFB45309.toInt() else 0xFF2B3650.toInt())
+            }
+            var downY = 0f
+            setOnTouchListener { _, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downY = event.rawY
+                        false
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        val dy = event.rawY - downY
+                        when {
+                            dy < -ui.dp(18) -> {
+                                executeCompletion(activity, item)
+                                true
+                            }
+                            dy > ui.dp(18) -> {
+                                if (item.kind == "HIST") {
+                                    deleteHistoryCompletion(activity, item)
+                                } else {
+                                    Toast.makeText(activity, "内置命令不能删除", Toast.LENGTH_SHORT).show()
+                                }
+                                true
+                            }
+                            else -> false
+                        }
+                    }
+                    else -> false
+                }
             }
             setOnClickListener { applyCompletion(item) }
             setOnLongClickListener {
-                executeCompletion(activity, item)
+                AlertDialog.Builder(activity)
+                    .setTitle(item.label)
+                    .setMessage(if (item.kind == "HIST") "这是历史输入建议。\n\n点击：补全/替换当前输入\n上滑：执行并回车\n下滑：删除这条历史建议" else "这是内置正确命令。\n\n点击：补全/替换当前输入\n上滑：执行并回车\n下滑：不会删除内置命令")
+                    .setPositiveButton("执行") { _, _ -> executeCompletion(activity, item) }
+                    .setNegativeButton("关闭", null)
+                    .show()
                 true
             }
         }
@@ -349,7 +382,8 @@ class EmbeddedTerminalPage : ShellPage {
         val prefix = completionInput().trimStart()
         val history = recentCommandHistory(activity).map { TerminalCompletion(it, it, "HIST") }
         val builtIns = builtinCompletions()
-        val source = (history + builtIns).distinctBy { it.insertText }
+        val builtInTexts = builtIns.map { it.insertText }.toSet()
+        val source = (builtIns + history.filterNot { it.insertText in builtInTexts }).distinctBy { it.insertText }
         if (prefix.isBlank()) return source.take(8)
         return source
             .filter { it.insertText.startsWith(prefix, ignoreCase = true) || it.label.startsWith(prefix, ignoreCase = true) }
@@ -439,6 +473,15 @@ class EmbeddedTerminalPage : ShellPage {
         composingBuffer = ""
         refreshCompletions(activity)
         terminalView?.requestFocus()
+    }
+
+    private fun deleteHistoryCompletion(activity: Activity, item: TerminalCompletion) {
+        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+        val old = prefs.getString("terminal_command_history", "")?.lines().orEmpty()
+        val next = old.filter { it.isNotBlank() && it != item.insertText }
+        prefs.edit().putString("terminal_command_history", next.joinToString("\n")).apply()
+        refreshCompletions(activity)
+        Toast.makeText(activity, "已删除历史建议", Toast.LENGTH_SHORT).show()
     }
 
     private fun updateInputBuffer(text: String) {
