@@ -164,6 +164,8 @@ class EmbeddedTerminalPage : ShellPage {
     private var fontApplyScheduled = false
     private var inputBuffer = ""
     private var composingBuffer = ""
+    private var pwdObserver: PwdFileObserver? = null
+    private var lastSyncedPwd = ""
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
@@ -214,6 +216,7 @@ class EmbeddedTerminalPage : ShellPage {
         root.addView(completionBar(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(32)))
         root.addView(keys(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(70)))
         ensureSession(activity)
+        initPwdObserver(activity)
         root.postDelayed({ focusTerminalInput(activity) }, 250)
         terminalView?.postDelayed({
             consumePendingCommand()
@@ -360,6 +363,45 @@ class EmbeddedTerminalPage : ShellPage {
         }, 600)
     }
 
+    private fun initPwdObserver(activity: Activity) {
+        val home = homeDir ?: return
+        val pwdFile = File(home, ".aidev-current-pwd")
+        pwdObserver?.stop()
+        pwdObserver = PwdFileObserver(pwdFile) { ubuntuPwd ->
+            if (ubuntuPwd == lastSyncedPwd) return@PwdFileObserver
+            lastSyncedPwd = ubuntuPwd
+            val act = this.activity ?: return@PwdFileObserver
+            val prefs = act.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+            SyncCoordinator.onTerminalPwdChanged(ubuntuPwd, home, prefs) { targetDir ->
+                if (act is ShellActivity) act.syncBrowserToDir(targetDir)
+            }
+        }
+        pwdObserver?.start()
+    }
+
+    private fun syncToggleButton(activity: Activity, ui: AIDevUi): View {
+        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+        val on = SyncCoordinator.isEnabled(prefs)
+        return button(activity, ui, if (on) "联动ON" else "联动OFF") {
+            val current = SyncCoordinator.isEnabled(prefs)
+            SyncCoordinator.setEnabled(prefs, !current)
+            Toast.makeText(activity, if (!current) "终端-文件联动已开启" else "终端-文件联动已关闭", Toast.LENGTH_SHORT).show()
+        }.apply {
+            setTextColor(if (on) 0xFF22D3A7.toInt() else 0xFF9CA3AF.toInt())
+        }
+    }
+
+    fun prefillCdCommand(ubuntuPath: String) {
+        val cmd = "cd $ubuntuPath"
+        inputBuffer = ""
+        composingBuffer = ""
+        session?.write("\u0015$cmd")
+        inputBuffer = cmd
+        val act = activity ?: return
+        refreshCompletions(act)
+        focusTerminalInput(act)
+    }
+
     private fun topBar(activity: Activity, ui: AIDevUi, host: ShellHost): View =
         LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -375,6 +417,9 @@ class EmbeddedTerminalPage : ShellPage {
                 leftMargin = ui.dp(4)
             })
             addView(button(activity, ui, "更多") { showTerminalTopMore(activity, host) }, LinearLayout.LayoutParams(ui.dp(54), ui.dp(30)).apply {
+                leftMargin = ui.dp(4)
+            })
+            addView(syncToggleButton(activity, ui), LinearLayout.LayoutParams(ui.dp(42), ui.dp(30)).apply {
                 leftMargin = ui.dp(4)
             })
         }

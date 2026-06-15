@@ -11,8 +11,8 @@ android {
         applicationId = "com.aidev.terminal"
         minSdk = 26
         targetSdk = 34
-        versionCode = 73
-        versionName = "0.12.31-current-pwd-path-completion-debug"
+        versionCode = 74
+        versionName = "0.12.32-terminal-file-sync-debug"
         ndk {
             abiFilters += listOf("arm64-v8a")
         }

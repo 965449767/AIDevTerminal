@@ -46,6 +46,7 @@ class EmbeddedFilesPage : ShellPage {
     private var activeLeft = true
     private var leftSelected: File? = null
     private var rightSelected: File? = null
+    private var syncEnabled = false
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
@@ -67,6 +68,7 @@ class EmbeddedFilesPage : ShellPage {
 
     override fun onSelected(activity: Activity, view: View) {
         if (::leftList.isInitialized) reloadAll()
+        syncEnabled = SyncCoordinator.isEnabled(activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
     }
 
     private fun toolbar(host: ShellHost): View =
@@ -83,6 +85,15 @@ class EmbeddedFilesPage : ShellPage {
             })
             addView(action("搜索") { searchActiveDir() })
             addView(action("更多") { showFileMoreMenu(host) })
+            addView(action(if (syncEnabled) "联动ON" else "联动OFF") {
+                val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+                val current = SyncCoordinator.isEnabled(prefs)
+                SyncCoordinator.setEnabled(prefs, !current)
+                syncEnabled = !current
+                Toast.makeText(activity, if (!current) "终端-文件联动已开启" else "终端-文件联动已关闭", Toast.LENGTH_SHORT).show()
+            }.apply {
+                setTextColor(if (syncEnabled) 0xFF22D3A7.toInt() else 0xFF9CA3AF.toInt())
+            })
         }
 
     private fun showFileMoreMenu(host: ShellHost) {
@@ -204,6 +215,7 @@ class EmbeddedFilesPage : ShellPage {
                     if (isLeft) leftDir = file else rightDir = file
                     if (isLeft) leftSelected = null else rightSelected = null
                     rememberRecentDir(file)
+                    if (syncEnabled) notifyTerminalCd(file)
                 } else if (!parent) {
                     if (isLeft) leftSelected = file else rightSelected = file
                 }
@@ -220,6 +232,22 @@ class EmbeddedFilesPage : ShellPage {
     private fun selected(): File? = if (activeLeft) leftSelected else rightSelected
     private fun activeDir(): File = if (activeLeft) leftDir else rightDir
     private fun otherDir(): File = if (activeLeft) rightDir else leftDir
+
+    fun syncNavigateTo(targetDir: File) {
+        if (!targetDir.isDirectory) return
+        if (activeLeft) { leftDir = targetDir; leftSelected = null }
+        else { rightDir = targetDir; rightSelected = null }
+        loadPane(activeLeft)
+    }
+
+    private fun notifyTerminalCd(dir: File) {
+        val act = activity
+        val home = File(act.filesDir, "home")
+        val prefs = act.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+        SyncCoordinator.onBrowserDirChanged(dir, home, prefs) { ubuntuPath ->
+            if (act is ShellActivity) act.syncTerminalCd(ubuntuPath)
+        }
+    }
 
     private fun copyToOther(move: Boolean) {
         val src = selected() ?: return toast("请先选择文件或目录")

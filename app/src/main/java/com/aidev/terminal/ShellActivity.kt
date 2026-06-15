@@ -464,6 +464,17 @@ class ShellActivity : Activity() {
         renderCurrent(previous, animateForward = forward)
     }
 
+    fun syncBrowserToDir(targetDir: File) {
+        val filesPage = pages[TAB_FILES] as? EmbeddedFilesPage ?: return
+        filesPage.syncNavigateTo(targetDir)
+    }
+
+    fun syncTerminalCd(ubuntuPath: String) {
+        val termPage = pages[TAB_TERMINAL] as? EmbeddedTerminalPage ?: return
+        if (currentIndex != TAB_TERMINAL) switchTo(TAB_TERMINAL)
+        termPage.prefillCdCommand(ubuntuPath)
+    }
+
     private fun renderCurrent(previousIndex: Int = currentIndex, animateForward: Boolean?) {
         val next = pageViews.getOrPut(currentIndex) {
             pages[currentIndex].create(this, ui, ShellHost(this, prefs, ui)).also {
