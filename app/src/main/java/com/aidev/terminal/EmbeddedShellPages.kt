@@ -76,6 +76,7 @@ class EmbeddedTerminalPage : ShellPage {
     private var pendingFontSp = DEFAULT_FONT_SP
     private var fontApplyScheduled = false
     private var inputBuffer = ""
+    private var composingBuffer = ""
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
@@ -345,17 +346,24 @@ class EmbeddedTerminalPage : ShellPage {
     }
 
     private fun completionSuggestions(activity: Activity): List<TerminalCompletion> {
-        val prefix = inputBuffer.trimStart()
+        val prefix = completionInput().trimStart()
         val history = recentCommandHistory(activity).map { TerminalCompletion(it, it, "HIST") }
         val builtIns = builtinCompletions()
         val source = (history + builtIns).distinctBy { it.insertText }
         if (prefix.isBlank()) return source.take(8)
         return source
             .filter { it.insertText.startsWith(prefix, ignoreCase = true) || it.label.startsWith(prefix, ignoreCase = true) }
-            .ifEmpty {
-                source.filter { it.insertText.contains(prefix, ignoreCase = true) || it.label.contains(prefix, ignoreCase = true) }
-            }
+            .ifEmpty { source.filter { fuzzyCompletionMatch(prefix, it) } }
             .take(8)
+    }
+
+    private fun completionInput(): String = inputBuffer + composingBuffer
+
+    private fun fuzzyCompletionMatch(prefix: String, item: TerminalCompletion): Boolean {
+        if (prefix.length < 2) return false
+        val compactPrefix = prefix.lowercase()
+        val compactTarget = item.insertText.lowercase().filter { it.isLetterOrDigit() }
+        return compactTarget.contains(compactPrefix)
     }
 
     private fun builtinCompletions(): List<TerminalCompletion> =
@@ -404,11 +412,23 @@ class EmbeddedTerminalPage : ShellPage {
         ).map { TerminalCompletion(it) }
 
     private fun applyCompletion(item: TerminalCompletion) {
-        val current = inputBuffer
         val target = item.insertText
-        val insert = if (target.startsWith(current, ignoreCase = true)) target.drop(current.length) else target
+        val committed = inputBuffer
+        val insert = if (target.equals(completionInput(), ignoreCase = true) || target.equals(committed, ignoreCase = true)) {
+            ""
+        } else if (target.startsWith(committed, ignoreCase = true) && composingBuffer.isEmpty()) {
+            target.drop(committed.length)
+        } else {
+            "\u007F".repeat(committed.length) + target
+        }
+        if (insert.isEmpty()) return
+        composingBuffer = ""
+        terminalView?.let { view ->
+            (activity?.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)?.restartInput(view)
+        }
         session?.write(insert)
-        updateInputBuffer(insert)
+        inputBuffer = target
+        refreshCompletions(activity ?: return)
         terminalView?.requestFocus()
     }
 
@@ -416,6 +436,7 @@ class EmbeddedTerminalPage : ShellPage {
         session?.write(item.insertText.trimEnd() + "\n")
         rememberCommand(activity, item.insertText.trim())
         inputBuffer = ""
+        composingBuffer = ""
         refreshCompletions(activity)
         terminalView?.requestFocus()
     }
@@ -426,6 +447,7 @@ class EmbeddedTerminalPage : ShellPage {
                 '\r', '\n' -> {
                     activity?.let { rememberCommand(it, inputBuffer.trim()) }
                     inputBuffer = ""
+                    composingBuffer = ""
                 }
                 '\b', '\u007F' -> inputBuffer = inputBuffer.dropLast(1)
                 else -> if (!ch.isISOControl()) inputBuffer += ch
