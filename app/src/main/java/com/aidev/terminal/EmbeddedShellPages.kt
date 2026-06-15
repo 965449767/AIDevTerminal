@@ -287,7 +287,7 @@ class EmbeddedTerminalPage : ShellPage {
     private fun completionHintChip(activity: Activity, ui: AIDevUi): TextView =
         TextView(activity).apply {
             val hasIndex = commandIndexFile()?.isFile == true
-            text = if (hasIndex) "没有匹配命令，长按刷新环境索引" else "索引未生成，点击刷新环境命令"
+            text = if (hasIndex) "没有匹配命令，长按刷新环境索引" else "索引未生成，长按刷新环境命令"
             textSize = 11f
             gravity = Gravity.CENTER
             includeFontPadding = false
@@ -300,13 +300,7 @@ class EmbeddedTerminalPage : ShellPage {
                 cornerRadius = ui.dp(12).toFloat()
                 setStroke(ui.dp(1), 0xFF374151.toInt())
             }
-            setOnClickListener {
-                if (hasIndex) {
-                    focusTerminalInput(activity)
-                } else {
-                    refreshCommandIndex(activity)
-                }
-            }
+            setOnClickListener { focusTerminalInput(activity) }
             setOnLongClickListener {
                 refreshCommandIndex(activity)
                 true
@@ -629,7 +623,9 @@ class EmbeddedTerminalPage : ShellPage {
         val target = item.insertText
         val committed = inputBuffer
         val current = completionInput()
-        val insert = if (target.equals(current, ignoreCase = true) || target.equals(committed, ignoreCase = true)) {
+        val insert = if (composingBuffer.isNotEmpty() && target.equals(current, ignoreCase = true)) {
+            if (target.startsWith(committed, ignoreCase = true)) target.drop(committed.length) else target
+        } else if (target.equals(current, ignoreCase = true) || target.equals(committed, ignoreCase = true)) {
             ""
         } else if (target.startsWith(committed, ignoreCase = true) && composingBuffer.isEmpty()) {
             target.drop(committed.length)

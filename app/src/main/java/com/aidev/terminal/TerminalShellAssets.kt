@@ -9,7 +9,7 @@ data class TerminalShellAssetPaths(
 )
 
 object TerminalShellAssets {
-    private const val ASSET_VERSION = "0.12.28-completion-index-ux-debug"
+    private const val ASSET_VERSION = "0.12.29-completion-click-commit-debug"
 
     fun ensure(activity: Activity): TerminalShellAssetPaths {
         val home = File(activity.filesDir, "home").apply { mkdirs() }
