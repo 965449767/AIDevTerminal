@@ -33,10 +33,9 @@ class EmbeddedSettingsPage : ShellPage {
         content.addView(ui.section("设置", "一级入口保持通用，二级动作以内嵌菜单展开，底部导航不离开 Shell"))
         content.addView(row("外观与交互", "主题、背景、透明度、模糊说明、触觉反馈") { appearanceMenu() })
         content.addView(row("终端设置", "字号、快捷键、会话行为和终端说明") { terminalMenu() })
-        content.addView(row("开发环境", "检测开发环境、部署 Android 工具链、修复环境") { devMenu() })
+        content.addView(row("开发环境", "全面检测环境状态，一键修复问题") { devCheckAndRepair() })
         content.addView(row("AI 与服务器", "安装 OpenCode、后台常驻、端口诊断") { aiServerMenu() })
         content.addView(row("文件与权限", "存储访问、安装权限、Shizuku、应用详情") { permissionMenu() })
-        content.addView(row("环境诊断", "存储、电池、Ubuntu、OpenCode、SDK、Shizuku 状态") { diagnosticsCenter() })
         content.addView(ui.section("当前效果说明", ui.effectNotice()))
         return ScrollView(activity).apply { addView(content) }
     }
@@ -247,16 +246,106 @@ class EmbeddedSettingsPage : ShellPage {
             .show()
     }
 
-    private fun devMenu() {
-        AlertDialog.Builder(activity).setTitle("开发环境").setItems(arrayOf("检测开发环境", "部署 Android 工具链", "修复环境", "Android 调试桥接")) { _, which ->
-            when (which) {
-                0 -> host.openTerminal("check-dev-env")
-                1 -> host.openTerminal("deploy-android-dev")
-                2 -> host.openTerminal("repair-dev-env")
-                3 -> detail("Android 调试桥接", "在 Ubuntu/终端中优先使用 pmx、amx、getpropx、logcatx，避免直接执行 /system/bin/pm 造成 PRoot 链接器错误。")
+    private fun devCheckAndRepair() {
+        val home = File(activity.filesDir, "home")
+        val rootfs = File(home, "ubuntu-rootfs")
+        val checks = mutableListOf<CheckItem>()
+
+        // Android 系统权限
+        val storageOk = if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager() else true
+        checks.add(CheckItem("存储权限", storageOk, "读取下载目录、项目目录和 APK", if (!storageOk) "open_storage" else null))
+        val batteryOk = if (Build.VERSION.SDK_INT < 23) true else (activity.getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(activity.packageName)
+        checks.add(CheckItem("电池优化白名单", batteryOk, "后台任务与长时间服务更稳定", if (!batteryOk) "open_battery" else null))
+
+        // Ubuntu 环境
+        checks.add(CheckItem("AIDev Home", home.exists(), home.absolutePath, if (!home.exists()) "repair_env" else null))
+        checks.add(CheckItem("Ubuntu rootfs", rootfs.exists(), rootfs.absolutePath, if (!rootfs.exists()) "repair_env" else null))
+        val prootOk = File(home, "proot-lib/libtalloc.so.2").exists()
+        checks.add(CheckItem("PRoot 依赖", prootOk, "终端 Ubuntu 入口依赖", if (!prootOk) "repair_env" else null))
+
+        // 开发工具（在 rootfs 内检测）
+        val devTools = listOf(
+            "node" to "Node.js",
+            "python3" to "Python3",
+            "git" to "Git",
+            "java" to "JDK",
+            "gradle" to "Gradle",
+            "go" to "Go",
+            "cargo" to "Rust/Cargo",
+            "opencode" to "OpenCode",
+            "adb" to "ADB",
+            "npm" to "npm"
+        )
+        for ((cmd, label) in devTools) {
+            val binPaths = listOf(
+                File(rootfs, "usr/bin/$cmd"),
+                File(rootfs, "usr/local/bin/$cmd"),
+                File(rootfs, "root/.opencode/bin/$cmd"),
+                File(rootfs, "usr/lib/android-sdk/build-tools/30.0.3/$cmd")
+            )
+            val exists = binPaths.any { it.exists() }
+            val fixCmd = when (cmd) {
+                "opencode" -> "install-aitool"
+                "adb" -> "deploy-android-dev"
+                else -> null
             }
-        }.show()
+            checks.add(CheckItem(label, exists, cmd, fixCmd))
+        }
+
+        // Shizuku
+        val shizukuInstalled = runCatching { activity.packageManager.getPackageInfo("moe.shizuku.privileged.api", 0) }.isSuccess
+        checks.add(CheckItem("Shizuku 应用", shizukuInstalled, "高权限操作支持", null))
+
+        // 构建显示内容
+        val failedChecks = checks.filter { !it.ok }
+        val allOk = failedChecks.isEmpty()
+
+        val body = StringBuilder()
+        body.append(if (allOk) "所有环境检查通过 ✓\n\n" else "发现 ${failedChecks.size} 个问题：\n\n")
+        for (item in checks) {
+            body.append("${if (item.ok) "✓" else "✗"} ${item.name}：${if (item.ok) "正常" else "未安装"}\n")
+            if (!item.ok && item.fixAction != null) {
+                body.append("  → 可修复\n")
+            }
+        }
+
+        if (allOk) {
+            AlertDialog.Builder(activity)
+                .setTitle("开发环境检查")
+                .setMessage(body.toString())
+                .setPositiveButton("关闭", null)
+                .show()
+        } else {
+            val fixLabels = failedChecks.filter { it.fixAction != null }.map { it.name }.toTypedArray()
+            val fixActions = failedChecks.filter { it.fixAction != null }.map { it.fixAction!! }.toTypedArray()
+            AlertDialog.Builder(activity)
+                .setTitle("开发环境检查")
+                .setMessage(body.toString())
+                .setPositiveButton(if (fixLabels.isNotEmpty()) "一键修复" else "关闭") { _, _ ->
+                    if (fixLabels.isEmpty()) return@setPositiveButton
+                    AlertDialog.Builder(activity)
+                        .setTitle("选择要修复的项目")
+                        .setMultiChoiceItems(fixLabels, null) { _, _, _ -> }
+                        .setPositiveButton("执行修复") { _, which ->
+                            val selected = (which as AlertDialog).listView.checkedItemPositions
+                            val cmds = mutableListOf<String>()
+                            for (i in 0 until fixActions.size) {
+                                if (selected.get(i, false)) cmds.add(fixActions[i])
+                            }
+                            if (cmds.isNotEmpty()) {
+                                host.openTerminal(cmds.joinToString(" && "))
+                            }
+                        }
+                        .setNegativeButton("取消", null)
+                        .show()
+                }
+                .setNeutralButton("终端详细检测") { _, _ -> host.openTerminal("check-dev-env") }
+                .setNegativeButton("关闭", null)
+                .show()
+        }
     }
+
+    private data class CheckItem(val name: String, val ok: Boolean, val desc: String, val fixAction: String?)
 
     private fun aiServerMenu() {
         AlertDialog.Builder(activity).setTitle("AI 与服务器").setItems(arrayOf("安装 OpenCode", "监听端口", "后台常驻")) { _, which ->
@@ -281,36 +370,6 @@ class EmbeddedSettingsPage : ShellPage {
             }
         }.show()
     }
-
-    private fun diagnosticsCenter() {
-        val home = File(activity.filesDir, "home")
-        val rootfs = File(home, "ubuntu-rootfs")
-        val sdk = File(rootfs, "opt/android-sdk")
-        val opencode = File(rootfs, "root/.opencode/bin/opencode")
-        val shizukuInstalled = runCatching { activity.packageManager.getPackageInfo("moe.shizuku.privileged.api", 0) }.isSuccess
-        val batteryOk = if (Build.VERSION.SDK_INT < 23) true else (activity.getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(activity.packageName)
-        val storageHint = if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager() else true
-        val body = listOf(
-            diagLine("存储权限", storageHint, "用于读取下载目录、项目目录和 APK"),
-            diagLine("电池优化", batteryOk, "后台任务与长时间服务更稳定"),
-            diagLine("AIDev Home", home.exists(), home.absolutePath),
-            diagLine("Ubuntu rootfs", rootfs.exists(), rootfs.absolutePath),
-            diagLine("Android SDK", sdk.exists(), sdk.absolutePath),
-            diagLine("OpenCode", opencode.exists(), opencode.absolutePath),
-            diagLine("Shizuku 应用", shizukuInstalled, "用于后续更高权限能力"),
-            diagLine("PRoot 依赖", File(home, "proot-lib/libtalloc.so.2").exists(), "终端 Ubuntu 入口依赖")
-        ).joinToString("\n")
-        AlertDialog.Builder(activity)
-            .setTitle("权限与环境诊断")
-            .setMessage(body)
-            .setPositiveButton("终端检测") { _, _ -> host.openTerminal("check-dev-env") }
-            .setNeutralButton("存储权限") { _, _ -> openStorageSettings() }
-            .setNegativeButton("关闭", null)
-            .show()
-    }
-
-    private fun diagLine(name: String, ok: Boolean, desc: String): String =
-        "${if (ok) "✓" else "!"} $name：${if (ok) "正常" else "待处理"}\n  $desc"
 
     private fun advancedMenu() {
         AlertDialog.Builder(activity).setTitle("系统与高级").setItems(arrayOf("命令速查")) { _, which ->

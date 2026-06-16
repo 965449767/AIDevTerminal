@@ -1149,6 +1149,7 @@ class EmbeddedTerminalPage : ShellPage {
                     MotionEvent.ACTION_UP -> {
                         val swipeUp = downY - event.rawY > ui.dp(24)
                         if (swipeUp && key.swipeCommand.isNotBlank()) {
+                            hapticTap(activity)
                             sendSwipeAction(key.swipeCommand)
                             true
                         } else false
@@ -1164,6 +1165,7 @@ class EmbeddedTerminalPage : ShellPage {
         }
 
     private fun handleVirtualKeyTap(activity: Activity, key: EmbeddedVirtualKey) {
+        hapticTap(activity)
         if (key.input == "__CTRL__") {
             ctrlLatched = !ctrlLatched
             refreshKeyboard(activity)
@@ -1187,6 +1189,16 @@ class EmbeddedTerminalPage : ShellPage {
             ctrlLatched = false
             refreshKeyboard(activity)
         }
+    }
+
+    private fun hapticTap(activity: Activity) {
+        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+        if (!prefs.getBoolean("haptic_tap", true)) return
+        if (Build.VERSION.SDK_INT >= 29) {
+            activity.getSystemService(android.view.HapticFeedbackConstants::class.java)
+        }
+        val view = terminalView ?: return
+        view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP, android.view.HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
     }
 
     private fun sendSwipeAction(action: String) {
