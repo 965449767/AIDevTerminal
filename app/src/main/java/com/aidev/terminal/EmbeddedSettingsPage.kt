@@ -2,36 +2,19 @@ package com.aidev.terminal
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.graphics.BitmapFactory
-import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.PowerManager
 import android.provider.Settings
-import android.text.TextUtils
-import android.util.Log
-import android.view.Gravity
-import android.view.KeyEvent
-import android.view.MotionEvent
 import android.view.View
-import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
-import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
-import android.widget.TextView
 import android.widget.Toast
-import com.termux.terminal.TerminalEmulator
-import com.termux.terminal.TerminalSession
-import com.termux.terminal.TerminalSessionClient
-import com.termux.view.TerminalView
-import com.termux.view.TerminalViewClient
 import java.io.File
 
 class EmbeddedSettingsPage : ShellPage {
@@ -50,11 +33,10 @@ class EmbeddedSettingsPage : ShellPage {
         content.addView(ui.section("设置", "一级入口保持通用，二级动作以内嵌菜单展开，底部导航不离开 Shell"))
         content.addView(row("外观与交互", "主题、背景、透明度、模糊说明、触觉反馈") { appearanceMenu() })
         content.addView(row("终端设置", "字号、快捷键、会话行为和终端说明") { terminalMenu() })
-        content.addView(row("开发环境", "Ubuntu、基础工具链、Android 调试桥接、修复工具") { devMenu() })
-        content.addView(row("AI 与服务器", "OpenCode、后台常驻、端口诊断、任务日志") { aiServerMenu() })
+        content.addView(row("开发环境", "检测开发环境、部署 Android 工具链、修复环境") { devMenu() })
+        content.addView(row("AI 与服务器", "安装 OpenCode、后台常驻、端口诊断") { aiServerMenu() })
         content.addView(row("文件与权限", "存储访问、安装权限、Shizuku、应用详情") { permissionMenu() })
-        content.addView(row("权限与环境诊断", "存储、电池、Ubuntu、OpenCode、SDK、Shizuku 状态") { diagnosticsCenter() })
-        content.addView(row("系统与高级", "命令速查、命令面板、环境诊断") { advancedMenu() })
+        content.addView(row("环境诊断", "存储、电池、Ubuntu、OpenCode、SDK、Shizuku 状态") { diagnosticsCenter() })
         content.addView(ui.section("当前效果说明", ui.effectNotice()))
         return ScrollView(activity).apply { addView(content) }
     }
@@ -155,23 +137,20 @@ class EmbeddedSettingsPage : ShellPage {
     }
 
     private fun terminalMenu() {
-        AlertDialog.Builder(activity).setTitle("终端设置").setItems(arrayOf("终端字号", "新增快捷键", "管理快捷键", "清除快捷键", "打开终端 Tab", "快捷键说明", "会话说明")) { _, which ->
+        AlertDialog.Builder(activity).setTitle("终端设置").setItems(arrayOf("终端字号", "新增快捷键", "管理快捷键", "清除快捷键", "快捷键说明", "会话说明")) { _, which ->
             when (which) {
                 0 -> terminalFontDialog()
                 1 -> customKeyDialog()
                 2 -> manageCustomKeys()
                 3 -> {
                     activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).edit()
-                        .remove("terminal_custom_key_label")
-                        .remove("terminal_custom_key_input")
                         .remove("terminal_custom_keys")
                         .remove("terminal_key_overrides")
                         .apply()
                     toast("已清除自定义快捷键")
                 }
-                4 -> host.switchTab(ShellActivity.TAB_TERMINAL)
-                5 -> detail("快捷键说明", "内嵌终端保持两行六列：点击是主功能，上滑是拓展功能，长按可自定义单个键。\n\n例如 C 点击输入 c，上滑 clear；SPC 点击空格，上滑 pwd。\n\n自定义输入支持 \\n、\\t 和 \\e 转义。")
-                6 -> detail("会话说明", "终端 Tab 支持多会话标签、新建会话、关闭当前会话、点击标签切换、长按标签重命名。关闭最后一个会话时会自动创建新会话。")
+                4 -> detail("快捷键说明", "内嵌终端保持两行六列：点击是主功能，上滑是拓展功能，长按可自定义单个键。\n\n例如 C 点击输入 c，上滑 clear；SPC 点击空格，上滑 pwd。\n\n自定义输入支持 \\n、\\t 和 \\e 转义。")
+                5 -> detail("会话说明", "终端 Tab 支持多会话标签、新建会话、关闭当前会话、点击标签切换、长按标签重命名。关闭最后一个会话时会自动创建新会话。")
             }
         }.show()
     }
@@ -269,40 +248,36 @@ class EmbeddedSettingsPage : ShellPage {
     }
 
     private fun devMenu() {
-        AlertDialog.Builder(activity).setTitle("开发环境").setItems(arrayOf("进入 Ubuntu", "检测开发环境", "部署 Android 工具链", "修复环境", "Android 调试桥接")) { _, which ->
+        AlertDialog.Builder(activity).setTitle("开发环境").setItems(arrayOf("检测开发环境", "部署 Android 工具链", "修复环境", "Android 调试桥接")) { _, which ->
             when (which) {
-                0 -> host.openTerminal("ubuntu")
-                1 -> host.openTerminal("check-dev-env")
-                2 -> host.openTerminal("deploy-android-dev")
-                3 -> host.openTerminal("repair-dev-env")
-                4 -> detail("Android 调试桥接", "在 Ubuntu/终端中优先使用 pmx、amx、getpropx、logcatx，避免直接执行 /system/bin/pm 造成 PRoot 链接器错误。")
+                0 -> host.openTerminal("check-dev-env")
+                1 -> host.openTerminal("deploy-android-dev")
+                2 -> host.openTerminal("repair-dev-env")
+                3 -> detail("Android 调试桥接", "在 Ubuntu/终端中优先使用 pmx、amx、getpropx、logcatx，避免直接执行 /system/bin/pm 造成 PRoot 链接器错误。")
             }
         }.show()
     }
 
     private fun aiServerMenu() {
-        AlertDialog.Builder(activity).setTitle("AI 与服务器").setItems(arrayOf("安装 OpenCode", "启动 AI 服务示例", "监听端口", "后台常驻", "任务页")) { _, which ->
+        AlertDialog.Builder(activity).setTitle("AI 与服务器").setItems(arrayOf("安装 OpenCode", "监听端口", "后台常驻")) { _, which ->
             when (which) {
                 0 -> host.openTerminal("install-aitool")
-                1 -> host.openTerminal("task-run opencode 'opencode --help'")
-                2 -> host.openTerminal("list-listen-ports")
-                3 -> {
+                1 -> host.openTerminal("list-listen-ports")
+                2 -> {
                     KeepAliveService.start(activity)
                     activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).edit().putBoolean("keepalive_auto", true).apply()
                     toast("后台常驻已启动")
                 }
-                4 -> host.switchTab(ShellActivity.TAB_TASKS)
             }
         }.show()
     }
 
     private fun permissionMenu() {
-        AlertDialog.Builder(activity).setTitle("文件与权限").setItems(arrayOf("打开文件 Tab", "存储权限", "应用详情", "Shizuku 状态")) { _, which ->
+        AlertDialog.Builder(activity).setTitle("文件与权限").setItems(arrayOf("存储权限", "应用详情", "Shizuku 状态")) { _, which ->
             when (which) {
-                0 -> host.switchTab(ShellActivity.TAB_FILES)
-                1 -> openStorageSettings()
-                2 -> openAppSettings()
-                3 -> detail("Shizuku 状态", "如果 Shizuku 未运行，请先打开 Shizuku 应用并启动服务。应用已声明 Shizuku Provider，用于后续更高权限能力。")
+                0 -> openStorageSettings()
+                1 -> openAppSettings()
+                2 -> detail("Shizuku 状态", "如果 Shizuku 未运行，请先打开 Shizuku 应用并启动服务。应用已声明 Shizuku Provider，用于后续更高权限能力。")
             }
         }.show()
     }
@@ -338,11 +313,9 @@ class EmbeddedSettingsPage : ShellPage {
         "${if (ok) "✓" else "!"} $name：${if (ok) "正常" else "待处理"}\n  $desc"
 
     private fun advancedMenu() {
-        AlertDialog.Builder(activity).setTitle("系统与高级").setItems(arrayOf("命令速查", "命令面板", "环境诊断")) { _, which ->
+        AlertDialog.Builder(activity).setTitle("系统与高级").setItems(arrayOf("命令速查")) { _, which ->
             when (which) {
                 0 -> detail("命令速查", "ubuntu\npmx list packages\namx start ...\ngetpropx ro.product.model\nlogcatx -d\ntask-list\ncheck-dev-env")
-                1 -> host.showCommandPalette()
-                2 -> diagnosticsCenter()
             }
         }.show()
     }
