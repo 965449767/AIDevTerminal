@@ -274,7 +274,10 @@ class EmbeddedTerminalPage : ShellPage {
                 refreshCompletions(activity)
             }
             onCommittedText = { text ->
-                if (tuiActive && ctrlLatched && text.length == 1) {
+                if (text == "\n") {
+                    // 回车键：发送 CR (0x0D) 而不是 LF (0x0A)
+                    session?.write("\r")
+                } else if (tuiActive && ctrlLatched && text.length == 1) {
                     // TUI 模式 + Ctrl 按下：发送组合键转义序列
                     val codePoint = text[0].code
                     val ctrlCode = when {
