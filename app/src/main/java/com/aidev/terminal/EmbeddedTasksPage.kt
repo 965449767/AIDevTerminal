@@ -116,6 +116,10 @@ class EmbeddedTasksPage : ShellPage {
             ui.actionCard("Shizuku 日志", "通过 Shizuku 获取应用日志", "LOG") { showShizukuLogcat() }
         ))
         list.addView(ui.rowOf(
+            ui.actionCard("Shizuku 诊断", "测试 Shizuku 权限和基本命令", "TEST") { testShizukuDiagnostics() },
+            ui.statusCard("Shizuku 状态", ShizukuLogcat.statusText(), ShizukuLogcat.isAvailable())
+        ))
+        list.addView(ui.rowOf(
             ui.actionCard("启动常驻", "启动前台服务与 WakeLock", "KEEP") {
                 KeepAliveService.start(activity)
                 Toast.makeText(activity, "已启动后台常驻", Toast.LENGTH_SHORT).show()
@@ -347,6 +351,64 @@ class EmbeddedTasksPage : ShellPage {
                 }
             }
         }
+    }
+
+    private fun testShizukuDiagnostics() {
+        if (!ShizukuLogcat.isAvailable()) {
+            AlertDialog.Builder(activity)
+                .setTitle("Shizuku 诊断")
+                .setMessage("Shizuku 不可用：${ShizukuLogcat.statusText()}\n\n请先安装并启动 Shizuku，然后授权 AIDev。")
+                .setPositiveButton("打开 Shizuku") { _, _ ->
+                    val intent = activity.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+                    if (intent != null) activity.startActivity(intent)
+                }
+                .setNegativeButton("关闭", null)
+                .show()
+            return
+        }
+
+        val dialog = AlertDialog.Builder(activity)
+            .setTitle("Shizuku 诊断")
+            .setMessage("正在测试 Shizuku 权限...")
+            .setCancelable(false)
+            .show()
+
+        // 测试 1: 执行 whoami
+        ShizukuLogcat.fetchLog(packageName = "", lines = 1, filters = listOf("*S")) { _ -> }
+        // 用 echo 测试基本命令执行
+        val testCmd = "echo 'shizuku_test_ok' && id && echo '---' && ps -A | grep shizuku | head -1"
+        Thread {
+            try {
+                val method = rikka.shizuku.Shizuku::class.java.getDeclaredMethod(
+                    "newProcess",
+                    Array<String>::class.java,
+                    Array<String>::class.java,
+                    String::class.java
+                ).apply { isAccessible = true }
+                val process = method.invoke(null, arrayOf("sh", "-c", testCmd), null, null) as? java.lang.Process
+                val output = process?.inputStream?.bufferedReader()?.use { it.readText() } ?: "无输出"
+                val exit = process?.waitFor() ?: -1
+
+                activity.runOnUiThread {
+                    dialog.dismiss()
+                    AlertDialog.Builder(activity)
+                        .setTitle("Shizuku 诊断结果")
+                        .setMessage("命令执行测试：\n$output\n\n退出码：$exit\n\n说明：\n- 如果显示 shell 用户（uid=2000），Shizuku 拥有 adb 权限\n- 如果显示 root（uid=0），Shizuku 拥有 root 权限\n- 如果失败，请检查 Shizuku 是否已正确启动")
+                        .setPositiveButton("测试 logcat") { _, _ -> showShizukuLogcat() }
+                        .setNegativeButton("关闭", null)
+                        .show()
+                }
+            } catch (e: Exception) {
+                activity.runOnUiThread {
+                    dialog.dismiss()
+                    AlertDialog.Builder(activity)
+                        .setTitle("Shizuku 诊断失败")
+                        .setMessage("错误：${e.message}\n\n可能原因：\n1. Shizuku 未正确启动\n2. AIDev 未获得 Shizuku 授权\n3. Shizuku API 版本不兼容")
+                        .setNegativeButton("关闭", null)
+                        .show()
+                }
+            }
+        }.apply { isDaemon = true }.start()
     }
 
     private fun showPortDetails() {
