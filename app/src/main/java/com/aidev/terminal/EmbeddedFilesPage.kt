@@ -179,9 +179,15 @@ class EmbeddedFilesPage : ShellPage {
     }
 
     private fun loadPane(isLeft: Boolean) {
-        val dir = if (isLeft) leftDir else rightDir
+        var dir = if (isLeft) leftDir else rightDir
         val list = if (isLeft) leftList else rightList
         val path = if (isLeft) leftPath else rightPath
+        // 如果当前目录不可读，自动回退到可读目录
+        if (dir.listFiles() == null) {
+            val fallback = Environment.getExternalStorageDirectory()
+            dir = fallback
+            if (isLeft) leftDir = fallback else rightDir = fallback
+        }
         path.text = if (isLeft) "左：${dir.absolutePath}" else "右：${dir.absolutePath}"
         list.removeAllViews()
         dir.parentFile?.let { list.addView(row("..", it, isLeft, true)) }
