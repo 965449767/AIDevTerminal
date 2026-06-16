@@ -202,6 +202,7 @@ class EmbeddedTerminalPage : ShellPage {
     private lateinit var tabBar: LinearLayout
     private lateinit var statusText: TextView
     private lateinit var completionRow: LinearLayout
+    private var completionBarView: View? = null
     private var session: TerminalSession? = null
     private var current: EmbeddedTermSession? = null
     private var homeDir: File? = null
@@ -216,7 +217,10 @@ class EmbeddedTerminalPage : ShellPage {
     private var pwdObserver: PwdFileObserver? = null
     private var lastSyncedPwd = ""
     private var syncIndicator: TextView? = null
+    private var tuiIndicator: TextView? = null
     private var tuiActive = false
+
+    private var manualTuiOverride = false
 
     private fun updateTuiMode() {
         val s = session ?: return
@@ -224,15 +228,13 @@ class EmbeddedTerminalPage : ShellPage {
             val emulator = s.javaClass.getMethod("getEmulator").invoke(s)
             emulator.javaClass.getMethod("isAlternateScreenActive").invoke(emulator) as Boolean
         }.getOrDefault(false)
+        // 如果用户手动切换了 TUI 模式，不覆盖
+        if (manualTuiOverride) return
         inputProxy?.tuiMode = isTui
         if (isTui != tuiActive) {
             tuiActive = isTui
             val act = activity ?: return
-            if (isTui) {
-                // TUI 模式：保持 inputProxy 焦点接收 IME（语音/文字），
-                // 但按键事件通过 tuiMode 放行到 TerminalView
-                // 不切换焦点
-            } else {
+            if (!isTui) {
                 inputProxy?.requestFocus()
             }
         }
@@ -328,6 +330,8 @@ class EmbeddedTerminalPage : ShellPage {
                 }
             }
             addView(textView, LinearLayout.LayoutParams(0, -1, 1f))
+            tuiIndicator = tuiIndicatorView(activity, ui)
+            addView(tuiIndicator, LinearLayout.LayoutParams(ui.dp(28), -1))
             syncIndicator = syncIndicatorView(activity, ui)
             addView(syncIndicator, LinearLayout.LayoutParams(ui.dp(36), -1))
         }
@@ -505,6 +509,35 @@ class EmbeddedTerminalPage : ShellPage {
     fun silentCd(ubuntuPath: String) {
         session?.write("cd $ubuntuPath\r")
     }
+
+    private fun toggleTuiMode(activity: Activity) {
+        tuiActive = !tuiActive
+        manualTuiOverride = tuiActive
+        inputProxy?.tuiMode = tuiActive
+        completionBarView?.visibility = if (tuiActive) View.GONE else View.VISIBLE
+        tuiIndicator?.let {
+            it.setTextColor(if (tuiActive) 0xFF22D3A7.toInt() else 0xFF9CA3AF.toInt())
+        }
+        Toast.makeText(activity, if (tuiActive) "TUI 模式已开启" else "TUI 模式已关闭", Toast.LENGTH_SHORT).show()
+        if (!tuiActive) {
+            inputProxy?.requestFocus()
+            refreshCompletions(activity)
+        }
+    }
+
+    private fun tuiIndicatorView(activity: Activity, ui: AIDevUi): TextView =
+        TextView(activity).apply {
+            gravity = Gravity.CENTER
+            textSize = 12f
+            text = "T"
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTextColor(if (tuiActive) 0xFF22D3A7.toInt() else 0xFF9CA3AF.toInt())
+            setOnClickListener { toggleTuiMode(activity) }
+            setOnLongClickListener {
+                Toast.makeText(activity, if (tuiActive) "TUI 模式：命令建议栏已隐藏" else "点击开启 TUI 模式（隐藏命令建议栏）", Toast.LENGTH_SHORT).show()
+                true
+            }
+        }
 
     fun prefillCdCommand(ubuntuPath: String) {
         val cmd = "cd $ubuntuPath"
