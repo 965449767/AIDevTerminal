@@ -173,6 +173,7 @@ class EmbeddedTerminalPage : ShellPage {
     private var pwdObserver: PwdFileObserver? = null
     private var lastSyncedPwd = ""
     private var syncIndicator: TextView? = null
+    private var tuiActive = false
 
     private fun updateTuiMode() {
         val s = session ?: return
@@ -181,6 +182,17 @@ class EmbeddedTerminalPage : ShellPage {
             emulator.javaClass.getMethod("isAlternateScreenActive").invoke(emulator) as Boolean
         }.getOrDefault(false)
         inputProxy?.tuiMode = isTui
+        if (isTui != tuiActive) {
+            tuiActive = isTui
+            val act = activity ?: return
+            if (isTui) {
+                // TUI 模式：焦点交给 TerminalView，让它原生处理按键
+                terminalView?.requestFocus()
+            } else {
+                // 普通模式：焦点回到 inputProxy
+                inputProxy?.requestFocus()
+            }
+        }
     }
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
@@ -876,6 +888,11 @@ class EmbeddedTerminalPage : ShellPage {
     }
 
     private fun focusTerminalInput(activity: Activity) {
+        if (tuiActive) {
+            // TUI 模式下焦点保持在 TerminalView
+            terminalView?.requestFocus()
+            return
+        }
         val proxy = inputProxy
         if (proxy != null) {
             proxy.requestFocus()
