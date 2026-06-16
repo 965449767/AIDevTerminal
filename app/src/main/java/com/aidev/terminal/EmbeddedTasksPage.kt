@@ -95,8 +95,8 @@ class EmbeddedTasksPage : ShellPage {
         ))
         currentProject()?.let { project ->
             list.addView(ui.rowOf(
-                ui.actionCard("OpenCode 项目", "在当前项目启动 AI 代理", "AI") { host.openTerminal("cd \"${project.absolutePath}\" && aidev-opencode") },
-                ui.actionCard("后台代理", "后台运行 OpenCode 并记录日志", "BG") { host.openTerminal("cd \"${project.absolutePath}\" && aidev-opencode-task") }
+                ui.actionCard("OpenCode 项目", "在当前项目启动 AI 代理", "AI") { host.openTerminal("cd \"${project.absolutePath}\" && opencode") },
+                ui.actionCard("后台代理", "后台运行 OpenCode 并记录日志", "BG") { host.openTerminal("cd \"${project.absolutePath}\" && task-run opencode \"opencode\"") }
             ))
             list.addView(ui.rowOf(
                 ui.actionCard("代理上下文", "输出项目/文件/Git/任务摘要", "CTX") { host.openTerminal("cd \"${project.absolutePath}\" && aidev-agent-context") },
@@ -150,7 +150,7 @@ class EmbeddedTasksPage : ShellPage {
             "日志 · 异常日志" to { searchErrorLogs() },
             "日志 · 代理日志" to { host.openTerminal("aidev-agent-log") },
             "上下文 · 导出上下文" to { host.openTerminal("cd \"${project.absolutePath}\" && aidev-agent-context-file") },
-            "检查 · 启动检查" to { host.openTerminal("cd \"${project.absolutePath}\" && aidev-opencode-preflight") },
+            "检查 · 启动检查" to { host.openTerminal("cd \"${project.absolutePath}\" && opencode --help") },
             "日志 · 日志摘要" to { showAgentLogSummary() },
             "日志 · 追踪代理" to { host.openTerminal("aidev-agent-tail") },
             "系统 · 端口详情" to { showPortDetails() },
@@ -345,8 +345,8 @@ class EmbeddedTasksPage : ShellPage {
             currentProjectTask("if [ -f package.json ]; then npm run build; elif [ -f build.gradle ] || [ -f build.gradle.kts ]; then ./gradlew assembleDebug; elif [ -f go.mod ]; then go build ./...; elif [ -f Cargo.toml ]; then cargo build; else ls -la; fi"),
             currentProjectTask("if [ -f package.json ]; then npm pkg get scripts; elif [ -f build.gradle ] || [ -f build.gradle.kts ]; then ./gradlew tasks --all | head -80; elif [ -f go.mod ]; then go list ./...; elif [ -f Cargo.toml ]; then cargo metadata --no-deps; else python3 -m pytest --collect-only; fi"),
             currentProjectTask("if [ -f package.json ]; then rm -rf node_modules package-lock.json && npm install; elif [ -f build.gradle ] || [ -f build.gradle.kts ]; then ./gradlew --stop; ./gradlew clean; elif [ -f go.mod ]; then go clean -cache && go mod tidy; elif [ -f Cargo.toml ]; then cargo clean && cargo fetch; elif [ -f requirements.txt ]; then python3 -m pip install -r requirements.txt --break-system-packages; else ls -la; fi"),
-            currentProjectTask("aidev-opencode"),
-            currentProjectTask("aidev-opencode-task"),
+            currentProjectTask("opencode"),
+            currentProjectTask("task-run opencode \"opencode\""),
             currentProjectTask("aidev-agent-context"),
             "aidev-agent-log"
         )

@@ -263,12 +263,12 @@ class ShellActivity : Activity() {
             25 -> openTerminalCommand("ls -lt \"${filesDir.absolutePath}/home/tasks\"/*.log 2>/dev/null | head -20")
             26 -> confirmCurrentProjectRepair()
             27 -> showOpenCodeLaunchOptions()
-            28 -> openCurrentProject("aidev-opencode-task")
+            28 -> openCurrentProject("task-run opencode \"opencode\"")
             29 -> openCurrentProject("task-run opencode-serve 'opencode serve'")
             30 -> openCurrentProject("aidev-agent-context")
             31 -> openCurrentProject("aidev-agent-context-file")
             32 -> openTerminalCommand("aidev-agent-summary")
-            33 -> openCurrentProject("aidev-opencode-preflight")
+            33 -> openCurrentProject("opencode --help")
             34 -> openTerminalCommand("aidev-agent-log")
         }
     }
@@ -289,9 +289,9 @@ class ShellActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("OpenCode 启动前检查")
             .setMessage(status)
-            .setPositiveButton("直接启动") { _, _ -> openCurrentProject("aidev-opencode") }
+            .setPositiveButton("直接启动") { _, _ -> openCurrentProject("opencode") }
             .setNeutralButton("先导出上下文") { _, _ -> openCurrentProject("aidev-agent-context-file") }
-            .setNegativeButton("后台启动") { _, _ -> openCurrentProject("aidev-opencode-task") }
+            .setNegativeButton("后台启动") { _, _ -> openCurrentProject("task-run opencode \"opencode\"") }
             .show()
     }
 

@@ -74,9 +74,9 @@ class DashboardPage : ShellPage {
             addView(ui.muted(projectHealthSummary(dir)).apply { maxLines = 3 })
             addView(ui.rowOf(
                 ui.actionCard("打开", "进入项目目录", "PWD") { host.openTerminal("cd \"${dir.absolutePath}\" && pwd && ls -la") },
-                ui.actionCard("AI", "启动当前项目代理", "AI") { host.openTerminal("cd \"${dir.absolutePath}\" && aidev-opencode") }.apply {
+                ui.actionCard("AI", "启动当前项目代理", "AI") { host.openTerminal("cd \"${dir.absolutePath}\" && opencode") }.apply {
                     setOnLongClickListener {
-                        host.openTerminal("cd \"${dir.absolutePath}\" && aidev-opencode-task")
+                        host.openTerminal("cd \"${dir.absolutePath}\" && task-run opencode \"opencode\"")
                         true
                     }
                 }
@@ -97,7 +97,7 @@ class DashboardPage : ShellPage {
             "日志 · 任务日志" to { host.openTerminal("ls -lt \"${activity.filesDir.absolutePath}/home/tasks\"/*.log 2>/dev/null | head -20") },
             "维护 · 修复" to { confirmProjectRepair(activity, host, dir) },
             "维护 · 依赖" to { host.openTerminal("cd \"${dir.absolutePath}\" && ${projectInstallCommand(dir)}") },
-            "AI · 后台 AI" to { host.openTerminal("cd \"${dir.absolutePath}\" && aidev-opencode-task") },
+            "AI · 后台 AI" to { host.openTerminal("cd \"${dir.absolutePath}\" && task-run opencode \"opencode\"") },
             "AI · 上下文文件" to { host.openTerminal("cd \"${dir.absolutePath}\" && aidev-agent-context-file") },
             "历史 · 最近操作" to { showProjectHistory(activity, host) },
             "系统 · 命令面板" to { host.showCommandPalette() }

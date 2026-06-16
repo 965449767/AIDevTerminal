@@ -57,43 +57,6 @@ object UbuntuBootstrapScripts {
           echo "== possible modified files =="
           grep -iE "modified|created|updated|wrote|write|saved|changed" "${'$'}log" 2>/dev/null | tail -30 || true
         }
-        aidev-opencode-preflight() {
-          echo "== OpenCode 启动前检查 =="
-          command -v opencode >/dev/null 2>&1 && echo "OpenCode: OK" || echo "OpenCode: 未安装，运行 install-aitool"
-          [ -d .git ] && echo "Git: OK" || echo "Git: 当前目录不是 Git 仓库"
-          [ -f README.md ] || [ -f README.txt ] || [ -f readme.md ] && echo "README: OK" || echo "README: 未发现"
-          [ -f package.json ] && echo "项目: Node/package.json"
-          [ -f pyproject.toml ] && echo "项目: Python/pyproject"
-          [ -f requirements.txt ] && echo "项目: Python/requirements"
-          [ -f build.gradle ] || [ -f build.gradle.kts ] && echo "项目: Gradle"
-          [ -f go.mod ] && echo "项目: Go"
-          [ -f Cargo.toml ] && echo "项目: Rust"
-          echo
-          git status --short --branch 2>/dev/null || true
-          echo
-          echo "建议："
-          echo "  aidev-agent-context-file   # 导出上下文"
-          echo "  aidev-opencode             # 前台启动"
-          echo "  aidev-opencode-task        # 后台启动"
-          echo "  aidev-agent-log            # 查看日志"
-        }
-        aidev-opencode() {
-          command -v opencode >/dev/null 2>&1 || { echo "opencode 未安装，先运行 install-aitool"; return 1; }
-          aidev-opencode-preflight
-          echo "启动 OpenCode。建议先在项目目录运行 aidev-agent-context-file。"
-          opencode "${'$'}@"
-        }
-        aidev-opencode-task() {
-          command -v opencode >/dev/null 2>&1 || { echo "opencode 未安装，先运行 install-aitool"; return 1; }
-          if command -v task-run >/dev/null 2>&1; then
-            task-run opencode "opencode"
-          else
-            mkdir -p "${'$'}AIDEV_HOME/tasks"
-            log="${'$'}AIDEV_HOME/tasks/opencode-${'$'}(date +%Y%m%d-%H%M%S).log"
-            nohup sh -lc "opencode" > "${'$'}log" 2>&1 &
-            echo "OpenCode 后台任务已启动，日志：${'$'}log"
-          fi
-        }
         aidev-agent-log() {
           ls -lt "${'$'}AIDEV_HOME/tasks"/*.log 2>/dev/null | head -20
         }
