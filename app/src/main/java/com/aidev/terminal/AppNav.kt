@@ -53,7 +53,7 @@ object AppNav {
     }
 
     fun openTerminal(activity: Activity, command: String) {
-        TerminalCommandBus.pending = command.trim()
+        TerminalCommandBus.post(command.trim())
         ShellActivity.open(activity, ShellActivity.TAB_TERMINAL)
     }
 

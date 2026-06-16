@@ -227,17 +227,17 @@ class EmbeddedTerminalPage : ShellPage {
         val s = session ?: return
         val isTui = runCatching {
             val emulator = s.javaClass.getMethod("getEmulator").invoke(s)
-            emulator.javaClass.getMethod("isAlternateScreenActive").invoke(emulator) as Boolean
+            emulator.javaClass.getMethod("isAlternateScreenActive").invoke(emulator) as? Boolean
         }.onFailure { e ->
             android.util.Log.w("AIDEV_TUI", "Failed to detect alternate screen: ${e.message}")
         }.getOrDefault(false)
         // 如果用户手动切换了 TUI 模式，不覆盖
         if (manualTuiOverride) return
-        inputProxy?.tuiMode = isTui
+        inputProxy?.tuiMode = isTui ?: false
         if (isTui != tuiActive) {
-            tuiActive = isTui
+            tuiActive = isTui ?: false
             val act = activity ?: return
-            if (!isTui) {
+            if (isTui != true) {
                 inputProxy?.requestFocus()
             }
         }
@@ -467,7 +467,7 @@ class EmbeddedTerminalPage : ShellPage {
         syncIndicator?.let { tv ->
             val on = SyncCoordinator.isEnabled(activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
             tv.text = if (on) "●" else "○"
-            tv.setTextColor(if (on) 0xFF22D3A7.toInt() else 0xFF4B5563.toInt())
+            tv.setTextColor(if (on) DesignTokens.SYNC_ACTIVE else DesignTokens.SYNC_INACTIVE)
         }
         terminalView?.postDelayed({
             maybeAutoBootstrapUbuntu(activity)
@@ -526,14 +526,14 @@ class EmbeddedTerminalPage : ShellPage {
             textSize = 11f
             val on = SyncCoordinator.isEnabled(activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
             text = if (on) "●" else "○"
-            setTextColor(if (on) 0xFF22D3A7.toInt() else 0xFF4B5563.toInt())
+            setTextColor(if (on) DesignTokens.SYNC_ACTIVE else DesignTokens.SYNC_INACTIVE)
             setOnClickListener {
                 val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
                 val current = SyncCoordinator.isEnabled(prefs)
                 SyncCoordinator.setEnabled(prefs, !current)
                 val nowOn = !current
                 text = if (nowOn) "●" else "○"
-                setTextColor(if (nowOn) 0xFF22D3A7.toInt() else 0xFF4B5563.toInt())
+                setTextColor(if (nowOn) DesignTokens.SYNC_ACTIVE else DesignTokens.SYNC_INACTIVE)
                 Toast.makeText(activity, if (nowOn) "联动已开启" else "联动已关闭", Toast.LENGTH_SHORT).show()
             }
             setOnLongClickListener {
@@ -553,7 +553,7 @@ class EmbeddedTerminalPage : ShellPage {
         inputProxy?.tuiMode = tuiActive
         completionBarView?.visibility = if (tuiActive) View.GONE else View.VISIBLE
         tuiIndicator?.let {
-            it.setTextColor(if (tuiActive) 0xFF22D3A7.toInt() else 0xFF9CA3AF.toInt())
+            it.setTextColor(if (tuiActive) DesignTokens.SYNC_ACTIVE else 0xFF9CA3AF.toInt())
         }
         Toast.makeText(activity, if (tuiActive) "TUI 模式已开启" else "TUI 模式已关闭", Toast.LENGTH_SHORT).show()
         if (!tuiActive) {
@@ -568,7 +568,7 @@ class EmbeddedTerminalPage : ShellPage {
             textSize = 12f
             text = "T"
             setTypeface(null, android.graphics.Typeface.BOLD)
-            setTextColor(if (tuiActive) 0xFF22D3A7.toInt() else 0xFF9CA3AF.toInt())
+            setTextColor(if (tuiActive) DesignTokens.SYNC_ACTIVE else 0xFF9CA3AF.toInt())
             setOnClickListener { toggleTuiMode(activity) }
             setOnLongClickListener {
                 Toast.makeText(activity, if (tuiActive) "TUI 模式：命令建议栏已隐藏" else "点击开启 TUI 模式（隐藏命令建议栏）", Toast.LENGTH_SHORT).show()
@@ -739,8 +739,8 @@ class EmbeddedTerminalPage : ShellPage {
         return runCatching {
             val emulator = s.javaClass.getMethod("getEmulator").invoke(s)
             val screen = emulator.javaClass.getMethod("getScreen").invoke(emulator)
-            val rows = screen.javaClass.getMethod("getRows").invoke(screen) as Int
-            val cols = screen.javaClass.getMethod("getColumns").invoke(screen) as Int
+            val rows = screen.javaClass.getMethod("getRows").invoke(screen) as? Int ?: 0
+            val cols = screen.javaClass.getMethod("getColumns").invoke(screen) as? Int ?: 0
             val sb = StringBuilder()
             for (row in 0 until rows) {
                 val line = StringBuilder()
@@ -781,8 +781,8 @@ class EmbeddedTerminalPage : ShellPage {
                     .setTitle("找到 ${matches.size} 条匹配")
                     .setItems(matches.toTypedArray()) { _, _ ->
                         // 复制选中行到剪贴板
-                        (activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
-                            .setPrimaryClip(ClipData.newPlainText("AIDev Terminal", matches[0]))
+                        (activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)
+                            ?.setPrimaryClip(ClipData.newPlainText("AIDev Terminal", matches[0]))
                         Toast.makeText(activity, "已复制: ${matches[0].take(40)}", Toast.LENGTH_SHORT).show()
                     }
                     .setNegativeButton("关闭", null)
@@ -1018,8 +1018,8 @@ class EmbeddedTerminalPage : ShellPage {
                     "补全" -> applyCompletion(item)
                     "执行并回车" -> executeCompletion(activity, item)
                     "复制命令" -> {
-                        (activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
-                            .setPrimaryClip(ClipData.newPlainText("AIDev command", item.insertText))
+                        (activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)
+                            ?.setPrimaryClip(ClipData.newPlainText("AIDev command", item.insertText))
                         Toast.makeText(activity, "已复制命令", Toast.LENGTH_SHORT).show()
                     }
                     "固定到常用" -> pinCompletion(activity, item)
@@ -1071,12 +1071,12 @@ class EmbeddedTerminalPage : ShellPage {
         val proxy = inputProxy
         if (proxy != null) {
             proxy.requestFocus()
-            (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-                .showSoftInput(proxy, InputMethodManager.SHOW_IMPLICIT)
+            (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+                ?.showSoftInput(proxy, InputMethodManager.SHOW_IMPLICIT)
         } else {
             terminalView?.requestFocus()
-            (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-                .showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT)
+            (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+                ?.showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT)
         }
     }
 
@@ -1425,7 +1425,10 @@ class EmbeddedTerminalPage : ShellPage {
         }
 
     private fun ensureSession(activity: Activity) {
-        val shellAssets = TerminalShellAssets.ensure(activity)
+        val shellAssets = runCatching { TerminalShellAssets.ensure(activity) }.getOrElse {
+            Toast.makeText(activity, "终端环境初始化失败：${it.message}", Toast.LENGTH_LONG).show()
+            return
+        }
         homeDir = shellAssets.home
         val entry = shellAssets.entry
         if (current != null) {
@@ -1435,7 +1438,9 @@ class EmbeddedTerminalPage : ShellPage {
             refreshTabs(activity)
             return
         }
-        newSession(activity)
+        runCatching { newSession(activity) }.onFailure { e ->
+            Toast.makeText(activity, "会话创建失败：${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun createTerminalSession(activity: Activity, id: Int): TerminalSession {
@@ -1462,7 +1467,7 @@ class EmbeddedTerminalPage : ShellPage {
             "ENV=${rc.absolutePath}",
             "PATH=$aidevBin:/system/bin:/system/xbin"
         )
-        return TerminalSession("/system/bin/sh", homeDir!!.absolutePath, arrayOf("sh", entry.absolutePath), env, 5000, sessionClient(activity)).apply {
+        return TerminalSession("/system/bin/sh", homeDir?.absolutePath ?: "/data/data/com.aidev.terminal/files/home", arrayOf("sh", entry.absolutePath), env, 5000, sessionClient(activity)).apply {
             mSessionName = "AIDev-Shell-$id"
         }
     }
@@ -1647,12 +1652,9 @@ class EmbeddedTerminalPage : ShellPage {
     }
 
     private fun consumePendingCommand() {
-        val command = TerminalCommandBus.pending.trim()
-        if (command.isNotEmpty()) {
-            TerminalCommandBus.pending = ""
-            if (command == "aidev-auto-bootstrap") autoBootstrapDispatched = true
-            send(command, remember = false)
-        }
+        val command = TerminalCommandBus.consume() ?: return
+        if (command == "aidev-auto-bootstrap") autoBootstrapDispatched = true
+        send(command, remember = false)
     }
 
     private fun maybeAutoBootstrapUbuntu(activity: Activity) {
@@ -1687,12 +1689,12 @@ class EmbeddedTerminalPage : ShellPage {
             override fun onTitleChanged(changedSession: TerminalSession) {}
             override fun onSessionFinished(finishedSession: TerminalSession) { terminalView?.onScreenUpdated() }
             override fun onCopyTextToClipboard(session: TerminalSession, text: String) {
-                (activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("AIDev Terminal", text))
+                (activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.setPrimaryClip(ClipData.newPlainText("AIDev Terminal", text))
                 val preview = text.replace("\n", " ").take(40)
                 Toast.makeText(activity, "已复制: $preview${if (text.length > 40) "..." else ""}", Toast.LENGTH_SHORT).show()
             }
             override fun onPasteTextFromClipboard(session: TerminalSession) {
-                val text = (activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(activity)?.toString()
+                val text = (activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(activity)?.toString()
                 if (!text.isNullOrEmpty()) {
                     session.write(text)
                     updateInputBuffer(text)

@@ -254,7 +254,7 @@ class EmbeddedSettingsPage : ShellPage {
         // Android 系统权限（直接修复，不走终端）
         val storageOk = if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager() else true
         checks.add(CheckItem("存储权限", storageOk, "读取下载目录、项目目录和 APK", if (!storageOk) "action:storage" else null))
-        val batteryOk = if (Build.VERSION.SDK_INT < 23) true else (activity.getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(activity.packageName)
+        val batteryOk = if (Build.VERSION.SDK_INT < 23) true else (activity.getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isIgnoringBatteryOptimizations(activity.packageName) ?: false
         checks.add(CheckItem("电池优化白名单", batteryOk, "后台任务与长时间服务更稳定", if (!batteryOk) "action:battery" else null))
 
         // Ubuntu 环境
@@ -335,7 +335,7 @@ class EmbeddedSettingsPage : ShellPage {
                 .show()
         } else {
             val fixLabels = failedChecks.filter { it.fixAction != null }.map { it.name }.toTypedArray()
-            val fixActions = failedChecks.filter { it.fixAction != null }.map { it.fixAction!! }.toTypedArray()
+            val fixActions = failedChecks.filter { it.fixAction != null }.mapNotNull { it.fixAction }.toTypedArray()
             AlertDialog.Builder(activity)
                 .setTitle("开发环境检查")
                 .setMessage(body.toString())
@@ -345,10 +345,10 @@ class EmbeddedSettingsPage : ShellPage {
                         .setTitle("选择要修复的项目")
                         .setMultiChoiceItems(fixLabels, null) { _, _, _ -> }
                         .setPositiveButton("执行修复") { dialog, _ ->
-                            val selected = (dialog as AlertDialog).listView.checkedItemPositions
+                            val selected = (dialog as? AlertDialog)?.listView?.checkedItemPositions
                             val cmds = mutableListOf<String>()
                             for (i in 0 until fixActions.size) {
-                                if (selected.get(i, false)) {
+                                if (selected?.get(i, false) == true) {
                                     when (fixActions[i]) {
                                         "action:storage" -> openStorageSettings()
                                         "action:battery" -> {

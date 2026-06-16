@@ -265,8 +265,8 @@ class EmbeddedTasksPage : ShellPage {
 
     private fun batteryIgnored(): Boolean {
         if (Build.VERSION.SDK_INT < 23) return true
-        val pm = activity.getSystemService(Context.POWER_SERVICE) as PowerManager
-        return pm.isIgnoringBatteryOptimizations(activity.packageName)
+        val pm = activity.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        return pm?.isIgnoringBatteryOptimizations(activity.packageName) ?: false
     }
 
     private fun listeningPorts(): List<Int> =
@@ -402,7 +402,11 @@ class EmbeddedTasksPage : ShellPage {
         if (name.contains("修复")) {
             confirmTaskRepair(command)
         } else {
-            host.openTerminal(command)
+            try {
+                host.openTerminal(command)
+            } catch (e: Exception) {
+                Toast.makeText(activity, "任务启动失败：${e.message ?: "未知错误"}", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
@@ -600,6 +604,6 @@ class EmbeddedTasksPage : ShellPage {
         reload()
     }
     private fun copyText(label: String, text: String) {
-        (activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(label, text))
+        (activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.setPrimaryClip(ClipData.newPlainText(label, text))
     }
 }

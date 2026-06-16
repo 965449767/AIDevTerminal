@@ -17,6 +17,7 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import java.io.File
 import kotlin.math.abs
 
@@ -55,7 +56,7 @@ class ShellActivity : Activity() {
         val requestedTab = intent?.getIntExtra("shell_tab", -1) ?: -1
         val shouldAutoBootstrapUbuntu = shouldAutoBootstrapUbuntu(requestedTab)
         if (shouldAutoBootstrapUbuntu) {
-            TerminalCommandBus.pending = "aidev-auto-bootstrap"
+            TerminalCommandBus.post("aidev-auto-bootstrap")
         }
         val initial = if (shouldAutoBootstrapUbuntu) TAB_TERMINAL else requestedTab.takeIf { it in pages.indices } ?: 0
         switchTo(initial, animateForward = null, force = true)
@@ -72,7 +73,7 @@ class ShellActivity : Activity() {
         if (tab in pages.indices) {
             switchTo(tab, animateForward = null, force = true)
         } else {
-            TerminalCommandBus.pending = "aidev-auto-bootstrap"
+            TerminalCommandBus.post("aidev-auto-bootstrap")
             switchTo(TAB_TERMINAL, animateForward = null, force = true)
         }
     }
@@ -296,7 +297,7 @@ class ShellActivity : Activity() {
     }
 
     private fun openTerminalCommand(command: String) {
-        TerminalCommandBus.pending = command
+        TerminalCommandBus.post(command)
         switchTo(TAB_TERMINAL)
     }
 
@@ -327,7 +328,7 @@ class ShellActivity : Activity() {
             switchTo(TAB_FILES)
             return
         }
-        TerminalCommandBus.pending = "cd \"${dir.absolutePath}\" && ${command ?: "pwd && ls -la"}"
+        TerminalCommandBus.post("cd \"${dir.absolutePath}\" && ${command ?: "pwd && ls -la"}")
         switchTo(TAB_TERMINAL)
     }
 
@@ -375,7 +376,14 @@ class ShellActivity : Activity() {
                     }
                     setOnLongClickListener {
                         ui.pulse()
-                        showCommandPalette()
+                        val descriptions = listOf(
+                            "工作台：查看系统状态、快捷操作和项目概览",
+                            "终端：嵌入式 Shell 终端，支持 Ubuntu 和命令执行",
+                            "文件：浏览和管理本地文件与项目目录",
+                            "任务：后台任务管理，支持创建和监控运行中任务",
+                            "设置：主题、背景、密度等 UI 偏好设置"
+                        )
+                        Toast.makeText(this@ShellActivity, descriptions.getOrElse(index) { bottomLabels()[index] }, Toast.LENGTH_SHORT).show()
                         true
                     }
                 }
@@ -538,7 +546,7 @@ class ShellHost(
 
     fun openTerminal(command: String) {
         if (activity is ShellActivity) {
-            TerminalCommandBus.pending = command
+            TerminalCommandBus.post(command)
             activity.switchTo(ShellActivity.TAB_TERMINAL)
         } else {
             AppNav.openTerminal(activity, command)
@@ -571,5 +579,14 @@ class ShellHost(
 }
 
 object TerminalCommandBus {
-    var pending: String = ""
+    @Volatile var pending: String = ""
+    private val lock = Any()
+
+    fun consume(): String? = synchronized(lock) {
+        pending.takeIf { it.isNotBlank() }.also { pending = "" }
+    }
+
+    fun post(command: String) = synchronized(lock) {
+        pending = command
+    }
 }

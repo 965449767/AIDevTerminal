@@ -29,6 +29,13 @@ object DesignTokens {
     const val BOTTOM_NAV_HEIGHT = 58
     const val SWIPE_TRIGGER_DP = 72
     const val SWIPE_SLOP_DP = 32
+
+    // 颜色常量
+    const val SYNC_ACTIVE = 0xFF22D3A7.toInt()
+    const val SYNC_INACTIVE = 0xFF4B5563.toInt()
+    const val TERMINAL_BG = 0xFF1A1A2E.toInt()
+    const val CARD_BG = 0xFF1E1E30.toInt()
+    const val ACCENT = 0xFF22D3A7.toInt()
 }
 
 data class WorkbenchPalette(

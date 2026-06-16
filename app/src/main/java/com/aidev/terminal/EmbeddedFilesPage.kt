@@ -277,14 +277,15 @@ class EmbeddedFilesPage : ShellPage {
         val src = selected() ?: return toast("请先选择文件或目录")
         val dst = File(otherDir(), src.name)
         if (dst.exists()) return toast("目标已存在")
-        runCatching {
+        try {
             if (src.isDirectory) copyDir(src, dst) else src.copyTo(dst)
             if (move) src.deleteRecursively()
-        }.onSuccess {
             clearSelection()
             reloadAll()
             toast(if (move) "移动完成" else "复制完成")
-        }.onFailure { toast("操作失败：${it.message}") }
+        } catch (e: Exception) {
+            toast("操作失败：${e.message ?: "未知错误"}")
+        }
     }
 
     private fun newFolder() = input("新建文件夹", "folder") { name ->
@@ -307,10 +308,14 @@ class EmbeddedFilesPage : ShellPage {
             .setTitle("删除")
             .setMessage(src.absolutePath)
             .setPositiveButton("删除") { _, _ ->
-                val ok = if (src.isDirectory) src.deleteRecursively() else src.delete()
-                clearSelection()
-                reloadAll()
-                toast(if (ok) "已删除" else "删除失败")
+                try {
+                    val ok = if (src.isDirectory) src.deleteRecursively() else src.delete()
+                    clearSelection()
+                    reloadAll()
+                    toast(if (ok) "已删除" else "删除失败")
+                } catch (e: Exception) {
+                    toast("删除失败：${e.message ?: "未知错误"}")
+                }
             }
             .setNegativeButton("取消", null)
             .show()
@@ -497,8 +502,8 @@ class EmbeddedFilesPage : ShellPage {
             .setMessage(body)
             .setPositiveButton("运行建议") { _, _ ->
                 if (activity is ShellActivity) {
-                    TerminalCommandBus.pending = runCmd
-                    (activity as ShellActivity).switchTo(ShellActivity.TAB_TERMINAL)
+                    TerminalCommandBus.post(runCmd)
+                    (activity as? ShellActivity)?.switchTo(ShellActivity.TAB_TERMINAL)
                 }
             }
             .setNeutralButton("复制路径") { _, _ ->
@@ -780,9 +785,10 @@ class EmbeddedFilesPage : ShellPage {
     private fun runInTerminal(command: String) {
         val dir = selected()?.takeIf { it.isDirectory } ?: activeDir()
         rememberProjectAction(commandLabel(command), dir, command)
-        if (activity is ShellActivity) {
-            TerminalCommandBus.pending = command
-            (activity as ShellActivity).switchTo(ShellActivity.TAB_TERMINAL)
+        val act = activity
+        if (act is ShellActivity) {
+            TerminalCommandBus.post(command)
+            act.switchTo(ShellActivity.TAB_TERMINAL)
         }
     }
 
@@ -1087,7 +1093,7 @@ class EmbeddedFilesPage : ShellPage {
     }
     private fun info(text: String): TextView = ui.text(text, 12f, ui.palette.muted).apply { setPadding(ui.dp(8), ui.dp(10), ui.dp(8), ui.dp(10)) }
     private fun copyText(label: String, text: String) {
-        (activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(label, text))
+        (activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.setPrimaryClip(ClipData.newPlainText(label, text))
     }
     private fun toast(text: String) = Toast.makeText(activity, text, Toast.LENGTH_SHORT).show()
 }
