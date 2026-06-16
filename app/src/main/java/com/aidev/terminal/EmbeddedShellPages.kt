@@ -235,7 +235,7 @@ class EmbeddedTerminalPage : ShellPage {
                 updateInputBuffer("\b")
             }
             onEnter = {
-                session?.write("\n")
+                session?.write("\r")
                 updateInputBuffer("\n")
             }
         }
@@ -452,7 +452,7 @@ class EmbeddedTerminalPage : ShellPage {
         }
 
     fun silentCd(ubuntuPath: String) {
-        session?.write("cd $ubuntuPath\n")
+        session?.write("cd $ubuntuPath\r")
     }
 
     fun prefillCdCommand(ubuntuPath: String) {
@@ -818,7 +818,7 @@ class EmbeddedTerminalPage : ShellPage {
     }
 
     private fun executeCompletion(activity: Activity, item: TerminalCompletion) {
-        session?.write(item.insertText.trimEnd() + "\n")
+        session?.write(item.insertText.trimEnd() + "\r")
         inputBuffer = ""
         clearComposingInput()
         refreshCompletions(activity)
@@ -1446,7 +1446,7 @@ class EmbeddedTerminalPage : ShellPage {
     private fun send(command: String, remember: Boolean = true) {
         ensureSession(activity ?: return)
         val finalCommand = command.trimEnd()
-        session?.write(finalCommand + "\n")
+        session?.write(finalCommand + "\r")
         inputBuffer = ""
         activity?.let { refreshCompletions(it) }
         activity?.let { focusTerminalInput(it) }
@@ -1464,7 +1464,7 @@ class EmbeddedTerminalPage : ShellPage {
     private fun maybeAutoBootstrapUbuntu(activity: Activity) {
         if (autoBootstrapDispatched) return
         autoBootstrapDispatched = true
-        session?.write("aidev-auto-bootstrap\n")
+        session?.write("aidev-auto-bootstrap\r")
         focusTerminalInput(activity)
     }
 
@@ -1478,7 +1478,7 @@ class EmbeddedTerminalPage : ShellPage {
     }
 
     private fun refreshCommandIndex(activity: Activity) {
-        session?.write("aidev-index-commands\n")
+        session?.write("aidev-index-commands\r")
         terminalView?.postDelayed({ refreshCompletions(activity) }, 2500)
         terminalView?.postDelayed({ refreshCompletions(activity) }, 5000)
         focusTerminalInput(activity)
