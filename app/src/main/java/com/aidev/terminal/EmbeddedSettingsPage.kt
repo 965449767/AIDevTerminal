@@ -251,17 +251,17 @@ class EmbeddedSettingsPage : ShellPage {
         val rootfs = File(home, "ubuntu-rootfs")
         val checks = mutableListOf<CheckItem>()
 
-        // Android 系统权限
+        // Android 系统权限（直接修复，不走终端）
         val storageOk = if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager() else true
-        checks.add(CheckItem("存储权限", storageOk, "读取下载目录、项目目录和 APK", if (!storageOk) "open_storage" else null))
+        checks.add(CheckItem("存储权限", storageOk, "读取下载目录、项目目录和 APK", if (!storageOk) "action:storage" else null))
         val batteryOk = if (Build.VERSION.SDK_INT < 23) true else (activity.getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(activity.packageName)
-        checks.add(CheckItem("电池优化白名单", batteryOk, "后台任务与长时间服务更稳定", if (!batteryOk) "open_battery" else null))
+        checks.add(CheckItem("电池优化白名单", batteryOk, "后台任务与长时间服务更稳定", if (!batteryOk) "action:battery" else null))
 
         // Ubuntu 环境
-        checks.add(CheckItem("AIDev Home", home.exists(), home.absolutePath, if (!home.exists()) "repair_env" else null))
-        checks.add(CheckItem("Ubuntu rootfs", rootfs.exists(), rootfs.absolutePath, if (!rootfs.exists()) "repair_env" else null))
+        checks.add(CheckItem("AIDev Home", home.exists(), home.absolutePath, null))
+        checks.add(CheckItem("Ubuntu rootfs", rootfs.exists(), rootfs.absolutePath, null))
         val prootOk = File(home, "proot-lib/libtalloc.so.2").exists()
-        checks.add(CheckItem("PRoot 依赖", prootOk, "终端 Ubuntu 入口依赖", if (!prootOk) "repair_env" else null))
+        checks.add(CheckItem("PRoot 依赖", prootOk, "终端 Ubuntu 入口依赖", null))
 
         // 开发工具（在 rootfs 内检测）
         val devTools = listOf(
@@ -273,20 +273,17 @@ class EmbeddedSettingsPage : ShellPage {
             "go" to "Go",
             "cargo" to "Rust/Cargo",
             "opencode" to "OpenCode",
-            "adb" to "ADB",
             "npm" to "npm"
         )
         for ((cmd, label) in devTools) {
             val binPaths = listOf(
                 File(rootfs, "usr/bin/$cmd"),
                 File(rootfs, "usr/local/bin/$cmd"),
-                File(rootfs, "root/.opencode/bin/$cmd"),
-                File(rootfs, "usr/lib/android-sdk/build-tools/30.0.3/$cmd")
+                File(rootfs, "root/.opencode/bin/$cmd")
             )
             val exists = binPaths.any { it.exists() }
             val fixCmd = when (cmd) {
                 "opencode" -> "install-aitool"
-                "adb" -> "deploy-android-dev"
                 else -> null
             }
             checks.add(CheckItem(label, exists, cmd, fixCmd))
@@ -326,11 +323,22 @@ class EmbeddedSettingsPage : ShellPage {
                     AlertDialog.Builder(activity)
                         .setTitle("选择要修复的项目")
                         .setMultiChoiceItems(fixLabels, null) { _, _, _ -> }
-                        .setPositiveButton("执行修复") { _, which ->
-                            val selected = (which as AlertDialog).listView.checkedItemPositions
+                        .setPositiveButton("执行修复") { dialog, _ ->
+                            val selected = (dialog as AlertDialog).listView.checkedItemPositions
                             val cmds = mutableListOf<String>()
                             for (i in 0 until fixActions.size) {
-                                if (selected.get(i, false)) cmds.add(fixActions[i])
+                                if (selected.get(i, false)) {
+                                    when (fixActions[i]) {
+                                        "action:storage" -> openStorageSettings()
+                                        "action:battery" -> {
+                                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                                data = Uri.parse("package:${activity.packageName}")
+                                            }
+                                            activity.startActivity(intent)
+                                        }
+                                        else -> cmds.add(fixActions[i])
+                                    }
+                                }
                             }
                             if (cmds.isNotEmpty()) {
                                 host.openTerminal(cmds.joinToString(" && "))
@@ -339,7 +347,13 @@ class EmbeddedSettingsPage : ShellPage {
                         .setNegativeButton("取消", null)
                         .show()
                 }
-                .setNeutralButton("终端详细检测") { _, _ -> host.openTerminal("check-dev-env") }
+                .setNeutralButton("终端详细检测") { _, _ ->
+                    if (!rootfs.exists()) {
+                        toast("Ubuntu 环境尚未初始化，请先进入终端")
+                    } else {
+                        host.openTerminal("check-dev-env")
+                    }
+                }
                 .setNegativeButton("关闭", null)
                 .show()
         }
