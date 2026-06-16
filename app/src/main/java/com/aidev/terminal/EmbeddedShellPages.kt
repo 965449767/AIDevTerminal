@@ -64,6 +64,7 @@ private class TerminalImeProxyEditText(context: Context) : EditText(context) {
     var onBackspace: () -> Unit = {}
     var onEnter: () -> Unit = {}
     var tuiMode = false
+    var tuiKeyHandler: ((KeyEvent) -> Boolean)? = null
     private var clearing = false
     private var currentComposing = ""
 
@@ -88,7 +89,13 @@ private class TerminalImeProxyEditText(context: Context) : EditText(context) {
             }
 
             override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
-                if (tuiMode) return super.commitText(text, newCursorPosition)
+                if (tuiMode) {
+                    // TUI 模式：把 committed 文字直接发给终端 session
+                    val str = text?.toString().orEmpty()
+                    if (str.isNotEmpty()) onCommittedText(str)
+                    clearProxyText()
+                    return super.commitText(text, newCursorPosition)
+                }
                 val committed = text?.toString().orEmpty()
                 if (committed.isNotEmpty()) onCommittedText(committed)
                 currentComposing = ""
@@ -117,7 +124,14 @@ private class TerminalImeProxyEditText(context: Context) : EditText(context) {
             }
 
             override fun sendKeyEvent(event: KeyEvent): Boolean {
-                if (tuiMode) return super.sendKeyEvent(event)
+                if (tuiMode) {
+                    // TUI 模式：把按键转发给 TerminalView 处理
+                    val handler = tuiKeyHandler
+                    if (handler != null && event.action == KeyEvent.ACTION_DOWN) {
+                        return handler(event)
+                    }
+                    return super.sendKeyEvent(event)
+                }
                 if (event.action == KeyEvent.ACTION_DOWN) {
                     when (event.keyCode) {
                         KeyEvent.KEYCODE_DEL -> {
@@ -186,10 +200,10 @@ class EmbeddedTerminalPage : ShellPage {
             tuiActive = isTui
             val act = activity ?: return
             if (isTui) {
-                // TUI 模式：焦点交给 TerminalView，让它原生处理按键
-                terminalView?.requestFocus()
+                // TUI 模式：保持 inputProxy 焦点接收 IME（语音/文字），
+                // 但按键事件通过 tuiMode 放行到 TerminalView
+                // 不切换焦点
             } else {
-                // 普通模式：焦点回到 inputProxy
                 inputProxy?.requestFocus()
             }
         }
@@ -238,6 +252,10 @@ class EmbeddedTerminalPage : ShellPage {
                 session?.write("\r")
                 updateInputBuffer("\n")
             }
+        }
+        // TUI 模式下按键转发给 TerminalView
+        inputProxy?.tuiKeyHandler = { event ->
+            terminalView?.onKeyDown(event.keyCode, event) ?: false
         }
         root.addView(terminalView, LinearLayout.LayoutParams(-1, 0, 1f))
         root.addView(inputProxy, LinearLayout.LayoutParams(1, 1))
@@ -422,7 +440,11 @@ class EmbeddedTerminalPage : ShellPage {
             val prefs = act.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
             SyncCoordinator.onTerminalPwdChanged(ubuntuPwd, home, prefs) { targetDir ->
                 android.util.Log.d("AIDEV_SYNC", "L1 sync: $ubuntuPwd -> ${targetDir.absolutePath}, isDir=${targetDir.isDirectory}")
-                if (act is ShellActivity) act.syncBrowserToDir(targetDir)
+                try {
+                    if (act is ShellActivity) act.syncBrowserToDir(targetDir)
+                } catch (e: Exception) {
+                    android.util.Log.e("AIDEV_SYNC", "syncBrowserToDir error", e)
+                }
             }
         }
         pwdObserver?.start()
@@ -888,11 +910,6 @@ class EmbeddedTerminalPage : ShellPage {
     }
 
     private fun focusTerminalInput(activity: Activity) {
-        if (tuiActive) {
-            // TUI 模式下焦点保持在 TerminalView
-            terminalView?.requestFocus()
-            return
-        }
         val proxy = inputProxy
         if (proxy != null) {
             proxy.requestFocus()
