@@ -67,6 +67,30 @@ object UbuntuBootstrapScripts {
         }
         """.trimIndent() + "\n"
 
+    /**
+     * 将 assets/scripts/ 中的脚本复制到 rootfs 的 /usr/local/bin/。
+     * 必须在 Kotlin 层调用（不是 shell 层），因为需要访问 Android AssetManager。
+     */
+    fun copyAssetScripts(activity: android.app.Activity, rootfs: java.io.File) {
+        if (!rootfs.isDirectory) return
+        val binDir = java.io.File(rootfs, "usr/local/bin")
+        binDir.mkdirs()
+        val scripts = listOf("check-dev-env.sh", "repair-dev-env.sh", "deploy-dev-env.sh", "install-aitool.sh", "aidev-logcat.sh")
+        for (script in scripts) {
+            val dstName = script.removeSuffix(".sh")
+            val dst = java.io.File(binDir, dstName)
+            try {
+                activity.assets.open("scripts/$script").use { input ->
+                    dst.outputStream().use { output -> input.copyTo(output) }
+                }
+                dst.setExecutable(true)
+                android.util.Log.d("AIDev", "已复制脚本: $dstName -> ${dst.absolutePath}")
+            } catch (e: Exception) {
+                android.util.Log.w("AIDev", "无法复制脚本 $script: ${e.message}")
+            }
+        }
+    }
+
     fun aidevUbuntuCommandScript(homePath: String): String =
         """
         #!/system/bin/sh
@@ -287,21 +311,6 @@ AIDEV_INSTALL_EOF
 ubuntu "$@"
 AIDEV_BOOTSTRAP_EOF
           chmod 755 "${'$'}AIDEV_ROOTFS/usr/local/bin/aidev-auto-bootstrap" 2>/dev/null || true
-
-          # 开发环境辅助命令（从 assets 复制）
-          val scripts = listOf("check-dev-env.sh", "repair-dev-env.sh", "deploy-dev-env.sh", "install-aitool.sh", "aidev-logcat.sh")
-          for (script in scripts) {
-            val dstName = script.removeSuffix(".sh")
-            val dst = File("${'$'}AIDEV_ROOTFS/usr/local/bin", dstName)
-            try {
-              activity.assets.open("scripts/${'$'}script").use { input ->
-                dst.outputStream().use { output -> input.copyTo(output) }
-              }
-              dst.setExecutable(true)
-            } catch (e: Exception) {
-              android.util.Log.w("AIDev", "无法复制脚本 ${'$'}script: ${'$'}{e.message}")
-            }
-          }
 
           mkdir -p "${'$'}AIDEV_ROOTFS/root"
           touch "${'$'}AIDEV_ROOTFS/root/.bashrc" 2>/dev/null || true

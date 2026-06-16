@@ -29,6 +29,11 @@ object TerminalShellAssets {
             writeShellEntry(home, rc, entry)
             marker.writeText("$ASSET_VERSION\n")
         }
+        // 每次 ensure 都检查 rootfs 中的辅助脚本（rootfs 可能被重装）
+        val rootfs = File(home, "ubuntu-rootfs")
+        if (rootfs.isDirectory) {
+            UbuntuBootstrapScripts.copyAssetScripts(activity, rootfs)
+        }
         return TerminalShellAssetPaths(home, entry)
     }
 
