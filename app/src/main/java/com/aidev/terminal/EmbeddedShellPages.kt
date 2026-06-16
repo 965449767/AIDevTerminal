@@ -355,6 +355,7 @@ class EmbeddedTerminalPage : ShellPage {
     override fun onSelected(activity: Activity, view: View) {
         this.activity = activity
         ensureSession(activity)
+        initPwdObserver(activity)
         focusTerminalInput(activity)
         consumePendingCommand()
         terminalView?.postDelayed({
@@ -366,11 +367,15 @@ class EmbeddedTerminalPage : ShellPage {
     private fun initPwdObserver(activity: Activity) {
         val home = homeDir ?: return
         val pwdFile = File(home, ".aidev-current-pwd")
+        pwdObserver?.stop()
         if (!pwdFile.isFile) {
-            android.util.Log.d("AIDEV_SYNC", "pwd file not found: ${pwdFile.absolutePath}")
+            // Ubuntu 还没引导，延迟 3 秒后重试
+            val act = this.activity ?: return
+            act.findViewById<View>(android.R.id.content)?.postDelayed({
+                if (pwdFile.isFile) initPwdObserver(act)
+            }, 3000)
             return
         }
-        pwdObserver?.stop()
         pwdObserver = PwdFileObserver(pwdFile) { ubuntuPwd ->
             if (ubuntuPwd == lastSyncedPwd) return@PwdFileObserver
             lastSyncedPwd = ubuntuPwd
