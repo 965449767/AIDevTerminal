@@ -290,7 +290,7 @@ AIDEV_BOOTSTRAP_EOF
 
           # 开发环境辅助命令（从 assets 复制）
           val assetsDir = File(activity.filesDir, "assets/scripts")
-          val scripts = listOf("check-dev-env.sh", "repair-dev-env.sh", "deploy-dev-env.sh", "install-aitool.sh")
+          val scripts = listOf("check-dev-env.sh", "repair-dev-env.sh", "deploy-dev-env.sh", "install-aitool.sh", "aidev-logcat.sh")
           for (script in scripts) {
             val src = File(assetsDir, script)
             val dstName = script.removeSuffix(".sh")

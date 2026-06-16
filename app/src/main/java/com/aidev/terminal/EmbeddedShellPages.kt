@@ -314,6 +314,7 @@ class EmbeddedTerminalPage : ShellPage {
         root.addView(keys(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(70)))
         ensureSession(activity)
         initPwdObserver(activity)
+        startShizukuBridge(activity)
         trackPostDelayed(root, 250) { focusTerminalInput(activity) }
         terminalView?.postDelayed({
             consumePendingCommand()
@@ -472,6 +473,8 @@ class EmbeddedTerminalPage : ShellPage {
         // 停止 pwd 观察者
         pwdObserver?.stop()
         pwdObserver = null
+        // 停止 Shizuku 桥服务
+        ShizukuBridgeService.stop()
         // 清理追踪的延迟任务
         for ((view, runnable) in pendingRunnables) {
             view.removeCallbacks(runnable)
@@ -481,6 +484,13 @@ class EmbeddedTerminalPage : ShellPage {
         terminalView?.removeCallbacks(null)
         // 重置状态
         this.activity = null
+    }
+
+    private fun startShizukuBridge(activity: Activity) {
+        val home = homeDir ?: return
+        if (ShizukuLogcat.isAvailable()) {
+            ShizukuBridgeService.start(home)
+        }
     }
 
     private fun initPwdObserver(activity: Activity) {
