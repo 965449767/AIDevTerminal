@@ -67,6 +67,7 @@ private class TerminalImeProxyEditText(context: Context) : EditText(context) {
     var tuiKeyHandler: ((KeyEvent) -> Boolean)? = null
     private var clearing = false
     private var currentComposing = ""
+    private var lastComposing = ""
 
     init {
         setSingleLine(true)
@@ -83,9 +84,16 @@ private class TerminalImeProxyEditText(context: Context) : EditText(context) {
         return object : InputConnectionWrapper(base, true) {
             override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
                 if (tuiMode) {
-                    // TUI 模式：语音/输入法 composing 文字直接发给终端
+                    // TUI 模式：只发送增量文字，避免重复
                     val str = text?.toString().orEmpty()
-                    if (str.isNotEmpty()) onCommittedText(str)
+                    if (str.startsWith(lastComposing) && str.length > lastComposing.length) {
+                        // 新增文字
+                        onCommittedText(str.substring(lastComposing.length))
+                    } else if (str.isNotEmpty() && lastComposing.isEmpty()) {
+                        // 首次输入
+                        onCommittedText(str)
+                    }
+                    lastComposing = str
                     clearProxyText()
                     return super.setComposingText("", 1)
                 }
@@ -98,6 +106,7 @@ private class TerminalImeProxyEditText(context: Context) : EditText(context) {
                 if (tuiMode) {
                     val str = text?.toString().orEmpty()
                     if (str.isNotEmpty()) onCommittedText(str)
+                    lastComposing = ""
                     clearProxyText()
                     return super.commitText("", 1)
                 }
