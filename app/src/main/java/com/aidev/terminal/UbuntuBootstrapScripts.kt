@@ -289,15 +289,17 @@ AIDEV_BOOTSTRAP_EOF
           chmod 755 "${'$'}AIDEV_ROOTFS/usr/local/bin/aidev-auto-bootstrap" 2>/dev/null || true
 
           # 开发环境辅助命令（从 assets 复制）
-          val assetsDir = File(activity.filesDir, "assets/scripts")
           val scripts = listOf("check-dev-env.sh", "repair-dev-env.sh", "deploy-dev-env.sh", "install-aitool.sh", "aidev-logcat.sh")
           for (script in scripts) {
-            val src = File(assetsDir, script)
             val dstName = script.removeSuffix(".sh")
             val dst = File("${'$'}AIDEV_ROOTFS/usr/local/bin", dstName)
-            if (src.exists()) {
-              src.copyTo(dst, overwrite = true)
+            try {
+              activity.assets.open("scripts/${'$'}script").use { input ->
+                dst.outputStream().use { output -> input.copyTo(output) }
+              }
               dst.setExecutable(true)
+            } catch (_: Exception) {
+              # asset 不存在则跳过
             }
           }
 
