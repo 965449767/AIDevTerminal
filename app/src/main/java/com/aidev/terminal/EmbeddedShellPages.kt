@@ -227,6 +227,8 @@ class EmbeddedTerminalPage : ShellPage {
         val isTui = runCatching {
             val emulator = s.javaClass.getMethod("getEmulator").invoke(s)
             emulator.javaClass.getMethod("isAlternateScreenActive").invoke(emulator) as Boolean
+        }.onFailure { e ->
+            android.util.Log.w("AIDEV_TUI", "Failed to detect alternate screen: ${e.message}")
         }.getOrDefault(false)
         // 如果用户手动切换了 TUI 模式，不覆盖
         if (manualTuiOverride) return
@@ -452,6 +454,16 @@ class EmbeddedTerminalPage : ShellPage {
             maybeAutoBootstrapUbuntu(activity)
             focusTerminalInput(activity)
         }, 600)
+    }
+
+    override fun onDestroy(activity: Activity) {
+        // 停止 pwd 观察者
+        pwdObserver?.stop()
+        pwdObserver = null
+        // 清理延迟任务
+        terminalView?.removeCallbacks(null)
+        // 重置状态
+        this.activity = null
     }
 
     private fun initPwdObserver(activity: Activity) {
@@ -1325,18 +1337,19 @@ class EmbeddedTerminalPage : ShellPage {
     }
 
     private fun createTerminalSession(activity: Activity, id: Int): TerminalSession {
-        val rc = File(homeDir, ".aidevrc")
-        val entry = File(homeDir, ".aidev_shell_entry")
+        val home = homeDir ?: throw IllegalStateException("homeDir is null")
+        val rc = File(home, ".aidevrc")
+        val entry = File(home, ".aidev_shell_entry")
         val nativeDir = activity.applicationInfo.nativeLibraryDir
-        val aidevBin = File(homeDir, "dev-env/bin").absolutePath
-        val prootLibDir = File(homeDir, "proot-lib").absolutePath
+        val aidevBin = File(home, "dev-env/bin").absolutePath
+        val prootLibDir = File(home, "proot-lib").absolutePath
         val env = arrayOf(
             "TERM=xterm-256color",
             "COLORTERM=truecolor",
-            "HOME=${homeDir!!.absolutePath}",
-            "PWD=${homeDir!!.absolutePath}",
+            "HOME=${home.absolutePath}",
+            "PWD=${home.absolutePath}",
             "TMPDIR=${File(activity.cacheDir, "tmp").apply { mkdirs() }.absolutePath}",
-            "AIDEV_HOME=${homeDir!!.absolutePath}",
+            "AIDEV_HOME=${home.absolutePath}",
             "AIDEV_BIN=$aidevBin",
             "AIDEV_NATIVE=$nativeDir",
             "AIDEV_PROOT=$nativeDir/libproot.so",

@@ -502,6 +502,7 @@ class ShellActivity : Activity() {
             next.translationX = 0f
             next.visibility = View.VISIBLE
         }
+        old?.let { pages[previousIndex].onDestroy(this) }
         pages[currentIndex].onSelected(activity = this, view = next)
     }
 
@@ -559,6 +560,7 @@ class ShellActivity : Activity() {
 interface ShellPage {
     fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View
     fun onSelected(activity: Activity, view: View) {}
+    fun onDestroy(activity: Activity) {}
 }
 
 /** 提供给 ShellPage 的容器能力。后续二级页面可使用 host 打开终端、AI 中心等。 */
