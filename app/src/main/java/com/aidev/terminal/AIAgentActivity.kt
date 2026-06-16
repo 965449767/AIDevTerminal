@@ -35,7 +35,7 @@ class AIAgentActivity : Activity() {
             ))
             addView(ui.rowOf(
                 ui.actionCard("启动服务", "用后台任务运行 AI 服务命令", "RUN") { openTerminal("task-run opencode 'opencode --help'\n") },
-                ui.actionCard("查看日志", "打开任务中心查看输出", "LOG") { startActivity(Intent(this@AIAgentActivity, TaskCenterActivity::class.java)) }
+                ui.actionCard("查看日志", "打开任务中心查看输出", "LOG") { ShellActivity.open(this@AIAgentActivity, ShellActivity.TAB_TASKS) }
             ))
 
             addView(ui.section("设计目标", "AI 中心不再让用户记命令，而是把安装、配置、启动、端口和日志组织成一组清晰操作"))

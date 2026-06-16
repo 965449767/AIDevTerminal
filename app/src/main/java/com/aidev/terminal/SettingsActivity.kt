@@ -36,7 +36,7 @@ class SettingsActivity : Activity() {
         ui = AIDevUi(this, getSharedPreferences("aidev_ui", MODE_PRIVATE))
         val root = ui.pageRoot()
         AppNav.attach(this, ui, root, SettingsActivity::class.java)
-        root.addView(ui.topBar("设置中心", "主题" to { startActivity(Intent(this, ThemeCenterActivity::class.java)) }, "关闭" to { finish() }))
+        root.addView(ui.topBar("设置中心", "主题" to { ShellActivity.open(this, ShellActivity.TAB_SETTINGS) }, "关闭" to { finish() }))
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -112,9 +112,9 @@ class SettingsActivity : Activity() {
             .setTitle("外观与交互")
             .setItems(items) { _, which ->
                 when (which) {
-                    0 -> startActivity(Intent(this, ThemeCenterActivity::class.java))
+                    0 -> ShellActivity.open(this, ShellActivity.TAB_SETTINGS)
                     1 -> showHapticDialog()
-                    2 -> startActivity(Intent(this, ThemeCenterActivity::class.java))
+                    2 -> ShellActivity.open(this, ShellActivity.TAB_SETTINGS)
                     3 -> detail(
                         "手势交互",
                         """
@@ -205,7 +205,7 @@ class SettingsActivity : Activity() {
                     2 -> startActivity(Intent(this, ServerCenterActivity::class.java))
                     3 -> showKeepAliveMenu()
                     4 -> detail("服务通信诊断", "用于检查 OpenCode/Web 前端服务端口是否能被浏览器访问。\n\n常用命令：\naidev-net-explain\nlist-listen-ports\ncheck-local-server 3000", "查看说明", "aidev-net-explain")
-                    5 -> startActivity(Intent(this, TaskCenterActivity::class.java))
+                    5 -> ShellActivity.open(this, ShellActivity.TAB_TASKS)
                 }
             }
             .show()
@@ -237,7 +237,7 @@ class SettingsActivity : Activity() {
             .setTitle("文件与权限")
             .setItems(items) { _, which ->
                 when (which) {
-                    0 -> startActivity(Intent(this, FileManagerActivity::class.java))
+                    0 -> ShellActivity.open(this, ShellActivity.TAB_FILES)
                     1 -> detail("权限状态", permissionStatusText(), "打开应用权限设置", "", execute = false, positiveAction = { openAppSettings() })
                     2 -> openAppSettings()
                     3 -> detail("Shizuku 状态与启动", "当前状态：\n${shizukuStatusText()}\n\n如果 Shizuku 未运行，请先打开 Shizuku 应用并启动服务。", "打开 Shizuku", "", execute = false, positiveAction = { openShizukuApp() })
@@ -620,10 +620,10 @@ class SettingsActivity : Activity() {
     }
 
     private fun navItems(): List<Pair<String, () -> Unit>> = listOf(
-        "工作台" to { startActivity(Intent(this, DashboardActivity::class.java)) },
+        "工作台" to { ShellActivity.open(this, ShellActivity.TAB_DASHBOARD) },
         "终端" to { AppNav.openTerminal(this, "") },
-        "任务" to { startActivity(Intent(this, TaskCenterActivity::class.java)) },
-        "主题" to { startActivity(Intent(this, ThemeCenterActivity::class.java)) }
+        "任务" to { ShellActivity.open(this, ShellActivity.TAB_TASKS) },
+        "主题" to { ShellActivity.open(this, ShellActivity.TAB_SETTINGS) }
     )
 
     private fun bg(fill: Int, stroke: Int): GradientDrawable =

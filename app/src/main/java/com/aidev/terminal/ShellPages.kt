@@ -229,7 +229,7 @@ class DashboardPage : ShellPage {
     }
 }
 
-/** 文件页的 Shell 内容：保留入口卡片，详细操作仍在 FileManagerActivity 中处理。 */
+/** 文件页的 Shell 内容：入口卡片，跳转到 ShellActivity 文件页。 */
 class FilesPage : ShellPage {
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         val container = LinearLayout(activity).apply {
@@ -238,7 +238,7 @@ class FilesPage : ShellPage {
         }
         container.addView(ui.section("文件", "双列文件管理、项目目录、APK 与日志"))
         container.addView(ui.actionCard("打开双列文件管理器", "在独立场景里进行复制/移动/删除/重命名/安装", "FIL") {
-            host.open(FileManagerActivity::class.java)
+            host.switchTab(ShellActivity.TAB_FILES)
         })
         container.addView(ui.actionCard("项目目录", "进入 Ubuntu 后默认工作区 /root/projects", "DIR") {
             host.openTerminal("ubuntu")
@@ -250,7 +250,7 @@ class FilesPage : ShellPage {
     }
 }
 
-/** 任务页的 Shell 内容：保留入口卡片，详细日志仍在 TaskCenterActivity 中处理。 */
+/** 任务页的 Shell 内容：入口卡片，跳转到 ShellActivity 任务页。 */
 class TasksPage : ShellPage {
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         val container = LinearLayout(activity).apply {
@@ -259,7 +259,7 @@ class TasksPage : ShellPage {
         }
         container.addView(ui.section("任务", "后台任务、长任务日志、服务运行状态"))
         container.addView(ui.actionCard("打开任务中心", "查看运行中任务、PID 和日志", "TSK") {
-            host.open(TaskCenterActivity::class.java)
+            host.switchTab(ShellActivity.TAB_TASKS)
         })
         container.addView(ui.actionCard("AI 助手中心", "OpenCode、代理服务和 Web UI", "AI") {
             host.open(AIAgentActivity::class.java)
@@ -280,7 +280,7 @@ class SettingsPage : ShellPage {
         }
         container.addView(ui.section("设置", "一级入口保持通用简洁，详细配置进入二级页"))
         container.addView(ui.actionCard("外观与交互", "主题、背景、空间尺寸、触觉反馈", "UX") {
-            host.open(ThemeCenterActivity::class.java)
+            host.switchTab(ShellActivity.TAB_SETTINGS)
         })
         container.addView(ui.actionCard("打开设置中心", "开发环境、AI、文件、权限、系统高级", "SET") {
             host.open(SettingsActivity::class.java)

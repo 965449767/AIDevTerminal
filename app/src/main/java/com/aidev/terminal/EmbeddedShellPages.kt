@@ -209,7 +209,6 @@ class EmbeddedTerminalPage : ShellPage {
     private val sessions = mutableListOf<EmbeddedTermSession>()
     private var ctrlLatched = false
     private var autoBootstrapDispatched = false
-    private var autoIndexDispatched = false
     private var pendingFontSp = DEFAULT_FONT_SP
     private var fontApplyScheduled = false
     private var inputBuffer = ""
@@ -321,7 +320,6 @@ class EmbeddedTerminalPage : ShellPage {
             maybeAutoBootstrapUbuntu(activity)
             focusTerminalInput(activity)
         }, 600)
-        terminalView?.postDelayed({ maybeAutoRefreshCommandIndex(activity) }, 1800)
         return root
     }
 
@@ -395,8 +393,7 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun completionHintChip(activity: Activity, ui: AIDevUi): TextView =
         TextView(activity).apply {
-            val hasIndex = commandIndexFile()?.isFile == true
-            text = if (hasIndex) "没有匹配命令，长按刷新环境索引" else "索引未生成，长按刷新环境命令"
+            text = "点击输入框获取焦点"
             textSize = 11f
             gravity = Gravity.CENTER
             includeFontPadding = false
@@ -410,10 +407,6 @@ class EmbeddedTerminalPage : ShellPage {
                 setStroke(ui.dp(1), 0xFF374151.toInt())
             }
             setOnClickListener { focusTerminalInput(activity) }
-            setOnLongClickListener {
-                refreshCommandIndex(activity)
-                true
-            }
         }
 
     private fun completionChip(activity: Activity, ui: AIDevUi, item: TerminalCompletion): TextView =
@@ -641,7 +634,6 @@ class EmbeddedTerminalPage : ShellPage {
             "导航 · 退出到工作台" to { host.switchTab(ShellActivity.TAB_DASHBOARD) },
             "终端 · 进入 Ubuntu" to { send("ubuntu") },
             "终端 · 诊断 Doctor" to { send("aidev-doctor") },
-            "终端 · 刷新命令索引" to { send("aidev-index-commands") },
             "终端 · 清屏" to { send("clear") },
             "终端 · 搜索输出" to { showTerminalSearch(activity) },
             "OpenCode · CLI 界面" to { sendAgentCommand("opencode") },
@@ -796,9 +788,8 @@ class EmbeddedTerminalPage : ShellPage {
         val prefix = completionInput().trimStart()
         val pinned = pinnedCompletions(activity)
         val paths = pathCompletions(prefix)
-        val runtime = runtimeCompletions()
         val builtIns = builtinCompletions()
-        val source = (paths + pinned + runtime + builtIns).distinctBy { it.insertText }
+        val source = (paths + pinned + builtIns).distinctBy { it.insertText }
         if (prefix.isBlank()) return source.take(8)
         val direct = source.filter { it.insertText.startsWith(prefix, ignoreCase = true) || it.label.startsWith(prefix, ignoreCase = true) }
         val matches = direct.ifEmpty { source.filter { fuzzyCompletionMatch(prefix, it) } }
@@ -844,7 +835,6 @@ class EmbeddedTerminalPage : ShellPage {
             "aidev-agent-context-file",
             "opencode",
             "opencode --help",
-            "aidev-index-commands",
             "ubuntu",
             "help",
             "history",
@@ -897,19 +887,6 @@ class EmbeddedTerminalPage : ShellPage {
             ?.filter { it.isNotBlank() }
             ?.map { TerminalCompletion(it, it, "PIN") }
             .orEmpty()
-
-    private fun runtimeCompletions(): List<TerminalCompletion> {
-        val index = commandIndexFile() ?: return emptyList()
-        if (!index.isFile) return emptyList()
-        return index.readLines()
-            .map { it.trim() }
-            .filter { it.isNotBlank() && !it.startsWith("#") }
-            .take(300)
-            .map { TerminalCompletion(it, it, "ENV") }
-    }
-
-    private fun commandIndexFile(): File? =
-        homeDir?.let { File(it, ".aidev-command-index") }
 
     private fun pathCompletions(input: String): List<TerminalCompletion> {
         val home = homeDir ?: return emptyList()
@@ -1661,22 +1638,6 @@ class EmbeddedTerminalPage : ShellPage {
         if (autoBootstrapDispatched) return
         autoBootstrapDispatched = true
         session?.write("aidev-auto-bootstrap\r")
-        focusTerminalInput(activity)
-    }
-
-    private fun maybeAutoRefreshCommandIndex(activity: Activity) {
-        if (autoIndexDispatched) return
-        val index = commandIndexFile() ?: return
-        val stale = !index.isFile || System.currentTimeMillis() - index.lastModified() > 24L * 60L * 60L * 1000L
-        if (!stale) return
-        autoIndexDispatched = true
-        refreshCommandIndex(activity)
-    }
-
-    private fun refreshCommandIndex(activity: Activity) {
-        session?.write("aidev-index-commands\r")
-        terminalView?.postDelayed({ refreshCompletions(activity) }, 2500)
-        terminalView?.postDelayed({ refreshCompletions(activity) }, 5000)
         focusTerminalInput(activity)
     }
 

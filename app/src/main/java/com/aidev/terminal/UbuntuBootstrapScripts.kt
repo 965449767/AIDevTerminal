@@ -269,29 +269,6 @@ echo "disk:"
 df -h / 2>/dev/null | tail -1 || true
 AIDEV_DOCTOR_EOF
           chmod 755 "${'$'}AIDEV_ROOTFS/usr/local/bin/aidev-doctor" 2>/dev/null || true
-          cat > "${'$'}AIDEV_ROOTFS/usr/local/bin/aidev-index-commands" <<'AIDEV_INDEX_EOF'
-#!/bin/sh
-out="${'$'}{AIDEV_HOME:-/host-home}/.aidev-command-index"
-tmp="${'$'}{out}.tmp"
-{
-  echo "# AIDev command index"
-  echo "# generated: ${'$'}(date '+%F %T' 2>/dev/null || true)"
-  alias 2>/dev/null | sed -n "s/^alias \([^=]*\)=.*/\1/p"
-  for dir in /usr/local/bin /usr/bin /bin /usr/local/sbin /usr/sbin /sbin; do
-    [ -d "${'$'}dir" ] || continue
-    count=0
-    for file in "${'$'}dir"/*; do
-      [ "${'$'}count" -ge 80 ] && break
-      [ -x "${'$'}file" ] && [ -f "${'$'}file" ] || continue
-      basename "${'$'}file"
-      count=${'$'}((count + 1))
-    done
-  done
-} | sed '/^${'$'}/d' | sort -u | head -220 > "${'$'}tmp"
-mv "${'$'}tmp" "${'$'}out"
-echo "命令索引已刷新"
-AIDEV_INDEX_EOF
-          chmod 755 "${'$'}AIDEV_ROOTFS/usr/local/bin/aidev-index-commands" 2>/dev/null || true
           cat > "${'$'}AIDEV_ROOTFS/usr/local/bin/ubuntu" <<'AIDEV_UBUNTU_EOF'
 #!/bin/sh
 echo "已经在 AIDev Ubuntu 环境中。"
@@ -373,7 +350,6 @@ AIDEV_PWD_HOOK_EOF
           ubuntu) enter_ubuntu "${'$'}@" ;;
           install-ubuntu) install_ubuntu "${'$'}@" ;;
           aidev-doctor) aidev_doctor_android ;;
-          aidev-index-commands) run_ubuntu_command aidev-index-commands ;;
           aidev-auto-bootstrap)
             if has_ubuntu; then
               ubuntu_logo "自动进入环境     │"

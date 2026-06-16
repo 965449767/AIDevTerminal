@@ -31,7 +31,7 @@ class EmbeddedSettingsPage : ShellPage {
             setPadding(ui.dp(18), ui.dp(12), ui.dp(18), ui.dp(24))
         }
         content.addView(ui.section("设置", "一级入口保持通用，二级动作以内嵌菜单展开，底部导航不离开 Shell"))
-        content.addView(row("外观与交互", "主题、背景、透明度、模糊说明、触觉反馈") { appearanceMenu() })
+        content.addView(row("外观与交互", "主题、背景、透明度、模糊说明、触觉反馈") { host.switchTab(ShellActivity.TAB_SETTINGS) })
         content.addView(row("终端设置", "字号、快捷键、会话行为和终端说明") { terminalMenu() })
         content.addView(row("开发环境", "全面检测环境状态，一键修复问题") { devCheckAndRepair() })
         content.addView(row("AI 与服务器", "安装 OpenCode、后台常驻、端口诊断") { aiServerMenu() })

@@ -569,7 +569,7 @@ class ShellHost(
         if (activity is ShellActivity) {
             activity.pickBackgroundImage()
         } else {
-            activity.startActivity(Intent(activity, ThemeCenterActivity::class.java))
+            ShellActivity.open(activity, ShellActivity.TAB_SETTINGS)
         }
     }
 

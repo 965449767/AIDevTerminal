@@ -5,29 +5,22 @@ import android.content.Intent
 
 object AppNav {
     private val fullOrder = listOf(
-        DashboardActivity::class.java,
         ShellActivity::class.java,
-        FileManagerActivity::class.java,
-        TaskCenterActivity::class.java,
         AIAgentActivity::class.java,
         ServerCenterActivity::class.java,
-        ThemeCenterActivity::class.java,
         SettingsActivity::class.java
     )
 
     private val bottomOrder = listOf(
-        DashboardActivity::class.java,
         ShellActivity::class.java,
-        FileManagerActivity::class.java,
-        TaskCenterActivity::class.java,
         SettingsActivity::class.java
     )
 
     fun bottom(activity: Activity): List<Pair<String, () -> Unit>> = listOf(
-        "工作台" to { open(activity, DashboardActivity::class.java) },
+        "工作台" to { open(activity, ShellActivity::class.java) },
         "终端" to { openTerminal(activity, "") },
-        "文件" to { open(activity, FileManagerActivity::class.java) },
-        "任务" to { open(activity, TaskCenterActivity::class.java) },
+        "文件" to { ShellActivity.open(activity, ShellActivity.TAB_FILES) },
+        "任务" to { ShellActivity.open(activity, ShellActivity.TAB_TASKS) },
         "设置" to { open(activity, SettingsActivity::class.java) }
     )
 

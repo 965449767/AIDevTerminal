@@ -36,26 +36,9 @@
         </activity>
 
         <activity
-            android:name=".DashboardActivity"
-            android:exported="false"
-            android:label="@string/app_name" />
-
-        <activity
             android:name=".SettingsActivity"
             android:exported="false"
             android:label="设置"
-            android:theme="@style/AppTheme" />
-
-        <activity
-            android:name=".TaskCenterActivity"
-            android:exported="false"
-            android:label="任务中心"
-            android:theme="@style/AppTheme" />
-
-        <activity
-            android:name=".FileManagerActivity"
-            android:exported="false"
-            android:label="文件管理器"
             android:theme="@style/AppTheme" />
 
         <activity
@@ -68,12 +51,6 @@
             android:name=".ServerCenterActivity"
             android:exported="false"
             android:label="服务器中心"
-            android:theme="@style/AppTheme" />
-
-        <activity
-            android:name=".ThemeCenterActivity"
-            android:exported="false"
-            android:label="主题中心"
             android:theme="@style/AppTheme" />
 
         <service

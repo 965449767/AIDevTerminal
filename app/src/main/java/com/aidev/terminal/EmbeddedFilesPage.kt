@@ -16,22 +16,12 @@ import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
 import android.view.Gravity
-import android.view.KeyEvent
-import android.view.MotionEvent
 import android.view.View
-import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
-import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
-import com.termux.terminal.TerminalEmulator
-import com.termux.terminal.TerminalSession
-import com.termux.terminal.TerminalSessionClient
-import com.termux.view.TerminalView
-import com.termux.view.TerminalViewClient
 import java.io.File
 
 class EmbeddedFilesPage : ShellPage {
@@ -110,7 +100,7 @@ class EmbeddedFilesPage : ShellPage {
             "项目 · 跳到当前项目" to { jumpCurrentProject() },
             "系统 · 安装 APK" to { installSelectedApk(host) },
             "系统 · 存储权限" to { openStorageSettings() },
-            "系统 · 旧版文件管理" to { host.open(FileManagerActivity::class.java) }
+            "系统 · 旧版文件管理" to { host.switchTab(ShellActivity.TAB_FILES) }
         )
         val recent = recentFileMenuLabels().filter { label -> actions.any { it.first == label } }
         val display = recent.map { "最近 · ${it.substringAfter(" · ")}" to it } + actions.filterNot { recent.contains(it.first) }.map { it.first to it.first }
