@@ -146,7 +146,7 @@ class EmbeddedTasksPage : ShellPage {
             "原生 · SSE 事件监听" to { com.aidev.terminal.opencode.OpencodeNativePanel.showEventConsole(activity) },
             "项目 · 当前项目目录" to { host.openTerminal("cd \"${project.absolutePath}\" && pwd && ls -la") },
             "项目 · 项目 Git" to { host.openTerminal("cd \"${project.absolutePath}\" && git status --short --branch") },
-            "项目 · 项目诊断" to { host.openTerminal(currentProjectTask(projectHealthCommand(project))) },
+            "项目 · 项目诊断" to { host.openTerminal(currentProjectTask(ProjectCommands.healthCommand(project))) },
             "日志 · 异常日志" to { searchErrorLogs() },
             "日志 · 代理日志" to { host.openTerminal("aidev-agent-log") },
             "上下文 · 导出上下文" to { host.openTerminal("cd \"${project.absolutePath}\" && aidev-agent-context-file") },
@@ -420,25 +420,6 @@ class EmbeddedTasksPage : ShellPage {
         return if (path.isBlank()) "pwd && $command" else "cd \"$path\" && $command"
     }
 
-    private fun projectHealthCommand(dir: File): String = when {
-        File(dir, "package.json").exists() -> "node -e \"const p=require('./package.json'); console.log('name:',p.name||'-'); console.log('scripts:', Object.keys(p.scripts||{}).join(','))\" && npm pkg get scripts"
-        File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists() -> "./gradlew tasks --all | head -80"
-        File(dir, "requirements.txt").exists() || File(dir, "pyproject.toml").exists() -> "python3 --version && python3 -m pip --version && python3 -m pytest --collect-only"
-        File(dir, "Cargo.toml").exists() -> "cargo metadata --no-deps"
-        File(dir, "go.mod").exists() -> "go list ./..."
-        else -> "pwd && ls -la"
-    }
-
-    private fun projectRepairCommand(dir: File): String = when {
-        File(dir, "package.json").exists() -> "rm -rf node_modules package-lock.json && npm install"
-        File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists() -> "./gradlew --stop; ./gradlew clean"
-        File(dir, "requirements.txt").exists() -> "python3 -m pip install -r requirements.txt --break-system-packages"
-        File(dir, "pyproject.toml").exists() -> "python3 -m pip install . --break-system-packages"
-        File(dir, "Cargo.toml").exists() -> "cargo clean && cargo fetch"
-        File(dir, "go.mod").exists() -> "go clean -cache && go mod tidy"
-        else -> "pwd && ls -la"
-    }
-
     private fun searchErrorLogs() {
         val matches = taskDir().listFiles { f -> f.name.endsWith(".log") }
             ?.mapNotNull { file ->
@@ -476,7 +457,7 @@ class EmbeddedTasksPage : ShellPage {
             }
             .setNeutralButton("追踪日志") { _, _ -> host.openTerminal("tail -f \"${file.absolutePath}\"") }
             .setNegativeButton("项目诊断") { _, _ ->
-                currentProject()?.let { host.openTerminal(currentProjectTask(projectHealthCommand(it))) } ?: Toast.makeText(activity, "未标记当前项目", Toast.LENGTH_SHORT).show()
+                currentProject()?.let { host.openTerminal(currentProjectTask(ProjectCommands.healthCommand(it))) } ?: Toast.makeText(activity, "未标记当前项目", Toast.LENGTH_SHORT).show()
             }
             .show()
     }

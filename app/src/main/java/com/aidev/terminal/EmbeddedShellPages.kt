@@ -215,6 +215,7 @@ class EmbeddedTerminalPage : ShellPage {
     private var inputBuffer = ""
     private var composingBuffer = ""
     private var pwdObserver: PwdFileObserver? = null
+    private val pendingRunnables = mutableListOf<Pair<View, Runnable>>()
     private var lastSyncedPwd = ""
     private var syncIndicator: TextView? = null
     private var tuiIndicator: TextView? = null
@@ -314,7 +315,7 @@ class EmbeddedTerminalPage : ShellPage {
         root.addView(keys(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(70)))
         ensureSession(activity)
         initPwdObserver(activity)
-        root.postDelayed({ focusTerminalInput(activity) }, 250)
+        trackPostDelayed(root, 250) { focusTerminalInput(activity) }
         terminalView?.postDelayed({
             consumePendingCommand()
             maybeAutoBootstrapUbuntu(activity)
@@ -478,7 +479,12 @@ class EmbeddedTerminalPage : ShellPage {
         // 停止 pwd 观察者
         pwdObserver?.stop()
         pwdObserver = null
-        // 清理延迟任务
+        // 清理追踪的延迟任务
+        for ((view, runnable) in pendingRunnables) {
+            view.removeCallbacks(runnable)
+        }
+        pendingRunnables.clear()
+        // 清理 terminalView 上的所有延迟任务
         terminalView?.removeCallbacks(null)
         // 重置状态
         this.activity = null
@@ -491,9 +497,10 @@ class EmbeddedTerminalPage : ShellPage {
         if (!pwdFile.isFile) {
             // Ubuntu 还没引导，延迟 3 秒后重试
             val act = this.activity ?: return
-            act.findViewById<View>(android.R.id.content)?.postDelayed({
+            val contentView = act.findViewById<View>(android.R.id.content) ?: return
+            trackPostDelayed(contentView, 3000) {
                 if (pwdFile.isFile) initPwdObserver(act)
-            }, 3000)
+            }
             return
         }
         pwdObserver = PwdFileObserver(pwdFile) { ubuntuPwd ->
@@ -1189,6 +1196,12 @@ class EmbeddedTerminalPage : ShellPage {
             ctrlLatched = false
             refreshKeyboard(activity)
         }
+    }
+
+    private fun trackPostDelayed(view: View, delayMs: Long, action: () -> Unit) {
+        val r = Runnable { action() }
+        pendingRunnables.add(view to r)
+        view.postDelayed(r, delayMs)
     }
 
     private fun hapticTap(activity: Activity) {

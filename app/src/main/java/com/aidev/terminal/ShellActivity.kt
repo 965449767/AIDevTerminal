@@ -252,14 +252,14 @@ class ShellActivity : Activity() {
             17 -> openTerminalCommand("clear")
             18 -> openCurrentProject("pwd && ls -la")
             19 -> openCurrentProject("git status --short --branch")
-            20 -> openCurrentProject(projectTestCommand(currentProjectDir()))
-            21 -> openCurrentProject(projectBuildCommand(currentProjectDir()))
+            20 -> openCurrentProject(ProjectCommands.testCommand(currentProjectDir()))
+            21 -> openCurrentProject(ProjectCommands.buildCommand(currentProjectDir()))
             22 -> {
                 prefs.edit().remove("current_project_path").apply()
                 switchTo(TAB_FILES)
             }
             23 -> openTerminalCommand("ls -lah \"${filesDir.absolutePath}/home/tasks\"")
-            24 -> openCurrentProject(projectHealthCommand(currentProjectDir()))
+            24 -> openCurrentProject(ProjectCommands.healthCommand(currentProjectDir()))
             25 -> openTerminalCommand("ls -lt \"${filesDir.absolutePath}/home/tasks\"/*.log 2>/dev/null | head -20")
             26 -> confirmCurrentProjectRepair()
             27 -> showOpenCodeLaunchOptions()
@@ -284,7 +284,7 @@ class ShellActivity : Activity() {
             "路径：${dir.absolutePath}",
             "Git：${if (File(dir, ".git").exists()) "有" else "无"}",
             "README：${if (listOf("README.md", "README.txt", "readme.md").any { File(dir, it).isFile }) "有" else "无"}",
-            "项目标记：${projectMarkers(dir)}"
+            "项目标记：${ProjectCommands.detectMarkers(dir).ifEmpty { listOf("未识别") }.joinToString("、")}"
         ).joinToString("\n")
         AlertDialog.Builder(this)
             .setTitle("OpenCode 启动前检查")
@@ -293,16 +293,6 @@ class ShellActivity : Activity() {
             .setNeutralButton("先导出上下文") { _, _ -> openCurrentProject("aidev-agent-context-file") }
             .setNegativeButton("后台启动") { _, _ -> openCurrentProject("task-run opencode \"opencode\"") }
             .show()
-    }
-
-    private fun projectMarkers(dir: File): String {
-        val markers = mutableListOf<String>()
-        if (File(dir, "package.json").exists()) markers.add("Node")
-        if (File(dir, "pyproject.toml").exists() || File(dir, "requirements.txt").exists()) markers.add("Python")
-        if (File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists()) markers.add("Gradle")
-        if (File(dir, "go.mod").exists()) markers.add("Go")
-        if (File(dir, "Cargo.toml").exists()) markers.add("Rust")
-        return markers.ifEmpty { listOf("未识别") }.joinToString("、")
     }
 
     private fun openTerminalCommand(command: String) {
@@ -316,7 +306,7 @@ class ShellActivity : Activity() {
             switchTo(TAB_FILES)
             return
         }
-        val command = projectRepairCommand(dir)
+        val command = ProjectCommands.repairCommand(dir)
         AlertDialog.Builder(this)
             .setTitle("确认修复当前项目")
             .setMessage("将进入：${dir.absolutePath}\n\n执行：\n$command\n\n注意：某些修复会删除缓存、依赖目录或锁文件，请确认当前项目不需要保留这些中间文件。")
@@ -346,46 +336,6 @@ class ShellActivity : Activity() {
         val old = prefs.getString("project_action_history", "") ?: ""
         val next = (old.lines().filter { it.isNotBlank() } + line).takeLast(20).joinToString("\n")
         prefs.edit().putString("project_action_history", next).apply()
-    }
-
-    private fun projectTestCommand(dir: File?): String = when {
-        dir == null -> "pwd"
-        File(dir, "package.json").exists() -> "npm test"
-        File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists() -> "./gradlew test"
-        File(dir, "requirements.txt").exists() || File(dir, "pyproject.toml").exists() -> "python3 -m pytest"
-        File(dir, "Cargo.toml").exists() -> "cargo test"
-        File(dir, "go.mod").exists() -> "go test ./..."
-        else -> "ls -la"
-    }
-
-    private fun projectBuildCommand(dir: File?): String = when {
-        dir == null -> "pwd"
-        File(dir, "package.json").exists() -> "npm run build"
-        File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists() -> "./gradlew assembleDebug"
-        File(dir, "Cargo.toml").exists() -> "cargo build"
-        File(dir, "go.mod").exists() -> "go build ./..."
-        else -> "ls -la"
-    }
-
-    private fun projectHealthCommand(dir: File?): String = when {
-        dir == null -> "pwd"
-        File(dir, "package.json").exists() -> "node -e \"const p=require('./package.json'); console.log('name:',p.name||'-'); console.log('scripts:', Object.keys(p.scripts||{}).join(','))\" && npm pkg get scripts"
-        File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists() -> "./gradlew tasks --all | head -80"
-        File(dir, "requirements.txt").exists() || File(dir, "pyproject.toml").exists() -> "python3 --version && python3 -m pip --version && python3 -m pytest --collect-only"
-        File(dir, "Cargo.toml").exists() -> "cargo metadata --no-deps"
-        File(dir, "go.mod").exists() -> "go list ./..."
-        else -> "pwd && ls -la"
-    }
-
-    private fun projectRepairCommand(dir: File?): String = when {
-        dir == null -> "pwd"
-        File(dir, "package.json").exists() -> "rm -rf node_modules package-lock.json && npm install"
-        File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists() -> "./gradlew --stop; ./gradlew clean"
-        File(dir, "requirements.txt").exists() -> "python3 -m pip install -r requirements.txt --break-system-packages"
-        File(dir, "pyproject.toml").exists() -> "python3 -m pip install . --break-system-packages"
-        File(dir, "Cargo.toml").exists() -> "cargo clean && cargo fetch"
-        File(dir, "go.mod").exists() -> "go clean -cache && go mod tidy"
-        else -> "pwd && ls -la"
     }
 
     private fun buildShell() {

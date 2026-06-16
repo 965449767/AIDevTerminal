@@ -71,7 +71,7 @@ class DashboardPage : ShellPage {
             setPadding(ui.dp(14), ui.dp(12), ui.dp(14), ui.dp(12))
             addView(ui.text(dir.name, 16f, ui.palette.text, bold = true))
             addView(ui.muted(dir.absolutePath).apply { maxLines = 2 })
-            addView(ui.muted(projectHealthSummary(dir)).apply { maxLines = 3 })
+            addView(ui.muted(ProjectCommands.detectSummary(dir)).apply { maxLines = 3 })
             addView(ui.rowOf(
                 ui.actionCard("打开", "进入项目目录", "PWD") { host.openTerminal("cd \"${dir.absolutePath}\" && pwd && ls -la") },
                 ui.actionCard("AI", "启动当前项目代理", "AI") { host.openTerminal("cd \"${dir.absolutePath}\" && opencode") }.apply {
@@ -82,7 +82,7 @@ class DashboardPage : ShellPage {
                 }
             ))
             addView(ui.rowOf(
-                ui.actionCard("测试", "按项目类型执行测试", "TST") { host.openTerminal("cd \"${dir.absolutePath}\" && ${projectTestCommand(dir)}") },
+                ui.actionCard("测试", "按项目类型执行测试", "TST") { host.openTerminal("cd \"${dir.absolutePath}\" && ${ProjectCommands.testCommand(dir)}") },
                 ui.actionCard("更多", "Git、构建、诊断、修复等", "MORE") { currentProjectMore(activity, host, dir) }
             ))
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, ui.dp(14)) }
@@ -92,11 +92,11 @@ class DashboardPage : ShellPage {
     private fun currentProjectMore(activity: Activity, host: ShellHost, dir: File) {
         val actions = listOf(
             "代码 · Git 状态" to { host.openTerminal("cd \"${dir.absolutePath}\" && git status --short --branch") },
-            "代码 · 构建" to { host.openTerminal("cd \"${dir.absolutePath}\" && ${projectBuildCommand(dir)}") },
-            "代码 · 诊断" to { host.openTerminal("cd \"${dir.absolutePath}\" && ${projectHealthCommand(dir)}") },
+            "代码 · 构建" to { host.openTerminal("cd \"${dir.absolutePath}\" && ${ProjectCommands.buildCommand(dir)}") },
+            "代码 · 诊断" to { host.openTerminal("cd \"${dir.absolutePath}\" && ${ProjectCommands.healthCommand(dir)}") },
             "日志 · 任务日志" to { host.openTerminal("ls -lt \"${activity.filesDir.absolutePath}/home/tasks\"/*.log 2>/dev/null | head -20") },
             "维护 · 修复" to { confirmProjectRepair(activity, host, dir) },
-            "维护 · 依赖" to { host.openTerminal("cd \"${dir.absolutePath}\" && ${projectInstallCommand(dir)}") },
+            "维护 · 依赖" to { host.openTerminal("cd \"${dir.absolutePath}\" && ${ProjectCommands.installCommand(dir)}") },
             "AI · 后台 AI" to { host.openTerminal("cd \"${dir.absolutePath}\" && task-run opencode \"opencode\"") },
             "AI · 上下文文件" to { host.openTerminal("cd \"${dir.absolutePath}\" && aidev-agent-context-file") },
             "历史 · 最近操作" to { showProjectHistory(activity, host) },
@@ -145,7 +145,7 @@ class DashboardPage : ShellPage {
     }
 
     private fun confirmProjectRepair(activity: Activity, host: ShellHost, dir: File) {
-        val command = projectRepairCommand(dir)
+        val command = ProjectCommands.repairCommand(dir)
         AlertDialog.Builder(activity)
             .setTitle("确认修复项目")
             .setMessage("项目：${dir.name}\n路径：${dir.absolutePath}\n\n执行：\n$command\n\n注意：某些修复会删除缓存、依赖目录或锁文件。")
@@ -186,63 +186,6 @@ class DashboardPage : ShellPage {
         val old = host.prefs.getString("project_action_history", "") ?: ""
         val next = (old.lines().filter { it.isNotBlank() } + line).takeLast(20).joinToString("\n")
         host.prefs.edit().putString("project_action_history", next).apply()
-    }
-
-    private fun projectHealthSummary(dir: File): String {
-        val markers = mutableListOf<String>()
-        if (File(dir, "README.md").exists() || File(dir, "README.txt").exists()) markers.add("README")
-        if (File(dir, ".git").exists()) markers.add("Git")
-        if (File(dir, "package.json").exists()) markers.add("Node")
-        if (File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists()) markers.add("Gradle")
-        if (File(dir, "requirements.txt").exists() || File(dir, "pyproject.toml").exists()) markers.add("Python")
-        if (File(dir, "go.mod").exists()) markers.add("Go")
-        if (File(dir, "Cargo.toml").exists()) markers.add("Rust")
-        return "识别：${if (markers.isEmpty()) "未发现常见项目标记" else markers.joinToString(" · ")}"
-    }
-
-    private fun projectTestCommand(dir: File): String = when {
-        File(dir, "package.json").exists() -> "npm test"
-        File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists() -> "./gradlew test"
-        File(dir, "requirements.txt").exists() || File(dir, "pyproject.toml").exists() -> "python3 -m pytest"
-        File(dir, "Cargo.toml").exists() -> "cargo test"
-        File(dir, "go.mod").exists() -> "go test ./..."
-        else -> "ls -la"
-    }
-
-    private fun projectBuildCommand(dir: File): String = when {
-        File(dir, "package.json").exists() -> "npm run build"
-        File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists() -> "./gradlew assembleDebug"
-        File(dir, "Cargo.toml").exists() -> "cargo build"
-        File(dir, "go.mod").exists() -> "go build ./..."
-        else -> "ls -la"
-    }
-
-    private fun projectInstallCommand(dir: File): String = when {
-        File(dir, "package.json").exists() -> "npm install"
-        File(dir, "requirements.txt").exists() -> "pip install -r requirements.txt --break-system-packages"
-        File(dir, "pyproject.toml").exists() -> "python3 -m pip install . --break-system-packages"
-        File(dir, "Cargo.toml").exists() -> "cargo fetch"
-        File(dir, "go.mod").exists() -> "go mod download"
-        else -> "ls -la"
-    }
-
-    private fun projectRepairCommand(dir: File): String = when {
-        File(dir, "package.json").exists() -> "rm -rf node_modules package-lock.json && npm install"
-        File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists() -> "./gradlew --stop; ./gradlew clean"
-        File(dir, "requirements.txt").exists() -> "python3 -m pip install -r requirements.txt --break-system-packages"
-        File(dir, "pyproject.toml").exists() -> "python3 -m pip install . --break-system-packages"
-        File(dir, "Cargo.toml").exists() -> "cargo clean && cargo fetch"
-        File(dir, "go.mod").exists() -> "go clean -cache && go mod tidy"
-        else -> "pwd && ls -la"
-    }
-
-    private fun projectHealthCommand(dir: File): String = when {
-        File(dir, "package.json").exists() -> "node -e \"const p=require('./package.json'); console.log('name:',p.name||'-'); console.log('scripts:', Object.keys(p.scripts||{}).join(','))\" && npm pkg get scripts"
-        File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists() -> "./gradlew tasks --all | head -80"
-        File(dir, "requirements.txt").exists() || File(dir, "pyproject.toml").exists() -> "python3 --version && python3 -m pip --version && python3 -m pytest --collect-only"
-        File(dir, "Cargo.toml").exists() -> "cargo metadata --no-deps"
-        File(dir, "go.mod").exists() -> "go list ./..."
-        else -> "pwd && ls -la"
     }
 
     private fun actionGrid(activity: Activity, ui: AIDevUi, host: ShellHost): View =

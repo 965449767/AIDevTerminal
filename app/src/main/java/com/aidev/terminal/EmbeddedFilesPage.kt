@@ -519,7 +519,7 @@ class EmbeddedFilesPage : ShellPage {
                     0 -> markCurrentProject(dir)
                     1 -> clearCurrentProject()
                     2 -> projectOverview(dir)
-                    3 -> runInTerminal(projectHealthCommand(dir))
+                    3 -> runInTerminal("cd \"${dir.absolutePath}\" && ${ProjectCommands.healthCommand(dir)}")
                     4 -> confirmProjectRepair(dir)
                     5 -> showProjectHistory()
                     6 -> showProjectScripts(dir)
@@ -529,10 +529,10 @@ class EmbeddedFilesPage : ShellPage {
                     10 -> showReadme(dir)
                     11 -> runInTerminal("cd \"${dir.absolutePath}\" && git status --short --branch")
                     12 -> runInTerminal("cd \"${dir.absolutePath}\" && git diff --stat")
-                    13 -> runInTerminal(projectInstallCommand(dir))
-                    14 -> runInTerminal(projectDevCommand(dir))
-                    15 -> runInTerminal(projectTestCommand(dir))
-                    16 -> runInTerminal(projectBuildCommand(dir))
+                    13 -> runInTerminal("cd \"${dir.absolutePath}\" && ${ProjectCommands.installCommand(dir)}")
+                    14 -> runInTerminal("cd \"${dir.absolutePath}\" && ${ProjectCommands.devCommand(dir)}")
+                    15 -> runInTerminal("cd \"${dir.absolutePath}\" && ${ProjectCommands.testCommand(dir)}")
+                    16 -> runInTerminal("cd \"${dir.absolutePath}\" && ${ProjectCommands.buildCommand(dir)}")
                     17 -> runInTerminal("cd \"${dir.absolutePath}\" && pwd && ls -la")
                     18 -> copyProjectCommands(dir)
                     19 -> exportProjectSummary(dir)
@@ -575,12 +575,12 @@ class EmbeddedFilesPage : ShellPage {
             "当前项目：${if (current) "是" else "否"}",
             "README：${if (listOf("README.md", "README.txt", "readme.md").any { File(dir, it).isFile }) "有" else "无"}",
             "Git：${if (File(dir, ".git").exists()) "有" else "无"}",
-            "健康摘要：${projectHealthSummary(dir)}",
-            "安装命令：${projectInstallCommand(dir)}",
-            "开发命令：${projectDevCommand(dir)}",
-            "测试命令：${projectTestCommand(dir)}",
-            "构建命令：${projectBuildCommand(dir)}",
-            "修复命令：${projectRepairCommand(dir)}"
+            "健康摘要：${ProjectCommands.detectSummary(dir)}",
+            "安装命令：cd \"${dir.absolutePath}\" && ${ProjectCommands.installCommand(dir)}",
+            "开发命令：cd \"${dir.absolutePath}\" && ${ProjectCommands.devCommand(dir)}",
+            "测试命令：cd \"${dir.absolutePath}\" && ${ProjectCommands.testCommand(dir)}",
+            "构建命令：cd \"${dir.absolutePath}\" && ${ProjectCommands.buildCommand(dir)}",
+            "修复命令：cd \"${dir.absolutePath}\" && ${ProjectCommands.repairCommand(dir)}"
         ).joinToString("\n")
         AlertDialog.Builder(activity)
             .setTitle("项目概览")
@@ -596,10 +596,10 @@ class EmbeddedFilesPage : ShellPage {
     private fun copyProjectCommands(dir: File) {
         val body = listOf(
             "cd \"${dir.absolutePath}\"",
-            projectInstallCommand(dir),
-            projectDevCommand(dir),
-            projectTestCommand(dir),
-            projectBuildCommand(dir)
+            ProjectCommands.installCommand(dir),
+            ProjectCommands.devCommand(dir),
+            ProjectCommands.testCommand(dir),
+            ProjectCommands.buildCommand(dir)
         ).joinToString("\n")
         copyText("AIDev 项目命令", body)
         toast("已复制项目命令")
@@ -609,27 +609,27 @@ class EmbeddedFilesPage : ShellPage {
         val body = listOf(
             "项目：${dir.name}",
             "路径：${dir.absolutePath}",
-            "健康摘要：${projectHealthSummary(dir)}",
+            "健康摘要：${ProjectCommands.detectSummary(dir)}",
             "README：${if (listOf("README.md", "README.txt", "readme.md").any { File(dir, it).isFile }) "有" else "无"}",
             "Git：${if (File(dir, ".git").exists()) "有" else "无"}",
-            "安装：${projectInstallCommand(dir)}",
-            "开发：${projectDevCommand(dir)}",
-            "测试：${projectTestCommand(dir)}",
-            "构建：${projectBuildCommand(dir)}",
-            "诊断：${projectHealthCommand(dir)}",
-            "修复：${projectRepairCommand(dir)}"
+            "安装：${ProjectCommands.installCommand(dir)}",
+            "开发：${ProjectCommands.devCommand(dir)}",
+            "测试：${ProjectCommands.testCommand(dir)}",
+            "构建：${ProjectCommands.buildCommand(dir)}",
+            "诊断：${ProjectCommands.healthCommand(dir)}",
+            "修复：${ProjectCommands.repairCommand(dir)}"
         ).joinToString("\n")
         copyText("AIDev 项目诊断", body)
         toast("已复制诊断报告")
     }
 
     private fun copyRepairCommand(dir: File) {
-        copyText("AIDev 修复命令", projectRepairCommand(dir))
+        copyText("AIDev 修复命令", ProjectCommands.repairCommand(dir))
         toast("已复制修复命令")
     }
 
     private fun confirmProjectRepair(dir: File) {
-        val command = projectRepairCommand(dir)
+        val command = "cd \"${dir.absolutePath}\" && ${ProjectCommands.repairCommand(dir)}"
         AlertDialog.Builder(activity)
             .setTitle("确认修复项目")
             .setMessage("项目：${dir.name}\n路径：${dir.absolutePath}\n\n执行：\n$command\n\n注意：某些修复会删除缓存、依赖目录或锁文件。")
@@ -739,13 +739,13 @@ class EmbeddedFilesPage : ShellPage {
             "AIDev 项目摘要",
             "项目：${dir.name}",
             "路径：${dir.absolutePath}",
-            "健康摘要：${projectHealthSummary(dir)}",
-            "安装：${projectInstallCommand(dir)}",
-            "开发：${projectDevCommand(dir)}",
-            "测试：${projectTestCommand(dir)}",
-            "构建：${projectBuildCommand(dir)}",
-            "诊断：${projectHealthCommand(dir)}",
-            "修复：${projectRepairCommand(dir)}"
+            "健康摘要：${ProjectCommands.detectSummary(dir)}",
+            "安装：${ProjectCommands.installCommand(dir)}",
+            "开发：${ProjectCommands.devCommand(dir)}",
+            "测试：${ProjectCommands.testCommand(dir)}",
+            "构建：${ProjectCommands.buildCommand(dir)}",
+            "诊断：${ProjectCommands.healthCommand(dir)}",
+            "修复：${ProjectCommands.repairCommand(dir)}"
         ).joinToString("\n")
         runCatching { out.writeText(body) }
             .onSuccess {
@@ -753,18 +753,6 @@ class EmbeddedFilesPage : ShellPage {
                 toast("已导出项目摘要")
             }
             .onFailure { toast("导出失败：${it.message}") }
-    }
-
-    private fun projectHealthSummary(dir: File): String {
-        val markers = mutableListOf<String>()
-        if (File(dir, "README.md").exists() || File(dir, "README.txt").exists()) markers.add("README")
-        if (File(dir, ".git").exists()) markers.add("Git")
-        if (File(dir, "package.json").exists()) markers.add("Node")
-        if (File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists()) markers.add("Gradle")
-        if (File(dir, "requirements.txt").exists() || File(dir, "pyproject.toml").exists()) markers.add("Python")
-        if (File(dir, "go.mod").exists()) markers.add("Go")
-        if (File(dir, "Cargo.toml").exists()) markers.add("Rust")
-        return if (markers.isEmpty()) "未发现常见项目标记" else markers.joinToString(" · ")
     }
 
     private fun showReadme(dir: File) {
@@ -787,58 +775,6 @@ class EmbeddedFilesPage : ShellPage {
             }
             .setNegativeButton("关闭", null)
             .show()
-    }
-
-    private fun projectInstallCommand(dir: File): String = when {
-        File(dir, "package.json").exists() -> "cd \"${dir.absolutePath}\" && npm install"
-        File(dir, "requirements.txt").exists() -> "cd \"${dir.absolutePath}\" && pip install -r requirements.txt --break-system-packages"
-        File(dir, "pyproject.toml").exists() -> "cd \"${dir.absolutePath}\" && python3 -m pip install . --break-system-packages"
-        File(dir, "Cargo.toml").exists() -> "cd \"${dir.absolutePath}\" && cargo fetch"
-        File(dir, "go.mod").exists() -> "cd \"${dir.absolutePath}\" && go mod download"
-        else -> "cd \"${dir.absolutePath}\" && ls -la"
-    }
-
-    private fun projectDevCommand(dir: File): String = when {
-        File(dir, "package.json").exists() -> "cd \"${dir.absolutePath}\" && npm run dev"
-        File(dir, "manage.py").exists() -> "cd \"${dir.absolutePath}\" && python3 manage.py runserver 0.0.0.0:8000"
-        File(dir, "requirements.txt").exists() || File(dir, "pyproject.toml").exists() -> "cd \"${dir.absolutePath}\" && python3 -m http.server 8000"
-        else -> "cd \"${dir.absolutePath}\" && python3 -m http.server 8000"
-    }
-
-    private fun projectTestCommand(dir: File): String = when {
-        File(dir, "package.json").exists() -> "cd \"${dir.absolutePath}\" && npm test"
-        File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists() -> "cd \"${dir.absolutePath}\" && ./gradlew test"
-        File(dir, "requirements.txt").exists() || File(dir, "pyproject.toml").exists() -> "cd \"${dir.absolutePath}\" && python3 -m pytest"
-        File(dir, "Cargo.toml").exists() -> "cd \"${dir.absolutePath}\" && cargo test"
-        File(dir, "go.mod").exists() -> "cd \"${dir.absolutePath}\" && go test ./..."
-        else -> "cd \"${dir.absolutePath}\" && ls -la"
-    }
-
-    private fun projectBuildCommand(dir: File): String = when {
-        File(dir, "package.json").exists() -> "cd \"${dir.absolutePath}\" && npm run build"
-        File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists() -> "cd \"${dir.absolutePath}\" && ./gradlew assembleDebug"
-        File(dir, "Cargo.toml").exists() -> "cd \"${dir.absolutePath}\" && cargo build"
-        File(dir, "go.mod").exists() -> "cd \"${dir.absolutePath}\" && go build ./..."
-        else -> "cd \"${dir.absolutePath}\" && ls -la"
-    }
-
-    private fun projectRepairCommand(dir: File): String = when {
-        File(dir, "package.json").exists() -> "cd \"${dir.absolutePath}\" && rm -rf node_modules package-lock.json && npm install"
-        File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists() -> "cd \"${dir.absolutePath}\" && ./gradlew --stop; ./gradlew clean"
-        File(dir, "requirements.txt").exists() -> "cd \"${dir.absolutePath}\" && python3 -m pip install -r requirements.txt --break-system-packages"
-        File(dir, "pyproject.toml").exists() -> "cd \"${dir.absolutePath}\" && python3 -m pip install . --break-system-packages"
-        File(dir, "Cargo.toml").exists() -> "cd \"${dir.absolutePath}\" && cargo clean && cargo fetch"
-        File(dir, "go.mod").exists() -> "cd \"${dir.absolutePath}\" && go clean -cache && go mod tidy"
-        else -> "cd \"${dir.absolutePath}\" && pwd && ls -la"
-    }
-
-    private fun projectHealthCommand(dir: File): String = when {
-        File(dir, "package.json").exists() -> "cd \"${dir.absolutePath}\" && node -e \"const p=require('./package.json'); console.log('name:',p.name||'-'); console.log('scripts:', Object.keys(p.scripts||{}).join(','))\" && npm pkg get scripts"
-        File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists() -> "cd \"${dir.absolutePath}\" && ./gradlew tasks --all | head -80"
-        File(dir, "requirements.txt").exists() || File(dir, "pyproject.toml").exists() -> "cd \"${dir.absolutePath}\" && python3 --version && python3 -m pip --version && python3 -m pytest --collect-only"
-        File(dir, "Cargo.toml").exists() -> "cd \"${dir.absolutePath}\" && cargo metadata --no-deps"
-        File(dir, "go.mod").exists() -> "cd \"${dir.absolutePath}\" && go list ./..."
-        else -> "cd \"${dir.absolutePath}\" && pwd && ls -la"
     }
 
     private fun runInTerminal(command: String) {
