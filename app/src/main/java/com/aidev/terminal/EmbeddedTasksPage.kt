@@ -336,8 +336,10 @@ class EmbeddedTasksPage : ShellPage {
                             copyText("$label logcat", logs)
                             Toast.makeText(activity, "已复制日志", Toast.LENGTH_SHORT).show()
                         }
-                        .setPositiveButton("终端查看") { _, _ ->
-                            host.openTerminal("logcat -d --pid=\$(pidof $packageName) -v threadtime | tail -200")
+                        .setPositiveButton("输出到终端") { _, _ ->
+                            val tmpFile = File(activity.filesDir, "home/.aidev-logcat-tmp.txt")
+                            tmpFile.writeText(logs)
+                            host.openTerminal("cat ~/.aidev-logcat-tmp.txt | tail -200 && rm -f ~/.aidev-logcat-tmp.txt")
                         }
                         .setNegativeButton("关闭", null)
                         .show()
