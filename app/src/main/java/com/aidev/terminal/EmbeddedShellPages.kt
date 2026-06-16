@@ -190,7 +190,7 @@ private class TerminalImeProxyEditText(context: Context) : EditText(context) {
 
 class EmbeddedTerminalPage : ShellPage {
     private companion object {
-        const val DEFAULT_FONT_SP = 15f
+        const val DEFAULT_FONT_SP = 10f
         const val MIN_FONT_SP = 10f
         const val MAX_FONT_SP = 24f
     }

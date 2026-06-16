@@ -12,6 +12,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -504,6 +505,17 @@ class ShellActivity : Activity() {
         }
         old?.let { pages[previousIndex].onDestroy(this) }
         pages[currentIndex].onSelected(activity = this, view = next)
+        // 键盘管理：切换到终端时弹起，离开终端时关闭
+        val imm = getSystemService(InputMethodManager::class.java)
+        if (currentIndex == TAB_TERMINAL) {
+            // 延迟弹起，等待页面渲染完成
+            next.postDelayed({
+                val focusView = next.findFocus() ?: next
+                imm?.showSoftInput(focusView, InputMethodManager.SHOW_IMPLICIT)
+            }, 200)
+        } else {
+            imm?.hideSoftInputFromWindow(next.windowToken, 0)
+        }
     }
 
     private fun attachSwipe(target: View) {
