@@ -269,13 +269,34 @@ class EmbeddedSettingsPage : ShellPage {
             "python3" to "Python3",
             "git" to "Git",
             "java" to "JDK",
-            "gradle" to "Gradle",
-            "go" to "Go",
-            "cargo" to "Rust/Cargo",
-            "opencode" to "OpenCode",
             "npm" to "npm"
         )
+        var hasBaseMissing = false
         for ((cmd, label) in devTools) {
+            val binPaths = listOf(
+                File(rootfs, "usr/bin/$cmd"),
+                File(rootfs, "usr/local/bin/$cmd"),
+                File(rootfs, "root/.opencode/bin/$cmd")
+            )
+            val exists = binPaths.any { it.exists() }
+            if (!exists) hasBaseMissing = true
+            checks.add(CheckItem(label, exists, cmd, null))
+        }
+        // 基础工具统一修复（deploy-dev-env 安装所有基础包）
+        if (hasBaseMissing) {
+            checks.add(CheckItem("基础开发工具包", false, "Node.js/Python3/Git/JDK/npm", "deploy-dev-env"))
+        } else {
+            checks.add(CheckItem("基础开发工具包", true, "Node.js/Python3/Git/JDK/npm", null))
+        }
+
+        // 可选工具（不显示在基础包中）
+        val optionalTools = listOf(
+            "opencode" to "OpenCode",
+            "gradle" to "Gradle",
+            "go" to "Go",
+            "cargo" to "Rust/Cargo"
+        )
+        for ((cmd, label) in optionalTools) {
             val binPaths = listOf(
                 File(rootfs, "usr/bin/$cmd"),
                 File(rootfs, "usr/local/bin/$cmd"),
