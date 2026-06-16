@@ -618,6 +618,7 @@ class EmbeddedTerminalPage : ShellPage {
             "终端 · 诊断 Doctor" to { send("aidev-doctor") },
             "终端 · 刷新命令索引" to { send("aidev-index-commands") },
             "终端 · 清屏" to { send("clear") },
+            "终端 · 搜索输出" to { showTerminalSearch(activity) },
             "OpenCode · CLI 界面" to { sendAgentCommand("aidev-opencode") },
             "OpenCode · Serve 后台服务" to { sendAgentCommand("task-run opencode-serve 'opencode serve --port 4096 --hostname 127.0.0.1'") },
             "OpenCode · 原生协议面板" to { com.aidev.terminal.opencode.OpencodeNativePanel.showHome(activity) },
@@ -706,6 +707,64 @@ class EmbeddedTerminalPage : ShellPage {
     private fun sendAgentCommand(command: String) {
         val dir = currentProjectDir()
         if (dir != null) send("cd \"${dir.absolutePath}\" && $command") else send(command)
+    }
+
+    private fun getScreenText(): String {
+        val s = session ?: return ""
+        return runCatching {
+            val emulator = s.javaClass.getMethod("getEmulator").invoke(s)
+            val screen = emulator.javaClass.getMethod("getScreen").invoke(emulator)
+            val rows = screen.javaClass.getMethod("getRows").invoke(screen) as Int
+            val cols = screen.javaClass.getMethod("getColumns").invoke(screen) as Int
+            val sb = StringBuilder()
+            for (row in 0 until rows) {
+                val line = StringBuilder()
+                for (col in 0 until cols) {
+                    val cell = screen.javaClass.getMethod("getCell", Int::class.java, Int::class.java).invoke(screen, col, row)
+                    val ch = cell?.javaClass?.getMethod("getChar")?.invoke(cell) as? Char ?: ' '
+                    if (ch.code != 0) line.append(ch)
+                }
+                val trimmed = line.toString().trimEnd()
+                if (trimmed.isNotEmpty()) sb.append(trimmed).append("\n")
+            }
+            sb.toString()
+        }.getOrDefault("")
+    }
+
+    private fun showTerminalSearch(activity: Activity) {
+        val edit = EditText(activity).apply {
+            hint = "搜索终端输出内容..."
+            setSingleLine(true)
+            setPadding(48, 24, 48, 24)
+        }
+        AlertDialog.Builder(activity)
+            .setTitle("搜索终端输出")
+            .setView(edit)
+            .setPositiveButton("搜索") { _, _ ->
+                val keyword = edit.text.toString().trim()
+                if (keyword.isEmpty()) return@setPositiveButton
+                val fullText = getScreenText()
+                val lines = fullText.lines()
+                val matches = lines.filterIndexed { idx, line ->
+                    line.contains(keyword, ignoreCase = true)
+                }.take(30)
+                if (matches.isEmpty()) {
+                    Toast.makeText(activity, "未找到匹配内容", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                AlertDialog.Builder(activity)
+                    .setTitle("找到 ${matches.size} 条匹配")
+                    .setItems(matches.toTypedArray()) { _, _ ->
+                        // 复制选中行到剪贴板
+                        (activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                            .setPrimaryClip(ClipData.newPlainText("AIDev Terminal", matches[0]))
+                        Toast.makeText(activity, "已复制: ${matches[0].take(40)}", Toast.LENGTH_SHORT).show()
+                    }
+                    .setNegativeButton("关闭", null)
+                    .show()
+            }
+            .setNegativeButton("取消", null)
+            .show()
     }
 
     private fun completionSuggestions(activity: Activity): List<TerminalCompletion> {
@@ -1586,6 +1645,8 @@ class EmbeddedTerminalPage : ShellPage {
             override fun onSessionFinished(finishedSession: TerminalSession) { terminalView?.onScreenUpdated() }
             override fun onCopyTextToClipboard(session: TerminalSession, text: String) {
                 (activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("AIDev Terminal", text))
+                val preview = text.replace("\n", " ").take(40)
+                Toast.makeText(activity, "已复制: $preview${if (text.length > 40) "..." else ""}", Toast.LENGTH_SHORT).show()
             }
             override fun onPasteTextFromClipboard(session: TerminalSession) {
                 val text = (activity.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(activity)?.toString()
