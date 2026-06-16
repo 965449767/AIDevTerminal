@@ -63,6 +63,7 @@ private class TerminalImeProxyEditText(context: Context) : EditText(context) {
     var onCommittedText: (String) -> Unit = {}
     var onBackspace: () -> Unit = {}
     var onEnter: () -> Unit = {}
+    var tuiMode = false
     private var clearing = false
     private var currentComposing = ""
 
@@ -80,12 +81,14 @@ private class TerminalImeProxyEditText(context: Context) : EditText(context) {
         val base = super.onCreateInputConnection(outAttrs)
         return object : InputConnectionWrapper(base, true) {
             override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
+                if (tuiMode) return super.setComposingText(text, newCursorPosition)
                 currentComposing = text?.toString().orEmpty()
                 onComposingChanged(currentComposing)
                 return super.setComposingText(text, newCursorPosition)
             }
 
             override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
+                if (tuiMode) return super.commitText(text, newCursorPosition)
                 val committed = text?.toString().orEmpty()
                 if (committed.isNotEmpty()) onCommittedText(committed)
                 currentComposing = ""
@@ -96,12 +99,14 @@ private class TerminalImeProxyEditText(context: Context) : EditText(context) {
             }
 
             override fun finishComposingText(): Boolean {
+                if (tuiMode) return super.finishComposingText()
                 currentComposing = ""
                 onComposingChanged("")
                 return super.finishComposingText()
             }
 
             override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
+                if (tuiMode) return super.deleteSurroundingText(beforeLength, afterLength)
                 if (currentComposing.isNotEmpty()) {
                     currentComposing = currentComposing.dropLast(beforeLength.coerceAtLeast(1))
                     onComposingChanged(currentComposing)
@@ -112,6 +117,7 @@ private class TerminalImeProxyEditText(context: Context) : EditText(context) {
             }
 
             override fun sendKeyEvent(event: KeyEvent): Boolean {
+                if (tuiMode) return super.sendKeyEvent(event)
                 if (event.action == KeyEvent.ACTION_DOWN) {
                     when (event.keyCode) {
                         KeyEvent.KEYCODE_DEL -> {
@@ -167,6 +173,15 @@ class EmbeddedTerminalPage : ShellPage {
     private var pwdObserver: PwdFileObserver? = null
     private var lastSyncedPwd = ""
     private var syncIndicator: TextView? = null
+
+    private fun updateTuiMode() {
+        val s = session ?: return
+        val isTui = runCatching {
+            val emulator = s.javaClass.getMethod("getEmulator").invoke(s)
+            emulator.javaClass.getMethod("isAlternateScreenActive").invoke(emulator) as Boolean
+        }.getOrDefault(false)
+        inputProxy?.tuiMode = isTui
+    }
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
@@ -1454,7 +1469,10 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun sessionClient(activity: Activity): TerminalSessionClient =
         object : TerminalSessionClient {
-            override fun onTextChanged(changedSession: TerminalSession) { terminalView?.onScreenUpdated() }
+            override fun onTextChanged(changedSession: TerminalSession) {
+                terminalView?.onScreenUpdated()
+                updateTuiMode()
+            }
             override fun onTitleChanged(changedSession: TerminalSession) {}
             override fun onSessionFinished(finishedSession: TerminalSession) { terminalView?.onScreenUpdated() }
             override fun onCopyTextToClipboard(session: TerminalSession, text: String) {
