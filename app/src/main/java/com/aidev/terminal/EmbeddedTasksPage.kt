@@ -113,7 +113,7 @@ class EmbeddedTasksPage : ShellPage {
         ))
         list.addView(ui.rowOf(
             ui.actionCard("任务模板", "常用后台任务一键生成", "TPL") { showTaskTemplates() },
-            ui.actionCard("Logcat", "后台记录 Android 日志", "LOG") { host.openTerminal("task-run logcat 'logcat'") }
+            ui.actionCard("Shizuku 日志", "通过 Shizuku 获取应用日志", "LOG") { showShizukuLogcat() }
         ))
         list.addView(ui.rowOf(
             ui.actionCard("启动常驻", "启动前台服务与 WakeLock", "KEEP") {
@@ -282,6 +282,72 @@ class EmbeddedTasksPage : ShellPage {
                 local.substringAfterLast(":").toIntOrNull(16)
             }
         }.getOrDefault(emptyList()).distinct().sorted()
+
+    private fun showShizukuLogcat() {
+        if (!ShizukuLogcat.isAvailable()) {
+            AlertDialog.Builder(activity)
+                .setTitle("Shizuku 日志")
+                .setMessage("Shizuku 不可用：${ShizukuLogcat.statusText()}\n\n请确保：\n1. 已安装 Shizuku 应用\n2. Shizuku 服务已启动\n3. 已授权 AIDev 使用 Shizuku")
+                .setPositiveButton("打开 Shizuku") { _, _ ->
+                    val intent = activity.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+                    if (intent != null) activity.startActivity(intent)
+                }
+                .setNegativeButton("关闭", null)
+                .show()
+            return
+        }
+
+        val packages = arrayOf(
+            "com.aidev.terminal" to "AIDev Terminal",
+            "moe.shizuku.privileged.api" to "Shizuku",
+            "android" to "系统"
+        )
+        val packageNames = packages.map { it.second }.toTypedArray()
+
+        AlertDialog.Builder(activity)
+            .setTitle("选择要查看日志的应用")
+            .setItems(packageNames) { _, which ->
+                val (pkg, label) = packages[which]
+                fetchAndShowLog(pkg, label)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun fetchAndShowLog(packageName: String, label: String) {
+        val dialog = AlertDialog.Builder(activity)
+            .setTitle("正在获取 $label 日志...")
+            .setMessage("通过 Shizuku 执行 logcat，请稍候")
+            .setCancelable(false)
+            .show()
+
+        ShizukuLogcat.fetchLog(packageName = packageName, lines = 500) { result ->
+            activity.runOnUiThread {
+                dialog.dismiss()
+                result.onSuccess { logs ->
+                    AlertDialog.Builder(activity)
+                        .setTitle("$label 日志 (最近 500 行)")
+                        .setMessage(if (logs.length > 3000) logs.takeLast(3000) else logs)
+                        .setNeutralButton("复制") { _, _ ->
+                            copyText("$label logcat", logs)
+                            Toast.makeText(activity, "已复制日志", Toast.LENGTH_SHORT).show()
+                        }
+                        .setPositiveButton("终端查看") { _, _ ->
+                            host.openTerminal("logcat -d --pid=\$(pidof $packageName) -v threadtime | tail -200")
+                        }
+                        .setNegativeButton("关闭", null)
+                        .show()
+                }.onFailure { e ->
+                    AlertDialog.Builder(activity)
+                        .setTitle("获取日志失败")
+                        .setMessage(e.message ?: "未知错误")
+                        .setPositiveButton("重试") { _, _ -> fetchAndShowLog(packageName, label) }
+                        .setNegativeButton("关闭", null)
+                        .show()
+                }
+            }
+        }
+    }
 
     private fun showPortDetails() {
         val ports = listeningPorts().distinct().sorted()
