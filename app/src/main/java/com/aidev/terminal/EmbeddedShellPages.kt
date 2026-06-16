@@ -82,7 +82,13 @@ private class TerminalImeProxyEditText(context: Context) : EditText(context) {
         val base = super.onCreateInputConnection(outAttrs)
         return object : InputConnectionWrapper(base, true) {
             override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
-                if (tuiMode) return super.setComposingText(text, newCursorPosition)
+                if (tuiMode) {
+                    // TUI 模式：语音/输入法 composing 文字直接发给终端
+                    val str = text?.toString().orEmpty()
+                    if (str.isNotEmpty()) onCommittedText(str)
+                    clearProxyText()
+                    return super.setComposingText("", 1)
+                }
                 currentComposing = text?.toString().orEmpty()
                 onComposingChanged(currentComposing)
                 return super.setComposingText(text, newCursorPosition)
@@ -90,11 +96,10 @@ private class TerminalImeProxyEditText(context: Context) : EditText(context) {
 
             override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
                 if (tuiMode) {
-                    // TUI 模式：把 committed 文字直接发给终端 session
                     val str = text?.toString().orEmpty()
                     if (str.isNotEmpty()) onCommittedText(str)
                     clearProxyText()
-                    return super.commitText(text, newCursorPosition)
+                    return super.commitText("", 1)
                 }
                 val committed = text?.toString().orEmpty()
                 if (committed.isNotEmpty()) onCommittedText(committed)
@@ -106,7 +111,11 @@ private class TerminalImeProxyEditText(context: Context) : EditText(context) {
             }
 
             override fun finishComposingText(): Boolean {
-                if (tuiMode) return super.finishComposingText()
+                if (tuiMode) {
+                    // composing 文字已在 setComposingText 中发送，这里只需清理
+                    clearProxyText()
+                    return super.finishComposingText()
+                }
                 currentComposing = ""
                 onComposingChanged("")
                 return super.finishComposingText()
