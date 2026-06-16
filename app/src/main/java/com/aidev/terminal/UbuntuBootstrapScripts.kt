@@ -298,8 +298,8 @@ AIDEV_BOOTSTRAP_EOF
                 dst.outputStream().use { output -> input.copyTo(output) }
               }
               dst.setExecutable(true)
-            } catch (_: Exception) {
-              # asset 不存在则跳过
+            } catch (e: Exception) {
+              android.util.Log.w("AIDev", "无法复制脚本 ${'$'}script: ${'$'}{e.message}")
             }
           }
 
