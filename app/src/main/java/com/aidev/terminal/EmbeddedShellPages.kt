@@ -274,8 +274,23 @@ class EmbeddedTerminalPage : ShellPage {
                 refreshCompletions(activity)
             }
             onCommittedText = { text ->
-                session?.write(text)
-                updateInputBuffer(text)
+                if (tuiActive && ctrlLatched && text.length == 1) {
+                    // TUI 模式 + Ctrl 按下：发送组合键转义序列
+                    val codePoint = text[0].code
+                    val ctrlCode = when {
+                        codePoint in 0x41..0x5A -> codePoint - 0x40 // A-Z -> Ctrl+A-Z (0x01-0x1A)
+                        codePoint in 0x61..0x7A -> codePoint - 0x60 // a-z -> Ctrl+A-Z (0x01-0x1A)
+                        else -> codePoint
+                    }
+                    if (ctrlCode in 0x01..0x1A) {
+                        session?.write(String(byteArrayOf(ctrlCode.toByte())))
+                    } else {
+                        session?.write(text)
+                    }
+                } else {
+                    session?.write(text)
+                    updateInputBuffer(text)
+                }
             }
             onBackspace = {
                 session?.write("\u007F")
