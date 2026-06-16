@@ -310,6 +310,20 @@ AIDEV_INSTALL_EOF
 ubuntu "$@"
 AIDEV_BOOTSTRAP_EOF
           chmod 755 "${'$'}AIDEV_ROOTFS/usr/local/bin/aidev-auto-bootstrap" 2>/dev/null || true
+
+          # 开发环境辅助命令（从 assets 复制）
+          val assetsDir = File(activity.filesDir, "assets/scripts")
+          val scripts = listOf("check-dev-env.sh", "repair-dev-env.sh", "deploy-dev-env.sh", "install-aitool.sh")
+          for (script in scripts) {
+            val src = File(assetsDir, script)
+            val dstName = script.removeSuffix(".sh")
+            val dst = File("${'$'}AIDEV_ROOTFS/usr/local/bin", dstName)
+            if (src.exists()) {
+              src.copyTo(dst, overwrite = true)
+              dst.setExecutable(true)
+            }
+          }
+
           mkdir -p "${'$'}AIDEV_ROOTFS/root"
           touch "${'$'}AIDEV_ROOTFS/root/.bashrc" 2>/dev/null || true
           if ! grep -q "AIDEV_PWD_HOOK_BEGIN" "${'$'}AIDEV_ROOTFS/root/.bashrc" 2>/dev/null; then
