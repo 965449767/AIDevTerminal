@@ -166,6 +166,7 @@ class EmbeddedTerminalPage : ShellPage {
     private var composingBuffer = ""
     private var pwdObserver: PwdFileObserver? = null
     private var lastSyncedPwd = ""
+    private var syncIndicator: TextView? = null
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
@@ -228,27 +229,33 @@ class EmbeddedTerminalPage : ShellPage {
     }
 
     private fun statusBar(activity: Activity, ui: AIDevUi): View =
-        TextView(activity).apply {
-            statusText = this
-            text = terminalStatus(activity)
-            textSize = 11f
+        LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-            setTextColor(0xFF9CA3AF.toInt())
             setBackgroundColor(0xFF0A0D12.toInt())
-            setPadding(ui.dp(12), 0, ui.dp(12), 0)
-            setOnClickListener {
-                AlertDialog.Builder(activity)
-                    .setTitle("终端状态")
-                    .setMessage("Ubuntu：自动进入已开启\n字号：${currentFontSp(activity).toInt()}sp\n运行：PRoot\n手势：双指缩放已开启\n虚拟键：点击为主功能，上滑为拓展功能，长按可自定义")
-                    .setPositiveButton("知道了", null)
-                    .show()
+            setPadding(ui.dp(12), 0, ui.dp(6), 0)
+            val textView = TextView(activity).apply {
+                statusText = this
+                text = terminalStatus(activity)
+                textSize = 11f
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                setTextColor(0xFF9CA3AF.toInt())
+                setOnClickListener {
+                    AlertDialog.Builder(activity)
+                        .setTitle("终端状态")
+                        .setMessage("Ubuntu：自动进入已开启\n字号：${currentFontSp(activity).toInt()}sp\n运行：PRoot\n手势：双指缩放已开启\n虚拟键：点击为主功能，上滑为拓展功能，长按可自定义")
+                        .setPositiveButton("知道了", null)
+                        .show()
+                }
+                setOnLongClickListener {
+                    showFontDialog(activity)
+                    true
+                }
             }
-            setOnLongClickListener {
-                showFontDialog(activity)
-                true
-            }
+            addView(textView, LinearLayout.LayoutParams(0, -1, 1f))
+            syncIndicator = syncIndicatorView(activity, ui)
+            addView(syncIndicator, LinearLayout.LayoutParams(ui.dp(36), -1))
         }
 
     private fun terminalStatus(activity: Activity): String =
@@ -358,6 +365,11 @@ class EmbeddedTerminalPage : ShellPage {
         initPwdObserver(activity)
         focusTerminalInput(activity)
         consumePendingCommand()
+        syncIndicator?.let { tv ->
+            val on = SyncCoordinator.isEnabled(activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
+            tv.text = if (on) "●" else "○"
+            tv.setTextColor(if (on) 0xFF22D3A7.toInt() else 0xFF4B5563.toInt())
+        }
         terminalView?.postDelayed({
             maybeAutoBootstrapUbuntu(activity)
             focusTerminalInput(activity)
@@ -389,18 +401,31 @@ class EmbeddedTerminalPage : ShellPage {
         pwdObserver?.start()
     }
 
-    private fun syncToggleButton(activity: Activity, ui: AIDevUi): View {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val on = SyncCoordinator.isEnabled(prefs)
-        return button(activity, ui, if (on) "⟷" else "⟷") {
-            val current = SyncCoordinator.isEnabled(prefs)
-            SyncCoordinator.setEnabled(prefs, !current)
-            val nowOn = !current
-            Toast.makeText(activity, if (nowOn) "联动已开启" else "联动已关闭", Toast.LENGTH_LONG).show()
-            android.util.Log.d("AIDEV_SYNC", "toggle: $current -> $nowOn")
-        }.apply {
-            setTextColor(if (on) 0xFF22D3A7.toInt() else 0xFF9CA3AF.toInt())
+    private fun syncIndicatorView(activity: Activity, ui: AIDevUi): TextView =
+        TextView(activity).apply {
+            gravity = Gravity.CENTER
+            textSize = 11f
+            val on = SyncCoordinator.isEnabled(activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
+            text = if (on) "●" else "○"
+            setTextColor(if (on) 0xFF22D3A7.toInt() else 0xFF4B5563.toInt())
+            setOnClickListener {
+                val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+                val current = SyncCoordinator.isEnabled(prefs)
+                SyncCoordinator.setEnabled(prefs, !current)
+                val nowOn = !current
+                text = if (nowOn) "●" else "○"
+                setTextColor(if (nowOn) 0xFF22D3A7.toInt() else 0xFF4B5563.toInt())
+                Toast.makeText(activity, if (nowOn) "联动已开启" else "联动已关闭", Toast.LENGTH_SHORT).show()
+            }
+            setOnLongClickListener {
+                val on = SyncCoordinator.isEnabled(activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
+                Toast.makeText(activity, if (on) "终端-文件联动中" else "已关闭，点击开启", Toast.LENGTH_SHORT).show()
+                true
+            }
         }
+
+    fun silentCd(ubuntuPath: String) {
+        session?.write("cd $ubuntuPath\n")
     }
 
     fun prefillCdCommand(ubuntuPath: String) {
@@ -420,7 +445,6 @@ class EmbeddedTerminalPage : ShellPage {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(ui.dp(12), 0, ui.dp(8), 0)
             setBackgroundColor(0xFF111418.toInt())
-            addView(syncToggleButton(activity, ui), LinearLayout.LayoutParams(ui.dp(42), ui.dp(30)))
             addView(ui.text("终端", 15f, Color.WHITE, bold = true).apply {
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END

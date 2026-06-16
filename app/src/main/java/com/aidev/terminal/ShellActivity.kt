@@ -471,8 +471,7 @@ class ShellActivity : Activity() {
 
     fun syncTerminalCd(ubuntuPath: String) {
         val termPage = pages[TAB_TERMINAL] as? EmbeddedTerminalPage ?: return
-        if (currentIndex != TAB_TERMINAL) switchTo(TAB_TERMINAL)
-        termPage.prefillCdCommand(ubuntuPath)
+        termPage.silentCd(ubuntuPath)
     }
 
     private fun renderCurrent(previousIndex: Int = currentIndex, animateForward: Boolean?) {
