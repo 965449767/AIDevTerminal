@@ -102,6 +102,14 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
         val rootfs = File(activity.filesDir, "home/ubuntu-rootfs").absolutePath
         val aidevHome = File(activity.filesDir, "home").absolutePath
 
+        // 检查 proot 和 rootfs 是否存在
+        if (!File(proot).exists()) {
+            Log.e("AIDevBackup", "libproot.so not found at: $proot")
+        }
+        if (!File(rootfs).exists()) {
+            Log.e("AIDevBackup", "rootfs not found at: $rootfs")
+        }
+
         val shellCmd = buildString {
             append("$proot --link2symlink -0 -r $rootfs ")
             append("-b /dev -b /proc -b /sys -b /system/bin -b /system/etc ")
@@ -110,13 +118,16 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
             append("/usr/bin/env -i HOME=/root ")
             append("PATH=/host-home/dev-env/bin:/system/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ")
             append("TERM=xterm-256color LANG=C.UTF-8 LC_ALL=C.UTF-8 ")
-            append("/bin/sh -c '$command'")
+            // 使用双引号包裹命令，避免单引号冲突
+            append("/bin/sh -c \"$command\"")
         }
 
+        Log.d("AIDevBackup", "runInProot cmd: ${shellCmd.take(200)}...")
         return Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", shellCmd))
     }
 
     private fun runNative(command: Array<String>): Process {
+        Log.d("AIDevBackup", "runNative: ${command.joinToString(" ")}")
         return Runtime.getRuntime().exec(command)
     }
 
@@ -124,6 +135,18 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
     //  流消费（防止死锁）
     // ═════════════════════════════════════════════════════════════════
 
+    /**
+     * 消费并收集 stdout 和 stderr，返回 Pair<stdout, stderr>
+     */
+    private fun collectOutput(process: Process): Pair<String, String> {
+        val stdout = process.inputStream.bufferedReader().use { it.readText() }
+        val stderr = process.errorStream.bufferedReader().use { it.readText() }
+        return Pair(stdout, stderr)
+    }
+
+    /**
+     * 在后台线程消费流，防止死锁。用于不需要读取输出的场景。
+     */
     private fun drainStream(process: Process) {
         Thread { process.inputStream.bufferedReader().use { it.readText() } }.start()
         Thread { process.errorStream.bufferedReader().use { it.readText() } }.start()
@@ -288,13 +311,13 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
                             listFile.writeText(fileListContent)
                             Log.d("AIDevBackup", "[${item.id}] fileList: $fileListContent")
 
-                            // 先检查文件是否存在
+                            // 先检查文件是否存在 - 结果写入临时文件避免流竞争
+                            val checkResultFile = File(activity.filesDir, "home/tasks/.backup_check_${item.id}.txt")
                             val checkCmd = sourcePaths.joinToString(" && ") { "test -e $it" }
-                            val checkProc = runInProot("$checkCmd && echo 'EXISTS' || echo 'MISSING'")
-                            val checkResult = checkProc.inputStream.bufferedReader().readText().trim()
-                            drainStream(checkProc)
-                            checkProc.waitFor()
-                            Log.d("AIDevBackup", "[${item.id}] checkResult: $checkResult")
+                            val checkProc = runInProot("$checkCmd && echo EXISTS > /host-home/tasks/.backup_check_${item.id}.txt || echo MISSING > /host-home/tasks/.backup_check_${item.id}.txt")
+                            val checkCode = waitForProcess(checkProc)
+                            val checkResult = if (checkResultFile.exists()) checkResultFile.readText().trim() else "NO_RESULT"
+                            Log.d("AIDevBackup", "[${item.id}] checkCode=$checkCode, checkResult=$checkResult")
 
                             if (checkResult == "EXISTS") {
                                 val tarCmd = "tar -czf /host-home/tasks/.backup_temp.tar.gz -C / -T /host-home/tasks/.backup_filelist_${item.id}.txt"
@@ -303,14 +326,14 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
                                 Log.d("AIDevBackup", "[${item.id}] tar exitCode=$exitCode")
 
                                 val tempTarInRootfs = File(activity.filesDir, "home/tasks/.backup_temp.tar.gz")
-                                if (tempTarInRootfs.exists()) {
+                                if (tempTarInRootfs.exists() && tempTarInRootfs.length() > 0) {
                                     tempTarInRootfs.renameTo(subTar)
                                     Log.d("AIDevBackup", "[${item.id}] moved to ${subTar.absolutePath}, size=${subTar.length()}")
                                 } else {
-                                    Log.w("AIDevBackup", "[${item.id}] temp tar not found after tar command")
+                                    Log.w("AIDevBackup", "[${item.id}] temp tar not found or empty after tar command")
                                 }
                             } else {
-                                Log.w("AIDevBackup", "[${item.id}] source files missing")
+                                Log.w("AIDevBackup", "[${item.id}] source files missing or check failed, result=$checkResult")
                             }
                         } else {
                             // 原生打包
