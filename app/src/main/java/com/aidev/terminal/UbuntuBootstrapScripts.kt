@@ -331,6 +331,15 @@ AIDEV_PWD_HOOK_EOF
           fi
         }
 
+        # 公共 proot 绑定参数（enter_ubuntu 和 run_ubuntu_command 共用）
+        proot_common_binds() {
+          echo "-b /dev -b /proc -b /sys -b /system/bin -b /system/etc -b /system/framework -b /sdcard -b /storage -b ${'$'}AIDEV_HOME:/host-home"
+        }
+
+        proot_common_env() {
+          echo "HOME=/root AIDEV_HOME=/host-home AIDEV_VERSION=${'$'}{AIDEV_VERSION:-unknown} PATH=/host-home/dev-env/bin:/system/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${'$'}{TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8"
+        }
+
         enter_ubuntu() {
           has_ubuntu || install_ubuntu --fast || return ${'$'}?
           ensure_android_groups "${'$'}AIDEV_ROOTFS"
@@ -338,11 +347,10 @@ AIDEV_PWD_HOOK_EOF
           shell="/bin/bash"
           [ -x "${'$'}AIDEV_ROOTFS/bin/bash" ] || shell="/bin/sh"
           cd "${'$'}AIDEV_HOME" || exit 1
-          exec "${'$'}AIDEV_PROOT" --link2symlink -0 -r "${'$'}AIDEV_ROOTFS" \
-            -b /dev -b /proc -b /sys -b /system/bin -b /system/etc -b /system/framework -b /sdcard -b /storage -b "${'$'}AIDEV_HOME:/host-home" \
+          eval exec "${'$'}AIDEV_PROOT" --link2symlink -0 -r "${'$'}AIDEV_ROOTFS" \
+            $(proot_common_binds) \
             -w /root /usr/bin/env -i \
-            HOME=/root AIDEV_HOME=/host-home AIDEV_VERSION="${'$'}{AIDEV_VERSION:-unknown}" PATH=/host-home/dev-env/bin:/system/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-            TERM="${'$'}{TERM:-xterm-256color}" LANG=C.UTF-8 LC_ALL=C.UTF-8 "${'$'}shell" -l
+            $(proot_common_env) "${'$'}shell" -l
         }
 
         run_ubuntu_command() {
@@ -350,11 +358,10 @@ AIDEV_PWD_HOOK_EOF
           ensure_android_groups "${'$'}AIDEV_ROOTFS"
           ensure_ubuntu_helpers
           cd "${'$'}AIDEV_HOME" || exit 1
-          exec "${'$'}AIDEV_PROOT" --link2symlink -0 -r "${'$'}AIDEV_ROOTFS" \
-            -b /dev -b /proc -b /sys -b /system/bin -b /system/etc -b /system/framework -b /sdcard -b /storage -b "${'$'}AIDEV_HOME:/host-home" \
+          eval exec "${'$'}AIDEV_PROOT" --link2symlink -0 -r "${'$'}AIDEV_ROOTFS" \
+            $(proot_common_binds) \
             -w /root /usr/bin/env -i \
-            HOME=/root AIDEV_HOME=/host-home AIDEV_VERSION="${'$'}{AIDEV_VERSION:-unknown}" PATH=/host-home/dev-env/bin:/system/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-            TERM="${'$'}{TERM:-xterm-256color}" LANG=C.UTF-8 LC_ALL=C.UTF-8 /bin/sh -lc "${'$'}*"
+            $(proot_common_env) /bin/sh -lc "${'$'}*"
         }
 
         case "${'$'}cmd" in

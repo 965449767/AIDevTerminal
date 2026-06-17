@@ -15,7 +15,7 @@ import android.util.Log
 object AIDevCommandDispatcher {
 
     private const val TAG = "AIDevCommandDispatcher"
-    private const val CHANNEL_ID = "aidev_terminal"
+    private const val CHANNEL_ID = Constants.NOTIFICATION_CHANNEL_ID
 
     /** 发送系统通知 */
     fun notify(context: Context, title: String, msg: String) {

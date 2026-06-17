@@ -9,7 +9,7 @@ data class TerminalShellAssetPaths(
 )
 
 object TerminalShellAssets {
-    private const val ASSET_VERSION = "0.12.32-terminal-file-sync-debug"
+    private const val ASSET_VERSION = Constants.ASSET_VERSION
 
     fun ensure(activity: Activity): TerminalShellAssetPaths {
         val home = File(activity.filesDir, "home").apply { mkdirs() }

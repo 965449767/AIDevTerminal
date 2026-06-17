@@ -15,10 +15,10 @@ class SysCommandReceiver : BroadcastReceiver() {
         private const val TAG = "SysCommandReceiver"
 
         // 内部 Action，不暴露给外部应用
-        const val ACTION_NOTIFY = "com.aidev.terminal.internal.NOTIFY"
-        const val ACTION_CLIP = "com.aidev.terminal.internal.CLIP"
-        const val ACTION_VOLUME = "com.aidev.terminal.internal.VOLUME"
-        const val ACTION_BRIGHTNESS = "com.aidev.terminal.internal.BRIGHTNESS"
+        const val ACTION_NOTIFY = Constants.Actions.NOTIFY
+        const val ACTION_CLIP = Constants.Actions.CLIP
+        const val ACTION_VOLUME = Constants.Actions.VOLUME
+        const val ACTION_BRIGHTNESS = Constants.Actions.BRIGHTNESS
 
         /** 发送内部广播（仅本应用可用） */
         fun send(context: Context, action: String, extras: (Intent.() -> Unit)? = null) {
