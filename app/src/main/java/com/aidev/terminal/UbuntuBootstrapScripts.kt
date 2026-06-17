@@ -339,7 +339,7 @@ AIDEV_PWD_HOOK_EOF
           [ -x "${'$'}AIDEV_ROOTFS/bin/bash" ] || shell="/bin/sh"
           cd "${'$'}AIDEV_HOME" || exit 1
           exec "${'$'}AIDEV_PROOT" --link2symlink -0 -r "${'$'}AIDEV_ROOTFS" \
-            -b /dev -b /proc -b /sys -b /sdcard -b "${'$'}AIDEV_HOME:/host-home" \
+            -b /dev -b /proc -b /sys -b /sdcard -b /storage -b "${'$'}AIDEV_HOME:/host-home" \
             -w /root /usr/bin/env -i \
             HOME=/root AIDEV_HOME=/host-home AIDEV_VERSION="${'$'}{AIDEV_VERSION:-unknown}" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
             TERM="${'$'}{TERM:-xterm-256color}" LANG=C.UTF-8 LC_ALL=C.UTF-8 "${'$'}shell" -l
@@ -351,7 +351,7 @@ AIDEV_PWD_HOOK_EOF
           ensure_ubuntu_helpers
           cd "${'$'}AIDEV_HOME" || exit 1
           exec "${'$'}AIDEV_PROOT" --link2symlink -0 -r "${'$'}AIDEV_ROOTFS" \
-            -b /dev -b /proc -b /sys -b /sdcard -b "${'$'}AIDEV_HOME:/host-home" \
+            -b /dev -b /proc -b /sys -b /sdcard -b /storage -b "${'$'}AIDEV_HOME:/host-home" \
             -w /root /usr/bin/env -i \
             HOME=/root AIDEV_HOME=/host-home AIDEV_VERSION="${'$'}{AIDEV_VERSION:-unknown}" PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
             TERM="${'$'}{TERM:-xterm-256color}" LANG=C.UTF-8 LC_ALL=C.UTF-8 /bin/sh -lc "${'$'}*"
