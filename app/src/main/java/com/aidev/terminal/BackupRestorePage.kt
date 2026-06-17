@@ -98,19 +98,28 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
 
     private fun runInProot(command: String): Process {
         val appInfo = activity.applicationInfo
-        val proot = File(appInfo.nativeLibraryDir, "libproot.so").absolutePath
+        val nativeDir = appInfo.nativeLibraryDir
+        val proot = File(nativeDir, "libproot.so").absolutePath
+        val prootLoader = File(nativeDir, "libproot_loader.so").absolutePath
         val rootfs = File(activity.filesDir, "home/ubuntu-rootfs").absolutePath
         val aidevHome = File(activity.filesDir, "home").absolutePath
+        val prootTmpDir = File(activity.cacheDir, "proot_tmp").apply { mkdirs() }.absolutePath
 
         // 检查 proot 和 rootfs 是否存在
         if (!File(proot).exists()) {
             Log.e("AIDevBackup", "libproot.so not found at: $proot")
         }
+        if (!File(prootLoader).exists()) {
+            Log.e("AIDevBackup", "libproot_loader.so not found at: $prootLoader")
+        }
         if (!File(rootfs).exists()) {
             Log.e("AIDevBackup", "rootfs not found at: $rootfs")
         }
 
+        // 构建带环境变量的 shell 命令
+        // proot 需要 PROOT_LOADER 和 PROOT_TMP_DIR 才能正常工作
         val shellCmd = buildString {
+            append("export PROOT_LOADER=$prootLoader PROOT_TMP_DIR=$prootTmpDir LD_LIBRARY_PATH=$nativeDir && ")
             append("$proot --link2symlink -0 -r $rootfs ")
             append("-b /dev -b /proc -b /sys -b /system/bin -b /system/etc ")
             append("-b /system/framework -b /sdcard -b /storage ")
@@ -118,7 +127,6 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
             append("/usr/bin/env -i HOME=/root ")
             append("PATH=/host-home/dev-env/bin:/system/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ")
             append("TERM=xterm-256color LANG=C.UTF-8 LC_ALL=C.UTF-8 ")
-            // 使用双引号包裹命令，避免单引号冲突
             append("/bin/sh -c \"$command\"")
         }
 
