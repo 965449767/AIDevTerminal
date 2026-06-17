@@ -2,11 +2,15 @@ package com.aidev.terminal
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.MotionEvent
@@ -50,6 +54,8 @@ class ShellActivity : Activity() {
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         prefs = getSharedPreferences("aidev_ui", MODE_PRIVATE)
         ui = AIDevUi(this, prefs)
+        requestEssentialPermissions()
+        ensureNotificationChannel()
         if (prefs.getBoolean("keepalive_auto", true)) runCatching { KeepAliveService.start(this) }
         buildShell()
         val requestedTab = intent?.getIntExtra("shell_tab", -1) ?: -1
@@ -505,6 +511,7 @@ class ShellActivity : Activity() {
 
     companion object {
         private const val REQ_BACKGROUND_IMAGE = 4301
+        private const val REQ_NOTIFICATION = 4302
         const val TAB_TERMINAL = 0
         const val TAB_FILES = 1
         const val TAB_TASKS = 2
@@ -517,6 +524,50 @@ class ShellActivity : Activity() {
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
             activity.startActivity(intent)
             activity.overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)
+        }
+    }
+
+    /** 请求必要的运行时权限 */
+    private fun requestEssentialPermissions() {
+        // Android 13+ 需要 POST_NOTIFICATIONS 权限
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFICATION)
+            }
+        }
+        // WRITE_SETTINGS 需要特殊处理（引导用户到系统设置）
+        if (Build.VERSION.SDK_INT >= 23) {
+            if (!android.provider.Settings.System.canWrite(this)) {
+                // 首次启动时提示用户，但不强制跳转（避免打断用户体验）
+                if (!prefs.getBoolean("write_settings_prompted", false)) {
+                    prefs.edit().putBoolean("write_settings_prompted", true).apply()
+                    AlertDialog.Builder(this)
+                        .setTitle("需要修改系统设置权限")
+                        .setMessage("亮度调节等功能需要\"修改系统设置\"权限。请在接下来的系统设置中开启此权限。")
+                        .setPositiveButton("去开启") { _, _ ->
+                            startActivity(Intent(android.provider.Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                                data = android.net.Uri.parse("package:$packageName")
+                            })
+                        }
+                        .setNegativeButton("稍后", null)
+                        .show()
+                }
+            }
+        }
+    }
+
+    /** 确保通知渠道已创建 */
+    private fun ensureNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= 26) {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val channel = NotificationChannel(
+                "aidev_terminal",
+                "AIDev Terminal",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "AIDev Terminal 系统通知"
+            }
+            nm.createNotificationChannel(channel)
         }
     }
 }

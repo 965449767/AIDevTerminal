@@ -17,8 +17,19 @@ class SysCommandReceiver : BroadcastReceiver() {
                 val msg = intent.getStringExtra("msg") ?: ""
                 val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 val channelId = "aidev_terminal"
+                // 确保渠道存在（如果 ShellActivity 还没有创建）
                 if (Build.VERSION.SDK_INT >= 26) {
-                    nm.createNotificationChannel(NotificationChannel(channelId, "AIDev Terminal", NotificationManager.IMPORTANCE_DEFAULT))
+                    if (nm.getNotificationChannel(channelId) == null) {
+                        nm.createNotificationChannel(NotificationChannel(channelId, "AIDev Terminal", NotificationManager.IMPORTANCE_DEFAULT))
+                    }
+                }
+                // 检查通知权限（Android 13+）
+                if (Build.VERSION.SDK_INT >= 33) {
+                    if (context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                        // 权限未授予，静默失败（避免崩溃）
+                        android.util.Log.w("SysCommandReceiver", "POST_NOTIFICATIONS permission not granted")
+                        return
+                    }
                 }
                 val builder = if (Build.VERSION.SDK_INT >= 26) {
                     android.app.Notification.Builder(context, channelId)
