@@ -63,6 +63,9 @@ object TerminalShellAssets {
             out.writeText("# AIDev command marker. Android 私有目录禁止直接执行脚本；实际入口由 .aidevrc 函数转发。\n")
             out.setReadable(true, false)
         }
+        // camera-photo 和 camera-pick 是可执行脚本，不依赖 .aidevrc 函数
+        writeCameraScript(bin, "camera-photo", "photo")
+        writeCameraScript(bin, "camera-pick", "pick")
         File(home, ".aidev_shell_fallback").delete()
     }
 
@@ -138,6 +141,59 @@ object TerminalShellAssets {
             ${UbuntuBootstrapScripts.agentShellFunctions()}
             """.trimIndent() + "\n"
         )
+    }
+
+    private fun writeCameraScript(binDir: File, name: String, mode: String) {
+        val script = File(binDir, name)
+        script.writeText(
+            """#!/system/bin/sh
+            # AIDev camera bridge script. Works in both Android shell and Ubuntu proot.
+            # Usage: $name [output_path]
+
+            # Detect AIDEV_HOME
+            if [ -z "${'$'}AIDEV_HOME" ]; then
+                # Fallback: derive from script location
+                AIDEV_HOME="$(dirname "$(dirname "$(dirname "${'$'}0")")")"
+            fi
+
+            BRIDGE_DIR="${'$'}AIDEV_HOME/.aidev-shizuku-bridge"
+            REQ_DIR="${'$'}BRIDGE_DIR/request"
+            RES_DIR="${'$'}BRIDGE_DIR/result"
+            mkdir -p "${'$'}REQ_DIR" "${'$'}RES_DIR"
+
+            TS=$(date +%s)
+            PID=${'$'}PPID
+            REQ="${'$'}REQ_DIR/camera_${'$'}TS_${'$'}PID"
+            RES="${'$'}RES_DIR/camera_${'$'}TS_${'$'}PID"
+
+            if [ "$mode" = "photo" ]; then
+                OUT="${'$'}{1:-/sdcard/DCIM/AIDev/photo_$(date +%Y%m%d_%H%M%S).jpg}"
+                echo "MODE=photo" > "${'$'}REQ"
+                echo "OUTPUT=${'$'}OUT" >> "${'$'}REQ"
+                echo "[CAMERA] Sending photo request..."
+            else
+                echo "MODE=pick" > "${'$'}REQ"
+                echo "[CAMERA] Sending pick request..."
+            fi
+
+            COUNT=0
+            while [ ! -f "${'$'}RES" ] && [ ${'$'}COUNT -lt 60 ]; do
+                sleep 1
+                COUNT=$((COUNT + 1))
+            done
+
+            if [ -f "${'$'}RES" ]; then
+                cat "${'$'}RES"
+                rm -f "${'$'}REQ" "${'$'}RES"
+            else
+                echo '{"status":"error","error":"${'$'}{mode} timeout"}'
+                rm -f "${'$'}REQ"
+                exit 1
+            fi
+            """.trimIndent() + "\n"
+        )
+        script.setExecutable(true, false)
+        script.setReadable(true, false)
     }
 
     private fun writeShellEntry(home: File, rc: File, entry: File) {
