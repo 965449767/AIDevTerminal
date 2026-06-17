@@ -83,6 +83,7 @@ class EmbeddedAIPage : ShellPage {
         list.addView(ui.actionRow("日志摘要", "抽取错误、命令和修改线索") { showAgentLogSummary() })
         list.addView(ui.actionRow("追踪代理", "tail 最近 AI/任务日志") { host.openTerminal("aidev-agent-tail") })
         list.addView(ui.actionRow("端口详情", "查看 LISTEN 端口") { showPortDetails() })
+        list.addView(ui.actionRow("网络诊断", "ping、HTTP、端口、DNS 检测") { openNetworkDiagnostics() })
         list.addView(ui.actionRow("安装 OpenCode", "在终端执行 install-aitool") { host.openTerminal("install-aitool") })
 
         list.addView(ui.divider())
@@ -317,5 +318,15 @@ class EmbeddedAIPage : ShellPage {
 
     private fun copyText(label: String, text: String) {
         (activity.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)?.setPrimaryClip(android.content.ClipData.newPlainText(label, text))
+    }
+
+    private fun openNetworkDiagnostics() {
+        val page = NetworkDiagnosticsPage()
+        val view = page.create(activity, ui, host)
+        AlertDialog.Builder(activity)
+            .setTitle("网络诊断")
+            .setView(view)
+            .setNegativeButton("关闭") { _, _ -> page.onSelected(activity, view) }
+            .show()
     }
 }

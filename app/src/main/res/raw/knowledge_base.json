@@ -1,0 +1,121 @@
+{
+  "categories": [
+    {
+      "id": "shell",
+      "name": "Shell 基础",
+      "items": [
+        {"title": "查看当前目录", "cmd": "pwd", "desc": "Print Working Directory"},
+        {"title": "列出文件", "cmd": "ls -la", "desc": "详细列出当前目录所有文件"},
+        {"title": "切换目录", "cmd": "cd ~", "desc": "切换到用户主目录"},
+        {"title": "创建目录", "cmd": "mkdir -p dir/subdir", "desc": "递归创建目录"},
+        {"title": "复制文件", "cmd": "cp -r src/ dest/", "desc": "递归复制目录"},
+        {"title": "移动/重命名", "cmd": "mv old.txt new.txt", "desc": "移动或重命名文件"},
+        {"title": "删除文件", "cmd": "rm -rf dir/", "desc": "强制递归删除（慎用）"},
+        {"title": "查看文件内容", "cmd": "cat file.txt", "desc": "输出文件内容到终端"},
+        {"title": "分页查看", "cmd": "less file.txt", "desc": "可滚动查看大文件"},
+        {"title": "查看文件头", "cmd": "head -n 20 file.txt", "desc": "查看前20行"},
+        {"title": "查看文件尾", "cmd": "tail -f log.txt", "desc": "实时追踪日志文件"},
+        {"title": "查找文件", "cmd": "find . -name '*.kt'", "desc": "在当前目录查找 .kt 文件"},
+        {"title": "文本搜索", "cmd": "grep -rn 'keyword' .", "desc": "递归搜索目录中的关键字"},
+        {"title": "磁盘使用", "cmd": "du -sh *", "desc": "查看当前目录各文件大小"},
+        {"title": "磁盘空间", "cmd": "df -h", "desc": "查看文件系统磁盘空间"}
+      ]
+    },
+    {
+      "id": "network",
+      "name": "网络诊断",
+      "items": [
+        {"title": "测试连通性", "cmd": "ping -c 4 google.com", "desc": "发送4个ICMP包测试连通性"},
+        {"title": "路由追踪", "cmd": "traceroute google.com", "desc": "显示数据包到达目标的路由路径"},
+        {"title": "查看网络接口", "cmd": "ip addr", "desc": "显示所有网络接口信息"},
+        {"title": "查看路由表", "cmd": "ip route", "desc": "显示内核路由表"},
+        {"title": "查看连接", "cmd": "ss -tlnp", "desc": "显示所有TCP监听端口和进程"},
+        {"title": "DNS查询", "cmd": "nslookup google.com", "desc": "查询域名对应的IP地址"},
+        {"title": "HTTP GET", "cmd": "curl -I https://api.github.com", "desc": "获取HTTP响应头"},
+        {"title": "下载文件", "cmd": "curl -O https://example.com/file.zip", "desc": "下载文件到当前目录"},
+        {"title": "HTTP POST", "cmd": "curl -X POST -d 'key=value' https://api.example.com", "desc": "发送POST请求"},
+        {"title": "端口扫描", "cmd": "nc -zv 127.0.0.1 1-1000", "desc": "扫描本地1-1000端口"},
+        {"title": "监听端口", "cmd": "nc -l -p 8080", "desc": "在8080端口监听连接"},
+        {"title": "网络统计", "cmd": "netstat -s", "desc": "显示网络协议统计信息"}
+      ]
+    },
+    {
+      "id": "git",
+      "name": "Git 速查",
+      "items": [
+        {"title": "克隆仓库", "cmd": "git clone https://github.com/user/repo.git", "desc": "克隆远程仓库到本地"},
+        {"title": "查看状态", "cmd": "git status", "desc": "查看工作区状态"},
+        {"title": "添加文件", "cmd": "git add -A", "desc": "添加所有变更到暂存区"},
+        {"title": "提交变更", "cmd": "git commit -m 'message'", "desc": "提交暂存区的变更"},
+        {"title": "推送代码", "cmd": "git push origin main", "desc": "推送本地提交到远程"},
+        {"title": "拉取更新", "cmd": "git pull origin main", "desc": "拉取远程更新并合并"},
+        {"title": "查看日志", "cmd": "git log --oneline -10", "desc": "查看最近10条提交记录"},
+        {"title": "创建分支", "cmd": "git checkout -b feature-branch", "desc": "创建并切换到新分支"},
+        {"title": "切换分支", "cmd": "git checkout main", "desc": "切换到指定分支"},
+        {"title": "合并分支", "cmd": "git merge feature-branch", "desc": "将指定分支合并到当前分支"},
+        {"title": "查看差异", "cmd": "git diff", "desc": "查看工作区与暂存区的差异"},
+        {"title": "撤销修改", "cmd": "git checkout -- file.txt", "desc": "撤销对文件的修改"},
+        {"title": "查看远程", "cmd": "git remote -v", "desc": "查看配置的远程仓库"},
+        {"title": "标签管理", "cmd": "git tag -a v1.0 -m 'Version 1.0'", "desc": "创建带注释的标签"},
+        {"title": "储藏变更", "cmd": "git stash", "desc": "临时储藏当前变更"}
+      ]
+    },
+    {
+      "id": "security",
+      "name": "安全基础",
+      "items": [
+        {"title": "查看文件权限", "cmd": "ls -la | grep '^-'", "desc": "列出所有文件及其权限"},
+        {"title": "修改权限", "cmd": "chmod 600 ~/.ssh/id_rsa", "desc": "设置私钥为仅所有者可读"},
+        {"title": "修改所有者", "cmd": "chown user:group file.txt", "desc": "修改文件所有者和组"},
+        {"title": "查找SUID文件", "cmd": "find / -perm -4000 2>/dev/null", "desc": "查找系统上的SUID文件"},
+        {"title": "生成密钥", "cmd": "ssh-keygen -t ed25519 -C 'email@example.com'", "desc": "生成SSH密钥对"},
+        {"title": "查看进程", "cmd": "ps aux | grep suspicious", "desc": "查找可疑进程"},
+        {"title": "查看登录记录", "cmd": "last -a", "desc": "查看最近的登录记录"},
+        {"title": "检查开放端口", "cmd": "ss -tlnp", "desc": "查看系统监听的端口"},
+        {"title": "文件哈希", "cmd": "sha256sum file.txt", "desc": "计算文件SHA256哈希值"},
+        {"title": "加密文件", "cmd": "openssl enc -aes-256-cbc -in file.txt -out file.enc", "desc": "使用AES加密文件"}
+      ]
+    },
+    {
+      "id": "ubuntu",
+      "name": "Ubuntu/Termux",
+      "items": [
+        {"title": "更新包列表", "cmd": "apt update", "desc": "更新可用软件包列表"},
+        {"title": "升级软件", "cmd": "apt upgrade -y", "desc": "升级所有已安装软件"},
+        {"title": "安装软件", "cmd": "apt install -y nginx", "desc": "安装指定软件包"},
+        {"title": "搜索软件", "cmd": "apt search nginx", "desc": "搜索软件包"},
+        {"title": "查看已安装", "cmd": "dpkg -l | grep nginx", "desc": "查看已安装的软件包"},
+        {"title": "Termux包管理", "cmd": "pkg install git", "desc": "Termux内置包管理器"},
+        {"title": "查看环境变量", "cmd": "env | sort", "desc": "查看所有环境变量"},
+        {"title": "查看PATH", "cmd": "echo $PATH | tr ':' '\n'", "desc": "以每行一个目录显示PATH"},
+        {"title": "查看系统信息", "cmd": "uname -a", "desc": "显示内核和系统信息"},
+        {"title": "查看内存", "cmd": "free -h", "desc": "以人类可读格式显示内存使用"},
+        {"title": "查看CPU", "cmd": "lscpu", "desc": "显示CPU详细信息"},
+        {"title": "查看进程", "cmd": "htop", "desc": "交互式进程查看器"},
+        {"title": "服务管理", "cmd": "systemctl status ssh", "desc": "查看服务状态"},
+        {"title": "用户管理", "cmd": "whoami && id", "desc": "查看当前用户信息"}
+      ]
+    },
+    {
+      "id": "oneliners",
+      "name": "Shell One-liners",
+      "items": [
+        {"title": "批量重命名", "cmd": "for f in *.txt; do mv \"$f\" \"${f%.txt}.md\"; done", "desc": "将所有 .txt 改为 .md"},
+        {"title": "查找大文件", "cmd": "find . -type f -size +100M -exec ls -lh {} \\;", "desc": "查找大于100MB的文件"},
+        {"title": "统计代码行数", "cmd": "find . -name '*.kt' | xargs wc -l", "desc": "统计所有Kotlin文件行数"},
+        {"title": "批量替换文本", "cmd": "sed -i 's/old/new/g' *.txt", "desc": "在所有 .txt 中替换文本"},
+        {"title": "生成随机密码", "cmd": "openssl rand -base64 16", "desc": "生成16字节随机密码"},
+        {"title": "JSON格式化", "cmd": "echo '{\"a\":1}' | python3 -m json.tool", "desc": "格式化JSON输出"},
+        {"title": "解压所有zip", "cmd": "for z in *.zip; do unzip \"$z\" -d \"${z%.zip}\"; done", "desc": "批量解压zip文件"},
+        {"title": "监控目录变化", "cmd": "watch -n 1 'ls -la'", "desc": "每秒刷新显示目录内容"},
+        {"title": "杀死进程", "cmd": "kill -9 $(pgrep -f 'process_name')", "desc": "强制杀死指定进程"},
+        {"title": "端口占用", "cmd": "lsof -i :8080", "desc": "查看占用8080端口的进程"},
+        {"title": "清空文件", "cmd": "> file.txt", "desc": "清空文件内容"},
+        {"title": "创建空文件", "cmd": "touch file.txt", "desc": "创建空文件或更新时间戳"},
+        {"title": "查看命令位置", "cmd": "which python3", "desc": "查找命令的完整路径"},
+        {"title": "查看命令类型", "cmd": "type ls", "desc": "显示命令是内置还是外部"},
+        {"title": "后台运行", "cmd": "nohup command &", "desc": "在后台运行命令，忽略挂起信号"}
+      ]
+    }
+  ]
+}

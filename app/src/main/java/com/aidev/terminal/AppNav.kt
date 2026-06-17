@@ -20,7 +20,8 @@ object AppNav {
         "终端" to { openTerminal(activity, "") },
         "文件" to { ShellActivity.open(activity, ShellActivity.TAB_FILES) },
         "AI代理" to { ShellActivity.open(activity, ShellActivity.TAB_AI) },
-        "设置" to { open(activity, SettingsActivity::class.java) }
+        "设置" to { open(activity, SettingsActivity::class.java) },
+        "知识库" to { ShellActivity.open(activity, ShellActivity.TAB_KNOWLEDGE) }
     )
 
     fun attach(activity: Activity, ui: AIDevUi, root: android.view.View, current: Class<out Activity>) {
