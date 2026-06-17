@@ -276,9 +276,15 @@ class EmbeddedSettingsPage : ShellPage {
             val binPaths = listOf(
                 File(rootfs, "usr/bin/$cmd"),
                 File(rootfs, "usr/local/bin/$cmd"),
-                File(rootfs, "root/.opencode/bin/$cmd")
+                File(rootfs, "root/.opencode/bin/$cmd"),
+                File(rootfs, "bin/$cmd")
             )
-            val exists = binPaths.any { it.exists() }
+            // Java 特殊处理：也检查 /usr/lib/jvm/ 目录
+            val exists = if (cmd == "java") {
+                binPaths.any { it.exists() } || File(rootfs, "usr/lib/jvm").listFiles()?.any { it.isDirectory } == true
+            } else {
+                binPaths.any { it.exists() }
+            }
             if (!exists) hasBaseMissing = true
             checks.add(CheckItem(label, exists, cmd, null))
         }
@@ -300,7 +306,8 @@ class EmbeddedSettingsPage : ShellPage {
             val binPaths = listOf(
                 File(rootfs, "usr/bin/$cmd"),
                 File(rootfs, "usr/local/bin/$cmd"),
-                File(rootfs, "root/.opencode/bin/$cmd")
+                File(rootfs, "root/.opencode/bin/$cmd"),
+                File(rootfs, "bin/$cmd")
             )
             val exists = binPaths.any { it.exists() }
             val fixCmd = when (cmd) {
