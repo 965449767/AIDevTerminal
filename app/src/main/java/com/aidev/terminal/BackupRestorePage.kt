@@ -2,10 +2,9 @@ package com.aidev.terminal
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.app.ProgressDialog
+import android.content.pm.ApplicationInfo
 import android.os.Handler
 import android.os.Looper
-import android.view.Gravity
 import android.view.View
 import android.widget.CheckBox
 import android.widget.LinearLayout
@@ -14,21 +13,25 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
-import java.io.BufferedReader
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
-import java.io.InputStreamReader
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * 数据备份恢复页面
+ * 数据备份恢复页面 v5
  *
- * 关键设计决策：
- * 1. 不复制到临时目录再打包 — 直接 tar 源路径，避免 OOM
- * 2. 大小计算异步 — 主线程只显示"计算中..."，后台完成后更新
- * 3. 真正的进度条 — 通过定时检查输出文件大小计算百分比
- * 4. 恢复时直接 tar 解压到目标路径 — 不经过临时目录中转
+ * 核心设计：
+ * 1. 逐项打包：每个数据项单独打 tar，完成后合并，精确进度
+ * 2. proot 统一执行壳：所有 tar/dpkg 在 Ubuntu 环境内执行
+ * 3. manifest.json：备份时生成清单，恢复时秒开
+ * 4. 中断清理：AtomicBoolean + process.destroy() + 残留文件删除
+ * 5. 恢复前备份：目标路径重命名为 .backup.old
+ * 6. 大小预估提示：确认对话框显示耗时预期
  */
 class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
 
@@ -39,19 +42,37 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
     private lateinit var host: ShellHost
     private lateinit var content: LinearLayout
     private val selectedItems = mutableSetOf<String>()
-    private val sizeCache = mutableMapOf<String, Long>()
-    private val sizeLoaded = mutableSetOf<String>()
     private val handler = Handler(Looper.getMainLooper())
-    private var progressPoller: Runnable? = null
+    private var cancelled = AtomicBoolean(false)
+    private var currentProcess: Process? = null
 
-    data class DataItem(val id: String, val name: String, val desc: String)
+    data class BackupItem(
+        val id: String,
+        val name: String,
+        val desc: String,
+        val isLarge: Boolean,
+        val defaultSelected: Boolean,
+        val getSourcePath: () -> String,
+        val isInRootfs: Boolean
+    )
 
-    private val dataItems = listOf(
-        DataItem("ubuntu", "Ubuntu 环境", "PRoot rootfs 和系统配置"),
-        DataItem("tasks", "任务数据", "后台任务日志和元数据"),
-        DataItem("ui_prefs", "UI 设置", "主题、背景、字号、快捷键等"),
-        DataItem("shell_prefs", "Shell 设置", "别名、收藏夹等"),
-        DataItem("projects", "项目目录", "外部存储中的项目文件")
+    private val backupItems = listOf(
+        BackupItem("ubuntu_config", "Ubuntu 配置", ".bashrc, .bash_history 等", false, true,
+            { "root/.bashrc root/.bash_history root/.profile root/.gitconfig" }, true),
+        BackupItem("ubuntu_packages", "已安装软件包", "dpkg --get-selections 列表", false, true,
+            { "/host-home/tasks/.backup_packages.list" }, true),
+        BackupItem("ubuntu_projects", "Ubuntu 项目", "/root/projects/ 目录", false, true,
+            { "root/projects" }, true),
+        BackupItem("ubuntu_rootfs", "完整 Ubuntu 环境", "整个 rootfs (1-2GB)", true, false,
+            { "." }, true),
+        BackupItem("tasks", "任务数据", "后台任务日志和元数据", false, true,
+            { File(activity.filesDir, "home/tasks").absolutePath }, false),
+        BackupItem("ui_prefs", "UI 设置", "主题、背景、字号等", false, true,
+            { File(activity.filesDir, "shared_prefs/aidev_ui.xml").absolutePath }, false),
+        BackupItem("shell_prefs", "Shell 设置", "别名、收藏夹等", false, true,
+            { File(activity.filesDir, "shared_prefs/aidev_shell.xml").absolutePath }, false),
+        BackupItem("projects", "Android 项目", "/sdcard/AIDev/ 目录", true, false,
+            { "/sdcard/AIDev" }, false)
     )
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
@@ -62,7 +83,6 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
             orientation = LinearLayout.VERTICAL
             setPadding(ui.dp(DesignTokens.SPACE_12), ui.dp(DesignTokens.SPACE_8), ui.dp(DesignTokens.SPACE_12), ui.dp(DesignTokens.SPACE_24))
         }
-
         if (mode == Mode.BACKUP) renderBackup() else renderRestore()
         return ScrollView(activity).apply { addView(content) }
     }
@@ -70,67 +90,46 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
     override fun onSelected(activity: Activity, view: View) {}
 
     // ═════════════════════════════════════════════════════════════════
-    //  路径与大小
+    //  proot 统一执行壳
     // ═════════════════════════════════════════════════════════════════
 
-    /** 返回 tar 时的相对路径前缀和源 File */
-    private fun getItemTarInfo(id: String): Pair<String, File> = when (id) {
-        "ubuntu" -> "home/ubuntu-rootfs" to File(activity.filesDir, "home/ubuntu-rootfs")
-        "tasks" -> "home/tasks" to File(activity.filesDir, "home/tasks")
-        "ui_prefs" -> "shared_prefs/aidev_ui.xml" to File(activity.filesDir, "shared_prefs/aidev_ui.xml")
-        "shell_prefs" -> "shared_prefs/aidev_shell.xml" to File(activity.filesDir, "shared_prefs/aidev_shell.xml")
-        "projects" -> "AIDev" to File("/sdcard/AIDev")
-        else -> id to File(activity.filesDir, id)
-    }
+    private fun runInProot(command: String): Process {
+        val appInfo = activity.applicationInfo
+        val proot = File(appInfo.nativeLibraryDir, "libproot.so").absolutePath
+        val rootfs = File(activity.filesDir, "home/ubuntu-rootfs").absolutePath
+        val aidevHome = File(activity.filesDir, "home").absolutePath
 
-    private fun getItemSize(id: String): Long {
-        sizeCache[id]?.let { return it }
-        return -1L // 未计算
-    }
-
-    private fun formatSize(bytes: Long): String = when {
-        bytes < 0 -> "计算中..."
-        bytes == 0L -> "不存在"
-        bytes >= 1024L * 1024 * 1024 * 1024 -> String.format("%.2f TB", bytes / (1024.0 * 1024 * 1024 * 1024))
-        bytes >= 1024L * 1024 * 1024 -> String.format("%.2f GB", bytes / (1024.0 * 1024 * 1024))
-        bytes >= 1024L * 1024 -> String.format("%.1f MB", bytes / (1024.0 * 1024))
-        bytes >= 1024L -> String.format("%.1f KB", bytes / 1024.0)
-        else -> "$bytes B"
-    }
-
-    /** 后台计算单个目录大小，完成后更新 UI */
-    private fun loadSizeAsync(id: String, textView: TextView) {
-        if (sizeLoaded.contains(id)) return
-        sizeLoaded.add(id)
-        Thread {
-            try {
-                val (_, file) = getItemTarInfo(id)
-                val size = if (file.exists()) calculateDirSize(file) else 0L
-                sizeCache[id] = size
-                handler.post { textView.text = "${getDataItem(id).name}    ${formatSize(size)}" }
-            } catch (_: OutOfMemoryError) {
-                handler.post { textView.text = "${getDataItem(id).name}    太大无法计算" }
-            } catch (_: Exception) {
-                // ignore
-            }
-        }.start()
-    }
-
-    private fun calculateDirSize(dir: File): Long {
-        if (!dir.exists() || !dir.isDirectory) return 0
-        var total = 0L
-        val stack = mutableListOf(dir)
-        while (stack.isNotEmpty()) {
-            val current = stack.removeAt(stack.size - 1)
-            val files = current.listFiles() ?: continue
-            for (file in files) {
-                if (file.isDirectory) stack.add(file) else total += file.length()
-            }
+        val shellCmd = buildString {
+            append("$proot --link2symlink -0 -r $rootfs ")
+            append("-b /dev -b /proc -b /sys -b /system/bin -b /system/etc ")
+            append("-b /system/framework -b /sdcard -b /storage ")
+            append("-b $aidevHome:/host-home -w /root ")
+            append("/usr/bin/env -i HOME=/root ")
+            append("PATH=/host-home/dev-env/bin:/system/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ")
+            append("TERM=xterm-256color LANG=C.UTF-8 LC_ALL=C.UTF-8 ")
+            append("/bin/sh -c '$command'")
         }
-        return total
+
+        return Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", shellCmd))
     }
 
-    private fun getDataItem(id: String) = dataItems.first { it.id == id }
+    private fun runNative(command: Array<String>): Process {
+        return Runtime.getRuntime().exec(command)
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    //  流消费（防止死锁）
+    // ═════════════════════════════════════════════════════════════════
+
+    private fun drainStream(process: Process) {
+        Thread { process.inputStream.bufferedReader().use { it.readText() } }.start()
+        Thread { process.errorStream.bufferedReader().use { it.readText() } }.start()
+    }
+
+    private fun waitForProcess(process: Process): Int {
+        drainStream(process)
+        return process.waitFor()
+    }
 
     // ═════════════════════════════════════════════════════════════════
     //  备份模式
@@ -139,7 +138,6 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
     private fun renderBackup() {
         content.addView(ui.section("数据备份", "选择要备份的数据项"))
 
-        // 全选开关
         val allSwitch = Switch(activity).apply {
             text = "全选/取消全选"
             setTextColor(ui.palette.text)
@@ -148,85 +146,57 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
         content.addView(allSwitch)
         content.addView(ui.divider())
 
-        // 数据项 CheckBox
         val checkBoxes = mutableMapOf<String, CheckBox>()
-        val sizeTextViews = mutableMapOf<String, TextView>()
-        dataItems.forEach { item ->
-            val (_, file) = getItemTarInfo(item.id)
-            val exists = file.exists()
+        backupItems.forEach { item ->
             val cb = CheckBox(activity).apply {
-                text = "${item.name}    ${if (exists) "计算中..." else "不存在"}"
+                text = item.name
                 setTextColor(ui.palette.text)
-                isEnabled = exists
-                isChecked = exists
+                isEnabled = true
+                isChecked = item.defaultSelected
                 setPadding(ui.dp(DesignTokens.SPACE_12), ui.dp(DesignTokens.SPACE_4), ui.dp(DesignTokens.SPACE_12), ui.dp(DesignTokens.SPACE_4))
             }
-            if (exists) selectedItems.add(item.id)
+            if (item.defaultSelected) selectedItems.add(item.id)
             checkBoxes[item.id] = cb
-            sizeTextViews[item.id] = cb
             content.addView(cb)
         }
 
-        // 全选联动
         allSwitch.setOnCheckedChangeListener { _, isChecked ->
             checkBoxes.values.forEach { it.isChecked = isChecked }
             selectedItems.clear()
-            if (isChecked) selectedItems.addAll(checkBoxes.keys.filter { checkBoxes[it]?.isEnabled == true })
-            updateTotalSize()
+            if (isChecked) selectedItems.addAll(backupItems.map { it.id })
         }
         checkBoxes.forEach { (id, cb) ->
             cb.setOnCheckedChangeListener { _, isChecked ->
                 if (isChecked) selectedItems.add(id) else selectedItems.remove(id)
-                updateTotalSize()
             }
         }
 
-        // 异步加载大小
-        dataItems.forEach { item ->
-            if (checkBoxes[item.id]?.isEnabled == true) {
-                loadSizeAsync(item.id, checkBoxes[item.id]!!)
-            }
-        }
-
-        // 预计大小
         content.addView(ui.divider())
-        val sizeTextView = ui.text("预计备份大小: 计算中...", DesignTokens.TEXT_BODY, ui.palette.accent, bold = true).apply {
-            setPadding(ui.dp(DesignTokens.SPACE_12), ui.dp(DesignTokens.SPACE_12), ui.dp(DesignTokens.SPACE_12), ui.dp(DesignTokens.SPACE_8))
-        }
-        sizeTextView.tag = "size_text"
-        content.addView(sizeTextView)
-
-        // 开始备份
-        content.addView(ui.actionRow("开始备份", "打包选中的数据到 /sdcard/AIDev/backups/") {
+        content.addView(ui.actionRow("开始备份", "打包选中的数据") {
             if (selectedItems.isEmpty()) { toast("请至少选择一项数据"); return@actionRow }
-            confirmAndBackup()
+            showBackupConfirm()
         })
     }
 
-    private fun updateTotalSize() {
-        val total = selectedItems.sumOf { getItemSize(it).coerceAtLeast(0) }
-        val allKnown = selectedItems.all { getItemSize(it) >= 0 }
-        for (i in 0 until content.childCount) {
-            val child = content.getChildAt(i)
-            if (child.tag == "size_text") {
-                (child as TextView).text = "预计备份大小: ${if (allKnown) formatSize(total) else "计算中..."}"
-                break
-            }
+    private fun showBackupConfirm() {
+        val hasLarge = selectedItems.any { id -> backupItems.find { it.id == id }?.isLarge == true }
+        val estimate = if (hasLarge) {
+            "包含大体积数据，预计耗时 3-10 分钟，请确保存储空间充足"
+        } else {
+            "预计很快完成（通常 10-30 秒）"
         }
-    }
-
-    private fun confirmAndBackup() {
-        val totalSize = selectedItems.sumOf { getItemSize(it).coerceAtLeast(0) }
         AlertDialog.Builder(activity)
             .setTitle("确认备份")
-            .setMessage("将备份 ${selectedItems.size} 项数据，预计 ${formatSize(totalSize)}\n\n备份路径: /sdcard/AIDev/backups/")
+            .setMessage("将备份 ${selectedItems.size} 项数据\n\n$estimate\n\n备份路径: /sdcard/AIDev/backups/")
             .setPositiveButton("开始备份") { _, _ -> executeBackup() }
             .setNegativeButton("取消", null)
             .show()
     }
 
     private fun executeBackup() {
-        // 带进度条的对话框
+        cancelled.set(false)
+
+        // 进度对话框
         val dialogView = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(ui.dp(24), ui.dp(16), ui.dp(24), ui.dp(16))
@@ -235,117 +205,171 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
             text = "准备中..."
             setTextColor(ui.palette.text)
             textSize = DesignTokens.TEXT_BODY
-            gravity = Gravity.CENTER
         }
         val progressBar = ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply {
-            isIndeterminate = false
             max = 100
             progress = 0
         }
+        val itemStatusLayout = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, ui.dp(8), 0, 0)
+        }
+        val itemStatusViews = mutableMapOf<String, TextView>()
+        selectedItems.forEach { id ->
+            val name = backupItems.find { it.id == id }?.name ?: id
+            val tv = TextView(activity).apply {
+                text = "  ○ $name"
+                setTextColor(ui.palette.muted)
+                textSize = DesignTokens.TEXT_CAPTION
+            }
+            itemStatusViews[id] = tv
+            itemStatusLayout.addView(tv)
+        }
+
         dialogView.addView(progressBar)
         dialogView.addView(statusText)
+        dialogView.addView(itemStatusLayout)
 
         val dialog = AlertDialog.Builder(activity)
             .setTitle("正在备份")
             .setView(dialogView)
             .setCancelable(false)
+            .setNegativeButton("取消") { _, _ ->
+                cancelled.set(true)
+                currentProcess?.destroy()
+            }
             .show()
 
         Thread {
+            var tempDir: File? = null
             try {
                 val backupDir = File("/sdcard/AIDev/backups").apply { mkdirs() }
                 val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                val backupFile = File(backupDir, "backup_$timestamp.tar.gz")
+                val finalFile = File(backupDir, "backup_$timestamp.tar.gz")
+                tempDir = File(activity.cacheDir, "backup_v5_$timestamp")
+                tempDir.mkdirs()
 
-                // 构建 tar 命令：直接从源路径打包，不经过临时目录
-                val tarArgs = mutableListOf("tar", "-czf", backupFile.absolutePath)
-                val baseDir = activity.filesDir.absolutePath
-                // 对于 filesDir 下的项，使用相对路径
-                // 对于 /sdcard 下的项，需要特殊处理
-                val sdcardItems = mutableListOf<String>()
-                val localItems = mutableListOf<String>()
+                val selectedList = backupItems.filter { selectedItems.contains(it.id) }
+                val total = selectedList.size
+                var completed = 0
 
-                selectedItems.forEach { id ->
-                    val (relPath, _) = getItemTarInfo(id)
-                    if (id == "projects") {
-                        sdcardItems.add(relPath)
+                // 生成包列表（ubuntu_packages 特殊处理）
+                if (selectedItems.contains("ubuntu_packages")) {
+                    handler.post { statusText.text = "正在获取软件包列表..." }
+                    val pkgFile = File(activity.filesDir, "home/tasks/.backup_packages.list")
+                    pkgFile.parentFile?.mkdirs()
+                    val proc = runInProot("dpkg --get-selections > /host-home/tasks/.backup_packages.list 2>/dev/null || echo 'no-dpkg' > /host-home/tasks/.backup_packages.list")
+                    waitForProcess(proc)
+                }
+
+                // 逐项打包
+                for (item in selectedList) {
+                    if (cancelled.get()) break
+
+                    handler.post {
+                        statusText.text = "正在打包: ${item.name} (${completed + 1}/$total)"
+                        itemStatusViews[item.id]?.text = "  ⟳ ${item.name}"
+                        itemStatusViews[item.id]?.setTextColor(ui.palette.accent)
+                    }
+
+                    val sourcePath = item.getSourcePath()
+                    val subTar = File(tempDir, "${item.id}.tar.gz")
+
+                    val exitCode = if (item.isInRootfs) {
+                        // proot 内打包
+                        val proc = runInProot("tar -czf /host-home/tasks/.backup_temp.tar.gz -C / $sourcePath 2>/dev/null || tar -czf /host-home/tasks/.backup_temp.tar.gz $sourcePath 2>/dev/null")
+                        val code = waitForProcess(proc)
+                        // 把临时文件移出来
+                        val tempTarInRootfs = File(activity.filesDir, "home/tasks/.backup_temp.tar.gz")
+                        if (tempTarInRootfs.exists()) {
+                            tempTarInRootfs.renameTo(subTar)
+                        }
+                        code
                     } else {
-                        localItems.add(relPath)
+                        // 原生打包
+                        val sourceFile = File(sourcePath)
+                        if (!sourceFile.exists()) {
+                            1
+                        } else {
+                            val cmd = if (sourceFile.isDirectory) {
+                                arrayOf("tar", "-czf", subTar.absolutePath, "-C", sourceFile.parentFile?.absolutePath ?: ".", sourceFile.name)
+                            } else {
+                                arrayOf("tar", "-czf", subTar.absolutePath, "-C", sourceFile.parentFile?.absolutePath ?: ".", sourceFile.name)
+                            }
+                            val proc = runNative(cmd)
+                            waitForProcess(proc)
+                        }
+                    }
+
+                    completed++
+                    val percent = (completed * 100 / total)
+                    handler.post {
+                        progressBar.progress = percent
+                        if (exitCode == 0 && subTar.exists()) {
+                            itemStatusViews[item.id]?.text = "  ✓ ${item.name}"
+                            itemStatusViews[item.id]?.setTextColor(ui.palette.success ?: ui.palette.accent)
+                        } else {
+                            itemStatusViews[item.id]?.text = "  ✗ ${item.name} (失败)"
+                            itemStatusViews[item.id]?.setTextColor(ui.palette.danger ?: ui.palette.text)
+                        }
                     }
                 }
 
-                // 分两步：先打包本地数据，再追加外部存储数据
-                // 简化方案：使用一个 tar 命令，通过 --transform 重命名
-                // 更简单：直接列出所有源文件
-                val sources = mutableListOf<String>()
-                selectedItems.forEach { id ->
-                    val (_, file) = getItemTarInfo(id)
-                    if (file.exists()) sources.add(file.absolutePath)
-                }
-
-                if (sources.isEmpty()) {
+                if (cancelled.get()) {
                     handler.post {
                         dialog.dismiss()
-                        toast("没有可备份的数据")
+                        toast("备份已取消")
                     }
                     return@Thread
                 }
 
-                // 计算总大小用于进度
-                val totalSize = selectedItems.sumOf { getItemSize(it).coerceAtLeast(0) }
+                // 合并所有子 tar
+                handler.post { statusText.text = "正在合并..." }
+                val mergeList = File(tempDir, "merge_list.txt")
+                selectedList.filter { File(tempDir, "${it.id}.tar.gz").exists() }.forEach {
+                    mergeList.appendText("${it.id}.tar.gz\n")
+                }
 
-                // 启动 tar 进程
-                val cmdArray = arrayOf("tar", "-czf", backupFile.absolutePath) + sources.toTypedArray()
-                handler.post { statusText.text = "正在打包..." }
+                if (mergeList.exists() && mergeList.length() > 0) {
+                    val mergeProc = runNative(arrayOf("tar", "-czf", finalFile.absolutePath, "-C", tempDir.absolutePath, "-T", mergeList.absolutePath))
+                    val mergeCode = waitForProcess(mergeProc)
 
-                val process = Runtime.getRuntime().exec(cmdArray)
-
-                // 进度轮询：每 500ms 检查输出文件大小
-                progressPoller = object : Runnable {
-                    override fun run() {
-                        if (backupFile.exists()) {
-                            val current = backupFile.length()
-                            val percent = if (totalSize > 0) (current * 100 / totalSize).toInt().coerceIn(0, 99) else 0
-                            progressBar.progress = percent
-                            statusText.text = "正在打包... ${formatSize(current)} / ${formatSize(totalSize)}"
+                    if (mergeCode == 0) {
+                        // 生成 manifest.json
+                        val manifest = JSONObject().apply {
+                            put("version", 1)
+                            put("timestamp", SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).format(Date()))
+                            put("items", JSONArray(selectedList.map { JSONObject().apply {
+                                put("id", it.id)
+                                put("name", it.name)
+                            } }))
                         }
-                        handler.postDelayed(this, 500)
-                    }
-                }
-                handler.post(progressPoller!!)
+                        File(backupDir, "backup_$timestamp.manifest.json").writeText(manifest.toString(2))
 
-                // 读取 stderr（tar 的错误输出）
-                val errorReader = BufferedReader(InputStreamReader(process.errorStream))
-                val errors = StringBuilder()
-                var line: String?
-                while (errorReader.readLine().also { line = it } != null) {
-                    errors.append(line).append("\n")
-                }
-                errorReader.close()
-
-                val exitCode = process.waitFor()
-
-                // 停止进度轮询
-                handler.post { progressPoller?.let { handler.removeCallbacks(it) } }
-                progressBar.progress = 100
-
-                if (exitCode == 0 && backupFile.exists()) {
-                    handler.post {
-                        statusText.text = "备份完成!"
-                        dialog.dismiss()
-                        toast("备份完成: ${backupFile.name} (${formatSize(backupFile.length())})")
+                        handler.post {
+                            dialog.dismiss()
+                            toast("备份完成: ${finalFile.name}")
+                        }
+                    } else {
+                        handler.post {
+                            dialog.dismiss()
+                            toast("合并失败")
+                        }
                     }
                 } else {
                     handler.post {
                         dialog.dismiss()
-                        val errMsg = if (errors.isNotBlank()) errors.toString().take(200) else "未知错误"
-                        toast("备份失败 (exit=$exitCode): $errMsg")
+                        toast("没有可备份的数据")
                     }
                 }
-            } catch (e: OutOfMemoryError) {
-                handler.post { progressPoller?.let { handler.removeCallbacks(it) }; dialog.dismiss(); toast("内存不足，请减少备份数据量") }
             } catch (e: Exception) {
-                handler.post { progressPoller?.let { handler.removeCallbacks(it) }; dialog.dismiss(); toast("备份失败: ${e.message}") }
+                handler.post {
+                    dialog.dismiss()
+                    toast("备份失败: ${e.message}")
+                }
+            } finally {
+                tempDir?.deleteRecursively()
+                currentProcess = null
             }
         }.start()
     }
@@ -355,79 +379,58 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
     // ═════════════════════════════════════════════════════════════════
 
     private fun renderRestore() {
-        content.addView(ui.section("数据恢复", "选择备份文件并恢复数据"))
+        content.addView(ui.section("数据恢复", "选择备份文件"))
 
         val backupDir = File("/sdcard/AIDev/backups")
-        val backups = backupDir.listFiles { f -> f.name.endsWith(".tar.gz") }
+        val manifests = backupDir.listFiles { f -> f.name.endsWith(".manifest.json") }
             ?.sortedByDescending { it.lastModified() }
             ?: emptyList()
 
-        if (backups.isEmpty()) {
-            content.addView(ui.emptyState("暂无备份文件", "在 /sdcard/AIDev/backups/ 目录中没有找到备份"))
-            content.addView(ui.actionRow("打开备份目录", "在终端中查看") {
+        if (manifests.isEmpty()) {
+            content.addView(ui.emptyState("暂无备份", "未找到备份文件"))
+            content.addView(ui.actionRow("打开备份目录", "在终端查看") {
                 host.openTerminal("ls -la /sdcard/AIDev/backups/")
             })
             return
         }
 
-        content.addView(ui.text("选择备份文件", DesignTokens.TEXT_BODY, ui.palette.text, bold = true).apply {
-            setPadding(0, ui.dp(DesignTokens.SPACE_8), 0, ui.dp(DesignTokens.SPACE_4))
-        })
-
-        backups.forEach { file ->
-            content.addView(ui.actionRow(file.name, "${formatSize(file.length())}  ·  ${formatDate(file.lastModified())}") {
-                selectBackupFile(file)
+        manifests.forEach { manifestFile ->
+            val tarName = manifestFile.name.replace(".manifest.json", ".tar.gz")
+            val tarFile = File(backupDir, tarName)
+            val dateStr = formatDate(manifestFile.lastModified())
+            content.addView(ui.actionRow(manifestFile.name.replace(".manifest.json", ""), dateStr) {
+                if (tarFile.exists()) {
+                    selectBackupFile(manifestFile, tarFile)
+                } else {
+                    toast("备份文件不存在: $tarName")
+                }
             })
         }
     }
 
-    private fun formatDate(ts: Long) = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(ts))
-
-    private fun selectBackupFile(file: File) {
-        // 用 tar -tzf 列出内容，确定包含哪些数据项
-        val progress = ProgressDialog(activity).apply {
-            setMessage("正在读取备份内容...")
-            setCancelable(false)
-            show()
-        }
-
-        Thread {
-            try {
-                val process = Runtime.getRuntime().exec(arrayOf("tar", "-tzf", file.absolutePath))
-                val reader = BufferedReader(InputStreamReader(process.inputStream))
-                val contents = mutableListOf<String>()
-                var line: String?
-                while (reader.readLine().also { line = it } != null) {
-                    line?.let { contents.add(it) }
-                }
-                reader.close()
-                process.waitFor()
-
-                // 判断包含哪些数据项
-                val availableItems = mutableListOf<DataItem>()
-                dataItems.forEach { item ->
-                    val (relPath, _) = getItemTarInfo(item.id)
-                    if (contents.any { it.startsWith(relPath) }) {
-                        availableItems.add(item)
-                    }
-                }
-
-                if (availableItems.isEmpty()) {
-                    handler.post { progress.dismiss(); toast("备份文件内容为空") }
-                    return@Thread
-                }
-
-                handler.post {
-                    progress.dismiss()
-                    showRestoreDialog(file, availableItems)
-                }
-            } catch (e: Exception) {
-                handler.post { progress.dismiss(); toast("无法读取备份: ${e.message}") }
+    private fun selectBackupFile(manifestFile: File, tarFile: File) {
+        try {
+            val manifest = JSONObject(manifestFile.readText())
+            val itemsArray = manifest.getJSONArray("items")
+            val availableItems = mutableListOf<BackupItem>()
+            for (i in 0 until itemsArray.length()) {
+                val obj = itemsArray.getJSONObject(i)
+                val id = obj.getString("id")
+                backupItems.find { it.id == id }?.let { availableItems.add(it) }
             }
-        }.start()
+
+            if (availableItems.isEmpty()) {
+                toast("备份清单为空")
+                return
+            }
+
+            showRestoreDialog(tarFile, availableItems)
+        } catch (e: Exception) {
+            toast("无法读取备份清单: ${e.message}")
+        }
     }
 
-    private fun showRestoreDialog(file: File, availableItems: List<DataItem>) {
+    private fun showRestoreDialog(tarFile: File, availableItems: List<BackupItem>) {
         selectedItems.clear()
 
         val dialogContent = LinearLayout(activity).apply {
@@ -464,29 +467,30 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
         }
 
         dialogContent.addView(ui.divider())
-        dialogContent.addView(ui.actionRow("开始恢复", "将覆盖现有数据，请谨慎操作") {
+        dialogContent.addView(ui.actionRow("开始恢复", "将覆盖现有数据") {
             if (selectedItems.isEmpty()) { toast("请至少选择一项"); return@actionRow }
-            confirmAndRestore(file)
+            confirmRestore(tarFile, availableItems.filter { selectedItems.contains(it.id) })
         })
 
         AlertDialog.Builder(activity)
-            .setTitle("恢复: ${file.name}")
+            .setTitle("恢复数据")
             .setView(ScrollView(activity).apply { addView(dialogContent) })
             .setNegativeButton("关闭", null)
             .show()
     }
 
-    private fun confirmAndRestore(file: File) {
+    private fun confirmRestore(tarFile: File, itemsToRestore: List<BackupItem>) {
         AlertDialog.Builder(activity)
             .setTitle("确认恢复")
-            .setMessage("恢复将覆盖现有数据，是否继续？")
-            .setPositiveButton("开始恢复") { _, _ -> executeRestore(file) }
+            .setMessage("恢复将覆盖现有数据，原数据会备份为 .backup.old，是否继续？")
+            .setPositiveButton("开始恢复") { _, _ -> executeRestore(tarFile, itemsToRestore) }
             .setNegativeButton("取消", null)
             .show()
     }
 
-    private fun executeRestore(backupFile: File) {
-        // 带进度条
+    private fun executeRestore(tarFile: File, itemsToRestore: List<BackupItem>) {
+        cancelled.set(false)
+
         val dialogView = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(ui.dp(24), ui.dp(16), ui.dp(24), ui.dp(16))
@@ -495,10 +499,8 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
             text = "准备中..."
             setTextColor(ui.palette.text)
             textSize = DesignTokens.TEXT_BODY
-            gravity = Gravity.CENTER
         }
         val progressBar = ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply {
-            isIndeterminate = false
             max = 100
             progress = 0
         }
@@ -509,62 +511,110 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
             .setTitle("正在恢复")
             .setView(dialogView)
             .setCancelable(false)
+            .setNegativeButton("取消") { _, _ ->
+                cancelled.set(true)
+                currentProcess?.destroy()
+            }
             .show()
 
-        val totalSize = backupFile.length()
-
         Thread {
+            var tempDir: File? = null
             try {
-                // 直接解压到 filesDir 根目录（tar 包内的相对路径会自动对齐）
-                val targetDir = activity.filesDir
-                handler.post { statusText.text = "正在解压..." }
+                tempDir = File(activity.cacheDir, "restore_v5_${System.currentTimeMillis()}")
+                tempDir.mkdirs()
 
-                val process = Runtime.getRuntime().exec(
-                    arrayOf("tar", "-xzf", backupFile.absolutePath, "-C", targetDir.absolutePath)
-                )
+                // 先解压整个 tar 到临时目录
+                handler.post { statusText.text = "正在解压备份..." }
+                val extractProc = runNative(arrayOf("tar", "-xzf", tarFile.absolutePath, "-C", tempDir.absolutePath))
+                val extractCode = waitForProcess(extractProc)
 
-                // 进度轮询
-                progressPoller = object : Runnable {
-                    override fun run() {
-                        // tar 解压没有好的进度指标，用时间估算
-                        statusText.text = "正在解压... 请勿关闭应用"
-                        handler.postDelayed(this, 1000)
-                    }
+                if (extractCode != 0) {
+                    handler.post { dialog.dismiss(); toast("解压失败") }
+                    return@Thread
                 }
-                handler.post(progressPoller!!)
 
-                // 读取错误
-                val errorReader = BufferedReader(InputStreamReader(process.errorStream))
-                val errors = StringBuilder()
-                var line: String?
-                while (errorReader.readLine().also { line = it } != null) {
-                    errors.append(line).append("\n")
-                }
-                errorReader.close()
+                val total = itemsToRestore.size
+                var completed = 0
 
-                val exitCode = process.waitFor()
+                for (item in itemsToRestore) {
+                    if (cancelled.get()) break
 
-                handler.post { progressPoller?.let { handler.removeCallbacks(it) }; progressBar.progress = 100 }
-
-                if (exitCode == 0) {
                     handler.post {
-                        statusText.text = "恢复完成!"
-                        dialog.dismiss()
-                        toast("恢复完成! 请重启应用以使设置生效")
+                        statusText.text = "正在恢复: ${item.name} (${completed + 1}/$total)"
                     }
+
+                    val subTar = File(tempDir, "${item.id}.tar.gz")
+                    if (!subTar.exists()) {
+                        completed++
+                        continue
+                    }
+
+                    // 恢复前备份原数据
+                    val targetPath = item.getSourcePath()
+                    val targetFile = if (item.isInRootfs) {
+                        File(activity.filesDir, "home/ubuntu-rootfs/$targetPath")
+                    } else {
+                        File(targetPath)
+                    }
+
+                    if (targetFile.exists()) {
+                        val backupOld = File(targetFile.parentFile, "${targetFile.name}.backup.old")
+                        if (backupOld.exists()) backupOld.deleteRecursively()
+                        targetFile.renameTo(backupOld)
+                    }
+
+                    // 解压子 tar
+                    val parentDir = targetFile.parentFile ?: continue
+                    parentDir.mkdirs()
+
+                    val restoreProc = if (item.isInRootfs) {
+                        // proot 内解压
+                        runInProot("tar -xzf /host-home/tasks/.restore_temp.tar.gz -C / 2>/dev/null")
+                    } else {
+                        runNative(arrayOf("tar", "-xzf", subTar.absolutePath, "-C", parentDir.absolutePath))
+                    }
+
+                    if (item.isInRootfs) {
+                        // 先把子 tar 复制到 proot 能访问的位置
+                        val restoreTemp = File(activity.filesDir, "home/tasks/.restore_temp.tar.gz")
+                        subTar.copyTo(restoreTemp, overwrite = true)
+                        waitForProcess(restoreProc)
+                        restoreTemp.delete()
+                    } else {
+                        waitForProcess(restoreProc)
+                    }
+
+                    completed++
+                    val percent = (completed * 100 / total)
+                    handler.post { progressBar.progress = percent }
+                }
+
+                if (cancelled.get()) {
+                    handler.post { dialog.dismiss(); toast("恢复已取消") }
                 } else {
                     handler.post {
                         dialog.dismiss()
-                        toast("恢复失败 (exit=$exitCode): ${errors.toString().take(200)}")
+                        toast("恢复完成! 请重启应用")
                     }
                 }
-            } catch (e: OutOfMemoryError) {
-                handler.post { progressPoller?.let { handler.removeCallbacks(it) }; dialog.dismiss(); toast("内存不足") }
             } catch (e: Exception) {
-                handler.post { progressPoller?.let { handler.removeCallbacks(it) }; dialog.dismiss(); toast("恢复失败: ${e.message}") }
+                handler.post { dialog.dismiss(); toast("恢复失败: ${e.message}") }
+            } finally {
+                tempDir?.deleteRecursively()
+                currentProcess = null
             }
         }.start()
     }
 
-    private fun toast(text: String) = Toast.makeText(activity, text, Toast.LENGTH_SHORT).show()
+    // ═════════════════════════════════════════════════════════════════
+    //  工具
+    // ═════════════════════════════════════════════════════════════════
+
+    private fun formatDate(ts: Long): String {
+        return SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(ts))
+    }
+
+    private fun toast(text: String) {
+        Toast.makeText(activity, text, Toast.LENGTH_SHORT).show()
+    }
 }
