@@ -63,4 +63,5 @@ dependencies {
     implementation("com.github.termux.termux-app:terminal-view:v0.118.3")
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
+    implementation("androidx.core:core-ktx:1.13.1")
 }

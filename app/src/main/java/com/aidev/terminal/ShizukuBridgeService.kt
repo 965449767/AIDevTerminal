@@ -38,8 +38,10 @@ object ShizukuBridgeService {
         observer = object : FileObserver(requestDir, FileObserver.CREATE or FileObserver.MODIFY) {
             override fun onEvent(event: Int, path: String?) {
                 if (path == null) return
-                if (!path.startsWith("log_")) return
-                handleRequest(requestDir, File(homeDir, BRIDGE_DIR), path)
+                when {
+                    path.startsWith("log_") -> handleRequest(requestDir, File(homeDir, BRIDGE_DIR), path)
+                    path.startsWith("camera_") -> handleCameraRequest(requestDir, File(homeDir, BRIDGE_DIR), path)
+                }
             }
         }
         observer?.startWatching()
@@ -121,5 +123,47 @@ object ShizukuBridgeService {
                 reqFile.delete()
             }
         }.apply { isDaemon = true }.start()
+    }
+
+    private fun handleCameraRequest(requestDir: File, bridgeDir: File, fileName: String) {
+        val reqFile = File(requestDir, fileName)
+        if (!reqFile.exists()) return
+
+        val resFile = File(File(bridgeDir, RESULT_DIR), fileName)
+        if (resFile.exists()) return
+
+        // 获取当前前台 Activity 来启动 CameraBridgeActivity
+        val activity = getForegroundActivity() ?: run {
+            resFile.writeText("""{"status":"error","error":"No foreground activity available","timestamp":${System.currentTimeMillis()}}""")
+            reqFile.delete()
+            return
+        }
+
+        CameraBridgeActivity.start(activity, reqFile.absolutePath, resFile.absolutePath)
+        // 请求文件由 CameraBridgeActivity 处理完成后删除
+    }
+
+    /** 获取当前前台 Activity（通过反射获取 Application 的 Activity 列表） */
+    @Suppress("UNCHECKED_CAST")
+    private fun getForegroundActivity(): android.app.Activity? {
+        return try {
+            val activityThread = Class.forName("android.app.ActivityThread")
+            val currentActivityThread = activityThread.getMethod("currentActivityThread").invoke(null)
+            val activitiesField = activityThread.getDeclaredField("mActivities").apply { isAccessible = true }
+            val activities = activitiesField.get(currentActivityThread) as java.util.Map<Any, Any>?
+            if (activities == null) return null
+            val values = activities.javaClass.getMethod("values").invoke(activities) as java.util.Collection<Any>
+            for (activityRecord in values) {
+                val pausedField = activityRecord.javaClass.getDeclaredField("paused").apply { isAccessible = true }
+                if (!pausedField.getBoolean(activityRecord)) {
+                    val activityField = activityRecord.javaClass.getDeclaredField("activity").apply { isAccessible = true }
+                    return activityField.get(activityRecord) as? android.app.Activity
+                }
+            }
+            null
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to get foreground activity", e)
+            null
+        }
     }
 }

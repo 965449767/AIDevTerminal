@@ -95,6 +95,46 @@ object TerminalShellAssets {
             install-ubuntu() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" install-ubuntu "${'$'}@"; }
             aidev-auto-bootstrap() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-auto-bootstrap "${'$'}@"; }
             aidev-doctor() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-doctor "${'$'}@"; }
+            camera-photo() {
+              local out="${'$'}{1:-/sdcard/DCIM/AIDev/photo_$(date +%Y%m%d_%H%M%S).jpg}"
+              local req="${'$'}AIDEV_HOME/.aidev-shizuku-bridge/request/camera_$(date +%s)_${'$'}PPID"
+              local res="${'$'}AIDEV_HOME/.aidev-shizuku-bridge/result/camera_$(date +%s)_${'$'}PPID"
+              mkdir -p "${'$'}AIDEV_HOME/.aidev-shizuku-bridge/request" "${'$'}AIDEV_HOME/.aidev-shizuku-bridge/result"
+              echo "MODE=photo" > "${'$'}req"
+              echo "OUTPUT=${'$'}out" >> "${'$'}req"
+              echo "[CAMERA] 请求已发送，等待拍照..."
+              local count=0
+              while [ ! -f "${'$'}res" ] && [ ${'$'}count -lt 60 ]; do
+                sleep 1
+                count=$((count + 1))
+              done
+              if [ -f "${'$'}res" ]; then
+                cat "${'$'}res"
+                rm -f "${'$'}req" "${'$'}res"
+              else
+                echo '{"status":"error","error":"拍照超时"}'
+                rm -f "${'$'}req"
+              fi
+            }
+            camera-pick() {
+              local req="${'$'}AIDEV_HOME/.aidev-shizuku-bridge/request/camera_$(date +%s)_${'$'}PPID"
+              local res="${'$'}AIDEV_HOME/.aidev-shizuku-bridge/result/camera_$(date +%s)_${'$'}PPID"
+              mkdir -p "${'$'}AIDEV_HOME/.aidev-shizuku-bridge/request" "${'$'}AIDEV_HOME/.aidev-shizuku-bridge/result"
+              echo "MODE=pick" > "${'$'}req"
+              echo "[CAMERA] 请求已发送，等待选择图片..."
+              local count=0
+              while [ ! -f "${'$'}res" ] && [ ${'$'}count -lt 60 ]; do
+                sleep 1
+                count=$((count + 1))
+              done
+              if [ -f "${'$'}res" ]; then
+                cat "${'$'}res"
+                rm -f "${'$'}req" "${'$'}res"
+              else
+                echo '{"status":"error","error":"选择超时"}'
+                rm -f "${'$'}req"
+              fi
+            }
             ${UbuntuBootstrapScripts.agentShellFunctions()}
             """.trimIndent() + "\n"
         )
