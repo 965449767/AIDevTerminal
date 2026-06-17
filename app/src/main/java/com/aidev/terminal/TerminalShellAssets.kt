@@ -155,7 +155,7 @@ object TerminalShellAssets {
     private fun writeCameraScript(binDir: File, name: String, mode: String) {
         val script = File(binDir, name)
         script.writeText(
-            """#!/system/bin/sh
+            """#!/bin/sh
             # AIDev camera bridge script. Works in both Android shell and Ubuntu proot.
             # Usage: $name [output_path]
 
@@ -208,7 +208,7 @@ object TerminalShellAssets {
     private fun writeSystemScript(binDir: File, name: String, desc: String) {
         val script = File(binDir, name)
         val content = when (name) {
-            "sysnotify" -> """#!/system/bin/sh
+            "sysnotify" -> """#!/bin/sh
                 # AIDev system notification script
                 # Usage: sysnotify <title> <message>
                 if [ $# -lt 2 ]; then
@@ -222,11 +222,11 @@ object TerminalShellAssets {
                 echo '{"status":"success","action":"notification sent"}'
                 """.trimIndent()
 
-            "screencap" -> """#!/system/bin/sh
+            "screencap" -> """#!/bin/sh
                 # AIDev screenshot script
                 # Usage: screencap [output_path]
                 OUT="${'$'}{1:-/sdcard/screenshot_$(date +%Y%m%d_%H%M%S).png}"
-                /system/bin/screencap -p "${'$'}OUT"
+                screencap -p "${'$'}OUT"
                 if [ -f "${'$'}OUT" ]; then
                     echo "{\"status\":\"success\",\"path\":\"${'$'}OUT\"}"
                 else
@@ -235,7 +235,7 @@ object TerminalShellAssets {
                 fi
                 """.trimIndent()
 
-            "volume" -> """#!/system/bin/sh
+            "volume" -> """#!/bin/sh
                 # AIDev volume control script
                 # Usage: volume [media|ring|alarm|call] [0-15|+|-]
                 STREAM="${'$'}{1:-media}"
@@ -248,8 +248,7 @@ object TerminalShellAssets {
                     *) echo '{"status":"error","error":"stream must be media|ring|alarm|call"}'; exit 1 ;;
                 esac
                 if [ -z "${'$'}VAL" ]; then
-                    # Get current volume
-                    CUR=$(/system/bin/sh -c "service call audio 15 i32 ${'$'}CODE" 2>/dev/null | grep -o '0x[0-9a-f]*' | head -1)
+                    CUR=$(service call audio 15 i32 ${'$'}CODE 2>/dev/null | grep -o '0x[0-9a-f]*' | head -1)
                     echo "{\"status\":\"success\",\"stream\":\"${'$'}STREAM\",\"volume\":\"${'$'}CUR\"}"
                 elif [ "${'$'}VAL" = "+" ] || [ "${'$'}VAL" = "-" ]; then
                     KEY=$(if [ "${'$'}VAL" = "+" ]; then echo 24; else echo 25; fi)
@@ -262,7 +261,7 @@ object TerminalShellAssets {
                 fi
                 """.trimIndent()
 
-            "brightness" -> """#!/system/bin/sh
+            "brightness" -> """#!/bin/sh
                 # AIDev brightness control script
                 # Usage: brightness [0-255|auto]
                 VAL="${'$'}1"
@@ -279,7 +278,7 @@ object TerminalShellAssets {
                 fi
                 """.trimIndent()
 
-            "startapp" -> """#!/system/bin/sh
+            "startapp" -> """#!/bin/sh
                 # AIDev start app script
                 # Usage: startapp <package_name>
                 if [ -z "${'$'}1" ]; then
@@ -290,7 +289,7 @@ object TerminalShellAssets {
                 echo "{\"status\":\"success\",\"action\":\"started\",\"package\":\"${'$'}1\"}"
                 """.trimIndent()
 
-            "stopapp" -> """#!/system/bin/sh
+            "stopapp" -> """#!/bin/sh
                 # AIDev stop app script
                 # Usage: stopapp <package_name>
                 if [ -z "${'$'}1" ]; then
@@ -301,7 +300,7 @@ object TerminalShellAssets {
                 echo "{\"status\":\"success\",\"action\":\"stopped\",\"package\":\"${'$'}1\"}"
                 """.trimIndent()
 
-            "installapk" -> """#!/system/bin/sh
+            "installapk" -> """#!/bin/sh
                 # AIDev install APK script
                 # Usage: installapk <apk_path>
                 if [ -z "${'$'}1" ] || [ ! -f "${'$'}1" ]; then
@@ -312,7 +311,7 @@ object TerminalShellAssets {
                 echo "{\"status\":\"success\",\"action\":\"installed\",\"path\":\"${'$'}1\"}"
                 """.trimIndent()
 
-            "uninstallapp" -> """#!/system/bin/sh
+            "uninstallapp" -> """#!/bin/sh
                 # AIDev uninstall app script
                 # Usage: uninstallapp <package_name>
                 if [ -z "${'$'}1" ]; then
@@ -323,7 +322,7 @@ object TerminalShellAssets {
                 echo "{\"status\":\"success\",\"action\":\"uninstalled\",\"package\":\"${'$'}1\"}"
                 """.trimIndent()
 
-            else -> "#!/system/bin/sh\necho 'Unknown command: $name'\n"
+            else -> "#!/bin/sh\necho 'Unknown command: $name'\n"
         }
         script.writeText(content + "\n")
         script.setExecutable(true, false)
