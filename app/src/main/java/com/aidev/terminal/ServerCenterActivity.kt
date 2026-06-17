@@ -29,22 +29,22 @@ class ServerCenterActivity : Activity() {
             setPadding(ui.dp(18), ui.dp(12), ui.dp(18), ui.dp(24))
             addView(ui.section("运行状态", "作为移动 Linux 服务器时最关键的状态"))
             addView(ui.rowOf(
-                ui.statusCard("后台常驻", if (keepAliveEnabled()) "已启用" else "未启用", keepAliveEnabled()),
-                ui.statusCard("电池优化", if (batteryIgnored()) "已忽略" else "受限制", batteryIgnored())
+                ui.listItem("后台常驻", if (keepAliveEnabled()) "已启用" else "未启用", keepAliveEnabled()),
+                ui.listItem("电池优化", if (batteryIgnored()) "已忽略" else "受限制", batteryIgnored())
             ))
             addView(ui.rowOf(
-                ui.statusCard("任务记录", "${taskCount()} 个", taskCount() > 0),
-                ui.statusCard("Ubuntu", if (ubuntuInstalled()) "可用" else "未安装", ubuntuInstalled())
+                ui.listItem("任务记录", "${taskCount()} 个", taskCount() > 0),
+                ui.listItem("Ubuntu", if (ubuntuInstalled()) "可用" else "未安装", ubuntuInstalled())
             ))
 
             addView(ui.section("服务操作", "端口、常驻、OpenCode Web 前端和局域网访问"))
             addView(ui.rowOf(
-                ui.actionCard("监听端口", "查看当前本机服务端口", "PORT") { openTerminal("list-listen-ports\n") },
-                ui.actionCard("访问诊断", "检查 127.0.0.1 服务", "HTTP") { openTerminal("check-local-server 3000\n") }
+                ui.actionRow("监听端口", "查看当前本机服务端口") { openTerminal("list-listen-ports\n") },
+                ui.actionRow("访问诊断", "检查 127.0.0.1 服务") { openTerminal("check-local-server 3000\n") }
             ))
             addView(ui.rowOf(
-                ui.actionCard("后台说明", "HyperOS 长后台建议", "KEEP") { openTerminal("keepalive-explain\ncheck-keepalive\n") },
-                ui.actionCard("任务中心", "查看服务日志和任务", "TASK") { ShellActivity.open(this@ServerCenterActivity, ShellActivity.TAB_TASKS) }
+                ui.actionRow("后台说明", "HyperOS 长后台建议") { openTerminal("keepalive-explain\ncheck-keepalive\n") },
+                ui.actionRow("任务中心", "查看服务日志和任务") { ShellActivity.open(this@ServerCenterActivity, ShellActivity.TAB_TASKS) }
             ))
 
             addView(ui.section("服务器模式原则", "服务类任务不应该依赖前台终端页面"))
@@ -60,7 +60,7 @@ class ServerCenterActivity : Activity() {
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(ui.dp(14), ui.dp(12), ui.dp(14), ui.dp(12))
-            background = ui.infoPanelBackground()
+            background = ui.surfaceBackground()
             addView(ui.text("建议用 task-run 启动下载、AI 后端、Web 前端和构建任务，再从任务中心查看日志。", 13f, ui.palette.text))
             addView(ui.muted("同机浏览器访问 127.0.0.1；如果要让局域网设备访问，服务需要监听 0.0.0.0，同时 HyperOS 不能限制后台网络。").apply {
                 setPadding(0, ui.dp(8), 0, 0)

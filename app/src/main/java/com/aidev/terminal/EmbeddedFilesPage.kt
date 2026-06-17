@@ -149,7 +149,7 @@ class EmbeddedFilesPage : ShellPage {
         val outer = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(ui.dp(4), ui.dp(4), ui.dp(4), ui.dp(4))
-            background = ui.infoPanelBackground()
+            background = ui.surfaceBackground()
         }
         val path = ui.text("", 12f, ui.palette.primary, bold = true).apply {
             setPadding(ui.dp(8), ui.dp(7), ui.dp(8), ui.dp(7))
@@ -1046,7 +1046,7 @@ class EmbeddedFilesPage : ShellPage {
     private fun action(label: String, click: () -> Unit): TextView =
         ui.text(label, 12f, ui.palette.text).apply {
             gravity = Gravity.CENTER
-            background = ui.subtleCommandButtonBackground()
+            background = ui.subtleButtonBackground()
             setOnClickListener {
                 ui.pulse()
                 click()

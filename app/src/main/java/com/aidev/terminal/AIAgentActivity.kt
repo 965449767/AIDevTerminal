@@ -26,20 +26,20 @@ class AIAgentActivity : Activity() {
             setPadding(ui.dp(18), ui.dp(12), ui.dp(18), ui.dp(24))
             addView(ui.section("OpenCode", "安装、启动、Web 前端和日志管理会逐步集中到这里"))
             addView(ui.rowOf(
-                ui.statusCard("安装状态", if (opencodeInstalled()) "可能已安装" else "未检测到", opencodeInstalled()),
-                ui.statusCard("配置状态", if (providerConfigured()) "有配置文件" else "待配置", providerConfigured())
+                ui.listItem("安装状态", if (opencodeInstalled()) "可能已安装" else "未检测到", opencodeInstalled()),
+                ui.listItem("配置状态", if (providerConfigured()) "有配置文件" else "待配置", providerConfigured())
             ))
             addView(ui.rowOf(
-                ui.actionCard("安装 OpenCode", "调用官方安装入口", "INSTALL") { openTerminal("install-aitool\n") },
-                ui.actionCard("检测环境", "查看 AI/Web 通信与工具链", "CHECK") { openTerminal("check-dev-env\naidev-net-explain\n") }
+                ui.actionRow("安装 OpenCode", "调用官方安装入口") { openTerminal("install-aitool\n") },
+                ui.actionRow("检测环境", "查看 AI/Web 通信与工具链") { openTerminal("check-dev-env\naidev-net-explain\n") }
             ))
             addView(ui.rowOf(
-                ui.actionCard("启动服务", "用后台任务运行 AI 服务命令", "RUN") { openTerminal("task-run opencode 'opencode --help'\n") },
-                ui.actionCard("查看日志", "打开任务中心查看输出", "LOG") { ShellActivity.open(this@AIAgentActivity, ShellActivity.TAB_TASKS) }
+                ui.actionRow("启动服务", "用后台任务运行 AI 服务命令") { openTerminal("task-run opencode 'opencode --help'\n") },
+                ui.actionRow("查看日志", "打开任务中心查看输出") { ShellActivity.open(this@AIAgentActivity, ShellActivity.TAB_TASKS) }
             ))
 
             addView(ui.section("设计目标", "AI 中心不再让用户记命令，而是把安装、配置、启动、端口和日志组织成一组清晰操作"))
-            addView(infoCard())
+            addView(infoRow())
         }
 
         root.addView(ScrollView(this).apply { addView(content) }, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -47,11 +47,11 @@ class AIAgentActivity : Activity() {
         setContentView(root)
     }
 
-    private fun infoCard() =
+    private fun infoRow() =
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(ui.dp(14), ui.dp(12), ui.dp(14), ui.dp(12))
-            background = ui.infoPanelBackground()
+            background = ui.surfaceBackground()
             addView(ui.text("后续这里会接入 OpenCode provider 检测、API Key 配置状态、Web UI 端口、打开浏览器和停止服务。", 13f, ui.palette.text))
             addView(ui.muted("当前版本先提供稳定入口和统一视觉结构，避免 AI 能力继续散落在设置和命令菜单里。").apply {
                 setPadding(0, ui.dp(8), 0, 0)

@@ -463,7 +463,7 @@ class EmbeddedTerminalPage : ShellPage {
         syncIndicator?.let { tv ->
             val on = SyncCoordinator.isEnabled(activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
             tv.text = if (on) "●" else "○"
-            tv.setTextColor(if (on) DesignTokens.SYNC_ACTIVE else DesignTokens.SYNC_INACTIVE)
+            tv.setTextColor(if (on) DesignTokens.ACCENT else 0xFF9CA3AF.toInt())
         }
         terminalView?.postDelayed({
             maybeAutoBootstrapUbuntu(activity)
@@ -531,14 +531,14 @@ class EmbeddedTerminalPage : ShellPage {
             textSize = 11f
             val on = SyncCoordinator.isEnabled(activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
             text = if (on) "●" else "○"
-            setTextColor(if (on) DesignTokens.SYNC_ACTIVE else DesignTokens.SYNC_INACTIVE)
+            setTextColor(if (on) DesignTokens.ACCENT else 0xFF9CA3AF.toInt())
             setOnClickListener {
                 val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
                 val current = SyncCoordinator.isEnabled(prefs)
                 SyncCoordinator.setEnabled(prefs, !current)
                 val nowOn = !current
                 text = if (nowOn) "●" else "○"
-                setTextColor(if (nowOn) DesignTokens.SYNC_ACTIVE else DesignTokens.SYNC_INACTIVE)
+                setTextColor(if (nowOn) DesignTokens.ACCENT else 0xFF9CA3AF.toInt())
                 Toast.makeText(activity, if (nowOn) "联动已开启" else "联动已关闭", Toast.LENGTH_SHORT).show()
             }
             setOnLongClickListener {
@@ -558,7 +558,7 @@ class EmbeddedTerminalPage : ShellPage {
         inputProxy?.tuiMode = tuiActive
         completionBarView?.visibility = if (tuiActive) View.GONE else View.VISIBLE
         tuiIndicator?.let {
-            it.setTextColor(if (tuiActive) DesignTokens.SYNC_ACTIVE else 0xFF9CA3AF.toInt())
+            it.setTextColor(if (tuiActive) DesignTokens.ACCENT else 0xFF9CA3AF.toInt())
         }
         Toast.makeText(activity, if (tuiActive) "TUI 模式已开启" else "TUI 模式已关闭", Toast.LENGTH_SHORT).show()
         if (!tuiActive) {
@@ -573,7 +573,7 @@ class EmbeddedTerminalPage : ShellPage {
             textSize = 12f
             text = "T"
             setTypeface(null, android.graphics.Typeface.BOLD)
-            setTextColor(if (tuiActive) DesignTokens.SYNC_ACTIVE else 0xFF9CA3AF.toInt())
+            setTextColor(if (tuiActive) DesignTokens.ACCENT else 0xFF9CA3AF.toInt())
             setOnClickListener { toggleTuiMode(activity) }
             setOnLongClickListener {
                 Toast.makeText(activity, if (tuiActive) "TUI 模式：命令建议栏已隐藏" else "点击开启 TUI 模式（隐藏命令建议栏）", Toast.LENGTH_SHORT).show()

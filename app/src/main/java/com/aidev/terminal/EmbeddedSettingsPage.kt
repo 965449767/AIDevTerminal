@@ -41,7 +41,7 @@ class EmbeddedSettingsPage : ShellPage {
     }
 
     private fun row(title: String, desc: String, click: () -> Unit): View =
-        ui.actionCard(title, desc, title.take(2).uppercase()) { click() }.apply {
+        ui.actionRow(title, desc) { click() }.apply {
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, ui.dp(8)) }
         }
 

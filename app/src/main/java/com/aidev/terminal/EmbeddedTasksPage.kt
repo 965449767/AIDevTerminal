@@ -71,64 +71,64 @@ class EmbeddedTasksPage : ShellPage {
         val tasks = taskDir().listFiles { f -> f.name.endsWith(".meta") }?.mapNotNull { parseTask(it) }?.sortedByDescending { it.id } ?: emptyList()
         val running = tasks.count { isRunning(it.pid) }
         list.addView(ui.section("任务与服务", "后台任务、AI Agent、Web 服务和最近日志统一放在一个 Shell 内容层"))
-        list.addView(ui.rowOf(ui.statusCard("运行中", "${running} 个", running > 0), ui.statusCard("任务记录", "${tasks.size} 个", tasks.isNotEmpty())))
+        list.addView(ui.rowOf(ui.listItem("运行中", "${running} 个", running > 0), ui.listItem("任务记录", "${tasks.size} 个", tasks.isNotEmpty())))
         list.addView(ui.rowOf(
-            ui.statusCard("OpenCode", if (opencodeInstalled()) "已检测到" else "未安装", opencodeInstalled()),
-            ui.statusCard("AI 配置", if (providerConfigured()) "有配置" else "待配置", providerConfigured())
+            ui.listItem("OpenCode", if (opencodeInstalled()) "已检测到" else "未安装", opencodeInstalled()),
+            ui.listItem("AI 配置", if (providerConfigured()) "有配置" else "待配置", providerConfigured())
         ))
         list.addView(ui.rowOf(
-            ui.statusCard("监听端口", "${listeningPorts().size} 个", listeningPorts().isNotEmpty()),
-            ui.statusCard("电池优化", if (batteryIgnored()) "已忽略" else "受限制", batteryIgnored())
+            ui.listItem("监听端口", "${listeningPorts().size} 个", listeningPorts().isNotEmpty()),
+            ui.listItem("电池优化", if (batteryIgnored()) "已忽略" else "受限制", batteryIgnored())
         ))
         list.addView(ui.section("AI 代理运行面板", "围绕 OpenCode 的启动、上下文、日志、端口和复盘集中处理"))
         list.addView(ui.rowOf(
-            ui.actionCard("原生 OpenCode", "多会话、Prompt、SSE、TODO、Diff", "NATIVE") {
+            ui.actionRow("原生 OpenCode", "多会话、Prompt、SSE、TODO、Diff") {
                 com.aidev.terminal.opencode.OpencodeNativePanel.showHome(activity)
             },
-            ui.actionCard("新建原生会话", "直接通过 HTTP API 提交任务", "API") {
+            ui.actionRow("新建原生会话", "直接通过 HTTP API 提交任务") {
                 com.aidev.terminal.opencode.OpencodeNativePanel.createSessionAndPrompt(activity)
             }
         ))
         list.addView(ui.rowOf(
-            ui.statusCard("当前项目", currentProject()?.name ?: "未标记", currentProject() != null),
-            ui.statusCard("最近代理日志", recentAgentLog()?.name ?: "暂无", recentAgentLog() != null)
+            ui.listItem("当前项目", currentProject()?.name ?: "未标记", currentProject() != null),
+            ui.listItem("最近代理日志", recentAgentLog()?.name ?: "暂无", recentAgentLog() != null)
         ))
         currentProject()?.let { project ->
             list.addView(ui.rowOf(
-                ui.actionCard("OpenCode 项目", "在当前项目启动 AI 代理", "AI") { host.openTerminal("cd \"${project.absolutePath}\" && opencode") },
-                ui.actionCard("后台代理", "后台运行 OpenCode 并记录日志", "BG") { host.openTerminal("cd \"${project.absolutePath}\" && task-run opencode \"opencode\"") }
+                ui.actionRow("OpenCode 项目", "在当前项目启动 AI 代理") { host.openTerminal("cd \"${project.absolutePath}\" && opencode") },
+                ui.actionRow("后台代理", "后台运行 OpenCode 并记录日志") { host.openTerminal("cd \"${project.absolutePath}\" && task-run opencode \"opencode\"") }
             ))
             list.addView(ui.rowOf(
-                ui.actionCard("代理上下文", "输出项目/文件/Git/任务摘要", "CTX") { host.openTerminal("cd \"${project.absolutePath}\" && aidev-agent-context") },
-                ui.actionCard("更多 AI", "日志、诊断、端口和上下文文件", "MORE") { showAgentPanelMore(project) }
+                ui.actionRow("代理上下文", "输出项目/文件/Git/任务摘要") { host.openTerminal("cd \"${project.absolutePath}\" && aidev-agent-context") },
+                ui.actionRow("更多 AI", "日志、诊断、端口和上下文文件") { showAgentPanelMore(project) }
             ))
         }
         list.addView(ui.rowOf(
-            ui.actionCard("日志摘要", "抽取错误、命令和修改线索", "SUM") { showAgentLogSummary() },
-            ui.actionCard("追踪代理", "tail 最近 AI/任务日志", "TAIL") { host.openTerminal("aidev-agent-tail") }
+            ui.actionRow("日志摘要", "抽取错误、命令和修改线索") { showAgentLogSummary() },
+            ui.actionRow("追踪代理", "tail 最近 AI/任务日志") { host.openTerminal("aidev-agent-tail") }
         ))
         list.addView(ui.rowOf(
-            ui.actionCard("安装 OpenCode", "在终端执行 install-aitool", "AI") { host.openTerminal("install-aitool") },
-            ui.actionCard("端口详情", "直接查看 LISTEN 端口", "PORT") { showPortDetails() }
+            ui.actionRow("安装 OpenCode", "在终端执行 install-aitool") { host.openTerminal("install-aitool") },
+            ui.actionRow("端口详情", "直接查看 LISTEN 端口") { showPortDetails() }
         ))
         list.addView(ui.rowOf(
-            ui.actionCard("任务模板", "常用后台任务一键生成", "TPL") { showTaskTemplates() },
-            ui.actionCard("Shizuku 日志", "通过 Shizuku 获取应用日志", "LOG") { showShizukuLogcat() }
+            ui.actionRow("任务模板", "常用后台任务一键生成") { showTaskTemplates() },
+            ui.actionRow("Shizuku 日志", "通过 Shizuku 获取应用日志") { showShizukuLogcat() }
         ))
         list.addView(ui.rowOf(
-            ui.actionCard("Shizuku 诊断", "测试 Shizuku 权限和基本命令", "TEST") { testShizukuDiagnostics() },
-            ui.statusCard("Shizuku 状态", ShizukuLogcat.statusText(), ShizukuLogcat.isAvailable())
+            ui.actionRow("Shizuku 诊断", "测试 Shizuku 权限和基本命令") { testShizukuDiagnostics() },
+            ui.listItem("Shizuku 状态", ShizukuLogcat.statusText(), ShizukuLogcat.isAvailable())
         ))
         list.addView(ui.rowOf(
-            ui.actionCard("启动常驻", "启动前台服务与 WakeLock", "KEEP") {
+            ui.actionRow("启动常驻", "启动前台服务与 WakeLock") {
                 KeepAliveService.start(activity)
                 Toast.makeText(activity, "已启动后台常驻", Toast.LENGTH_SHORT).show()
             },
-            ui.actionCard("搜索任务", "按名称、命令或 ID 查找", "FIND") { searchTasks(tasks) }
+            ui.actionRow("搜索任务", "按名称、命令或 ID 查找") { searchTasks(tasks) }
         ))
         list.addView(ui.rowOf(
-            ui.actionCard("环境检测", "检查开发与服务环境", "CHECK") { host.openTerminal("check-dev-env") },
-            ui.actionCard("刷新列表", "重新读取任务与端口状态", "REF") { reload() }
+            ui.actionRow("环境检测", "检查开发与服务环境") { host.openTerminal("check-dev-env") },
+            ui.actionRow("刷新列表", "重新读取任务与端口状态") { reload() }
         ))
         list.addView(ui.section("任务列表", "点击任务查看命令、PID 和最近 80 行日志"))
         if (tasks.isEmpty()) {
@@ -639,7 +639,7 @@ class EmbeddedTasksPage : ShellPage {
         LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(ui.dp(14), ui.dp(12), ui.dp(14), ui.dp(12))
-            background = ui.subtleCommandButtonBackground()
+            background = ui.subtleButtonBackground()
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, ui.dp(8)) }
             val running = isRunning(task.pid)
             addView(ui.text("${task.id}  ${if (running) "运行中" else "已结束"}", 13f, if (running) ui.palette.primary else ui.palette.text, bold = true))
@@ -652,7 +652,7 @@ class EmbeddedTasksPage : ShellPage {
         LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(ui.dp(14), ui.dp(12), ui.dp(14), ui.dp(12))
-            background = ui.infoPanelBackground()
+            background = ui.surfaceBackground()
             addView(ui.text("暂无后台任务", 16f, ui.palette.text, bold = true))
             addView(ui.muted("可以在终端中运行：task-run opencode 'opencode serve'"))
         }

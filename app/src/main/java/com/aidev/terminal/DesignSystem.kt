@@ -21,21 +21,19 @@ object DesignTokens {
     const val SPACE_XS = 4
     const val SPACE_SM = 8
     const val SPACE_MD = 12
-    const val SPACE_LG = 18
-    const val SPACE_XL = 24
-    const val RADIUS_MD = 16
-    const val RADIUS_LG = 24
-    const val TOP_BAR_HEIGHT = 56
-    const val BOTTOM_NAV_HEIGHT = 58
+    const val SPACE_LG = 16
+    const val SPACE_XL = 20
+    const val RADIUS_SM = 6
+    const val RADIUS_MD = 8
+    const val RADIUS_LG = 12
+    const val TOP_BAR_HEIGHT = 48
+    const val BOTTOM_NAV_HEIGHT = 52
     const val SWIPE_TRIGGER_DP = 72
     const val SWIPE_SLOP_DP = 32
 
-    // 颜色常量
-    const val SYNC_ACTIVE = 0xFF22D3A7.toInt()
-    const val SYNC_INACTIVE = 0xFF4B5563.toInt()
-    const val TERMINAL_BG = 0xFF1A1A2E.toInt()
-    const val CARD_BG = 0xFF1E1E30.toInt()
+    // 统一强调色：青绿色
     const val ACCENT = 0xFF22D3A7.toInt()
+    const val ACCENT_DARK = 0xFF0D9488.toInt()
 }
 
 data class WorkbenchPalette(
@@ -131,7 +129,7 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
             layoutParams = LinearLayout.LayoutParams(-1, dp(DesignTokens.TOP_BAR_HEIGHT))
             addView(text(title, 18f, palette.text, bold = true), LinearLayout.LayoutParams(0, -1, 1f))
             actions.forEach { (label, action) ->
-                addView(navText(label, action), LinearLayout.LayoutParams(dp(58), -1))
+                addView(navItem(label, action), LinearLayout.LayoutParams(dp(58), -1))
             }
         }
 
@@ -150,37 +148,19 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
             })
         }
 
-    fun card(hero: Boolean = false): GradientDrawable =
-        GradientDrawable(
-            if (hero) GradientDrawable.Orientation.TL_BR else GradientDrawable.Orientation.TOP_BOTTOM,
-            if (hero) intArrayOf(palette.primary, palette.secondary) else intArrayOf(palette.surface, palette.surface)
-        ).apply {
-            cornerRadius = dp(if (hero) DesignTokens.RADIUS_LG else DesignTokens.RADIUS_MD).toFloat()
-            alpha = (prefs.getInt("ui_alpha", 94) * 255 / 100).coerceIn(120, 255)
-            setStroke(dp(1), palette.outline)
-        }
-
-    fun infoPanelBackground(): GradientDrawable =
+    fun surfaceBackground(): GradientDrawable =
         GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(palette.surface, palette.surface)).apply {
             cornerRadius = dp(DesignTokens.RADIUS_MD).toFloat()
-            alpha = (prefs.getInt("ui_alpha", 90) * 255 / 100).coerceIn(116, 245)
-            setStroke(dp(1), palette.outline)
         }
 
-    fun commandButtonBackground(): GradientDrawable =
-        GradientDrawable(
-            GradientDrawable.Orientation.LEFT_RIGHT,
-            intArrayOf(tint(palette.primary, palette.surface, 0.22f), tint(palette.secondary, palette.surface, 0.14f))
-        ).apply {
+    fun accentButtonBackground(): GradientDrawable =
+        GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(DesignTokens.ACCENT, DesignTokens.ACCENT_DARK)).apply {
             cornerRadius = dp(DesignTokens.RADIUS_MD).toFloat()
-            alpha = (prefs.getInt("ui_alpha", 96) * 255 / 100).coerceIn(150, 255)
-            setStroke(dp(2), palette.primary)
         }
 
-    fun subtleCommandButtonBackground(): GradientDrawable =
-        GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(tint(palette.primary, palette.surface, 0.12f), palette.surface)).apply {
-            cornerRadius = dp(12).toFloat()
-            setStroke(dp(1), tint(palette.primary, palette.outline, 0.55f))
+    fun subtleButtonBackground(): GradientDrawable =
+        GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(palette.surfaceAlt, palette.surfaceAlt)).apply {
+            cornerRadius = dp(DesignTokens.RADIUS_MD).toFloat()
         }
 
     fun effectNotice(): String {
@@ -194,96 +174,57 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
         }
     }
 
-    fun statusCard(title: String, value: String, ok: Boolean): View =
+    fun listItem(title: String, value: String, ok: Boolean): View =
         LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(11), dp(14), dp(12))
-            background = infoPanelBackground()
-            isClickable = false
-            addView(LinearLayout(activity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                addView(text("信息", 10f, palette.muted, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    background = pillBackground(palette.outline, palette.surfaceAlt)
-                    setPadding(dp(7), 0, dp(7), 0)
-                }, LinearLayout.LayoutParams(-2, dp(20)).apply { setMargins(0, 0, dp(7), 0) })
-                addView(text(title, 12f, palette.muted).apply {
-                    maxLines = 1
-                    ellipsize = TextUtils.TruncateAt.END
-                }, LinearLayout.LayoutParams(0, -1, 1f))
-            })
-            addView(text(value, 18f, if (ok) palette.success else palette.warning, bold = true).apply {
-                setPadding(0, dp(8), 0, 0)
-                maxLines = 1
-                ellipsize = TextUtils.TruncateAt.END
-            })
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(DesignTokens.SPACE_MD), dp(DesignTokens.SPACE_SM), dp(DesignTokens.SPACE_MD), dp(DesignTokens.SPACE_SM))
+            addView(text(title, 13f, palette.muted), LinearLayout.LayoutParams(0, -2, 1f))
+            addView(text(value, 14f, if (ok) palette.success else palette.warning, bold = true), LinearLayout.LayoutParams(-2, -2))
         }
 
-    fun actionCard(title: String, desc: String, tag: String, action: () -> Unit): View =
+    fun actionRow(title: String, desc: String, action: () -> Unit): View =
         LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(15), dp(13), dp(13), dp(13))
-            background = commandButtonBackground()
+            setPadding(dp(DesignTokens.SPACE_MD), dp(DesignTokens.SPACE_SM), dp(DesignTokens.SPACE_MD), dp(DesignTokens.SPACE_SM))
             isClickable = true
             isFocusable = true
             setOnClickListener {
                 pulse()
                 action()
             }
-            addView(LinearLayout(activity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                addView(text(tag, 11f, Color.WHITE, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    maxLines = 1
-                    ellipsize = TextUtils.TruncateAt.END
-                    background = pillBackground(palette.primary, tint(palette.primary, Color.BLACK, 0.16f))
-                    setPadding(dp(7), 0, dp(7), 0)
-                }, LinearLayout.LayoutParams(-2, dp(22)).apply { setMargins(0, 0, dp(7), 0) })
-                addView(text("执行", 10f, palette.primary, bold = true).apply {
-                    gravity = Gravity.CENTER
-                    background = pillBackground(tint(palette.primary, palette.outline, 0.8f), tint(palette.primary, palette.surface, 0.16f))
-                    setPadding(dp(7), 0, dp(7), 0)
-                }, LinearLayout.LayoutParams(-2, dp(22)))
-                addView(text("›", 20f, palette.primary, bold = true).apply {
-                    gravity = Gravity.CENTER
-                }, LinearLayout.LayoutParams(0, dp(22), 1f))
-            })
-            addView(text(title, 18f, palette.text, bold = true).apply {
-                setPadding(0, dp(7), 0, 0)
+            addView(text(title, 15f, palette.text, bold = true).apply {
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
             })
             addView(text(desc, 12f, palette.muted).apply {
-                setPadding(0, dp(4), 0, 0)
-                maxLines = 2
+                setPadding(0, dp(2), 0, 0)
+                maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
             })
         }
 
-    fun infoCard(title: String, body: String): View =
+    fun infoRow(title: String, body: String): View =
         LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(14), dp(12), dp(14), dp(12))
-            background = infoPanelBackground()
+            setPadding(dp(DesignTokens.SPACE_MD), dp(DesignTokens.SPACE_SM), dp(DesignTokens.SPACE_MD), dp(DesignTokens.SPACE_SM))
             addView(text(title, 14f, palette.text, bold = true).apply {
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
             })
             addView(text(body, 12f, palette.muted).apply {
-                setPadding(0, dp(7), 0, 0)
+                setPadding(0, dp(2), 0, 0)
             })
         }
 
     fun bottomNav(items: List<Pair<String, () -> Unit>>): View =
         LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            setPadding(dp(DesignTokens.SPACE_SM), dp(DesignTokens.SPACE_SM), dp(DesignTokens.SPACE_SM), dp(DesignTokens.SPACE_SM))
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(DesignTokens.SPACE_MD), 0, dp(DesignTokens.SPACE_MD), 0)
             setBackgroundColor(palette.nav)
             items.forEach { (label, action) ->
-                addView(navText(label, action), LinearLayout.LayoutParams(0, dp(44), 1f))
+                addView(navItem(label, action), LinearLayout.LayoutParams(0, dp(DesignTokens.BOTTOM_NAV_HEIGHT), 1f))
             }
         }
 
@@ -344,10 +285,9 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
         }
     }
 
-    private fun navText(label: String, action: () -> Unit): TextView =
-        text(label, 13f, palette.text).apply {
+    private fun navItem(label: String, action: () -> Unit): TextView =
+        text(label, 12f, palette.muted).apply {
             gravity = Gravity.CENTER
-            background = subtleCommandButtonBackground()
             setOnClickListener {
                 pulse()
                 action()
@@ -397,7 +337,7 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
     private fun pillBackground(stroke: Int, fill: Int): GradientDrawable =
         GradientDrawable().apply {
             setColor(fill)
-            cornerRadius = dp(999).toFloat()
+            cornerRadius = dp(DesignTokens.RADIUS_MD).toFloat()
             setStroke(dp(1), stroke)
         }
 

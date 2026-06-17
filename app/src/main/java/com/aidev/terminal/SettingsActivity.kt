@@ -343,7 +343,7 @@ class SettingsActivity : Activity() {
     private fun row(title: String, desc: String): LinearLayout =
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = ui.subtleCommandButtonBackground()
+            background = ui.subtleButtonBackground()
             setPadding(ui.dp(14), ui.dp(12), ui.dp(14), ui.dp(12))
             val lp = LinearLayout.LayoutParams(-1, -2)
             lp.setMargins(0, 0, 0, ui.dp(8))
