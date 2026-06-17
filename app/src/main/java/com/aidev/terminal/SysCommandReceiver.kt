@@ -39,6 +39,24 @@ class SysCommandReceiver : BroadcastReceiver() {
                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 cm.setPrimaryClip(ClipData.newPlainText("AIDev Terminal", text))
             }
+            "com.aidev.terminal.SYSVOLUME" -> {
+                val stream = intent.getIntExtra("stream", 3)
+                val volume = intent.getIntExtra("volume", -1)
+                if (volume >= 0) {
+                    val am = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+                    am.setStreamVolume(stream, volume, 0)
+                }
+            }
+            "com.aidev.terminal.SYSBRIGHTNESS" -> {
+                val brightness = intent.getIntExtra("brightness", -1)
+                val auto = intent.getBooleanExtra("auto", false)
+                if (auto) {
+                    android.provider.Settings.System.putInt(context.contentResolver, android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE, 1)
+                } else if (brightness >= 0) {
+                    android.provider.Settings.System.putInt(context.contentResolver, android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE, 0)
+                    android.provider.Settings.System.putInt(context.contentResolver, android.provider.Settings.System.SCREEN_BRIGHTNESS, brightness)
+                }
+            }
         }
     }
 }
