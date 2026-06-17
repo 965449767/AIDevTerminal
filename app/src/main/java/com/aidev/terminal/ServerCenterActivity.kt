@@ -44,7 +44,7 @@ class ServerCenterActivity : Activity() {
             ))
             addView(ui.rowOf(
                 ui.actionRow("后台说明", "HyperOS 长后台建议") { openTerminal("keepalive-explain\ncheck-keepalive\n") },
-                ui.actionRow("任务中心", "查看服务日志和任务") { ShellActivity.open(this@ServerCenterActivity, ShellActivity.TAB_TASKS) }
+                ui.actionRow("任务中心", "查看服务日志和任务") { ShellActivity.open(this@ServerCenterActivity, ShellActivity.TAB_AI) }
             ))
 
             addView(ui.section("服务器模式原则", "服务类任务不应该依赖前台终端页面"))

@@ -66,9 +66,9 @@ class EmbeddedSettingsPage : ShellPage {
 
     private fun themePresetDialog() {
         val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val labels = arrayOf("深空蓝", "矩阵绿", "紫色专业", "亮色", "动态系统跟随")
-        val values = arrayOf("midnight", "matrix", "violet", "light", "dynamic")
-        val checked = values.indexOf(prefs.getString("theme_preset", "midnight")).coerceAtLeast(0)
+        val labels = arrayOf("深色", "亮色", "跟随系统")
+        val values = arrayOf("dark", "light", "system")
+        val checked = values.indexOf(prefs.getString("theme_preset", "system")).coerceAtLeast(0)
         AlertDialog.Builder(activity)
             .setTitle("主题预设")
             .setSingleChoiceItems(labels, checked) { dialog, which ->

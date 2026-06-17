@@ -1,6 +1,7 @@
 package com.aidev.terminal
 
 import android.app.Activity
+import android.content.Context
 import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.graphics.BitmapFactory
@@ -17,97 +18,113 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import kotlin.math.abs
 
+/**
+ * 设计令牌：统一的间距、圆角、字体层级
+ */
 object DesignTokens {
-    const val SPACE_XS = 4
-    const val SPACE_SM = 8
-    const val SPACE_MD = 12
-    const val SPACE_LG = 16
-    const val SPACE_XL = 20
+    // 间距 7 级
+    const val SPACE_2 = 2
+    const val SPACE_4 = 4
+    const val SPACE_8 = 8
+    const val SPACE_12 = 12
+    const val SPACE_16 = 16
+    const val SPACE_20 = 20
+    const val SPACE_24 = 24
+
+    // 圆角
     const val RADIUS_SM = 6
     const val RADIUS_MD = 8
     const val RADIUS_LG = 12
+
+    // 尺寸
     const val TOP_BAR_HEIGHT = 48
     const val BOTTOM_NAV_HEIGHT = 52
+    const val LIST_ITEM_HEIGHT = 48
     const val SWIPE_TRIGGER_DP = 72
     const val SWIPE_SLOP_DP = 32
+
+    // 字体层级
+    const val TEXT_H1 = 20f
+    const val TEXT_H2 = 16f
+    const val TEXT_BODY = 14f
+    const val TEXT_CAPTION = 12f
+    const val TEXT_LABEL = 10f
 
     // 统一强调色：青绿色
     const val ACCENT = 0xFF22D3A7.toInt()
     const val ACCENT_DARK = 0xFF0D9488.toInt()
 }
 
+/**
+ * 主题管理器：支持系统深色/浅色模式跟随
+ */
+object ThemeManager {
+    fun isSystemDark(context: Context): Boolean {
+        return (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+    }
+
+    fun getPalette(context: Context): WorkbenchPalette {
+        return if (isSystemDark(context)) DarkTheme else LightTheme
+    }
+
+    private val DarkTheme = WorkbenchPalette(
+        bg = 0xFF0A0A0F.toInt(),
+        surface = 0xFF141419.toInt(),
+        surfaceAlt = 0xFF1A1A20.toInt(),
+        text = 0xFFE8E8ED.toInt(),
+        muted = 0xFF8A8A93.toInt(),
+        outline = 0xFF2A2A30.toInt(),
+        accent = DesignTokens.ACCENT,
+        success = 0xFF34D399.toInt(),
+        warning = 0xFFFBBF24.toInt(),
+        danger = 0xFFF87171.toInt()
+    )
+
+    private val LightTheme = WorkbenchPalette(
+        bg = 0xFFF5F5F7.toInt(),
+        surface = 0xFFFFFFFF.toInt(),
+        surfaceAlt = 0xFFF0F0F2.toInt(),
+        text = 0xFF1A1A1A.toInt(),
+        muted = 0xFF6B6B73.toInt(),
+        outline = 0xFFE0E0E5.toInt(),
+        accent = 0xFF0D9488.toInt(),
+        success = 0xFF059669.toInt(),
+        warning = 0xFFD97706.toInt(),
+        danger = 0xFFDC2626.toInt()
+    )
+}
+
+/**
+ * 调色板：单强调色，移除 primary/secondary 双强调色
+ */
 data class WorkbenchPalette(
     val bg: Int,
-    val nav: Int,
     val surface: Int,
     val surfaceAlt: Int,
     val text: Int,
     val muted: Int,
     val outline: Int,
-    val primary: Int,
-    val secondary: Int,
+    val accent: Int,
     val success: Int,
     val warning: Int,
     val danger: Int
-) {
-    companion object {
-        fun from(prefs: SharedPreferences, uiMode: Int): WorkbenchPalette {
-            val preset = prefs.getString("theme_preset", "midnight") ?: "midnight"
-            val systemDark = (uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-            return when (preset) {
-                "light" -> WorkbenchPalette(
-                    bg = 0xFFF7F9FC.toInt(),
-                    nav = 0xFFFFFFFF.toInt(),
-                    surface = 0xFFFFFFFF.toInt(),
-                    surfaceAlt = 0xFFF1F5F9.toInt(),
-                    text = 0xFF111827.toInt(),
-                    muted = 0xFF6B7280.toInt(),
-                    outline = 0xFFE5E7EB.toInt(),
-                    primary = 0xFF2563EB.toInt(),
-                    secondary = 0xFF06B6D4.toInt(),
-                    success = 0xFF059669.toInt(),
-                    warning = 0xFFD97706.toInt(),
-                    danger = 0xFFDC2626.toInt()
-                )
-                "dynamic" -> if (systemDark) dark(0xFF7C3AED.toInt(), 0xFF06B6D4.toInt()) else WorkbenchPalette(
-                    bg = 0xFFF8FAFF.toInt(),
-                    nav = 0xFFFFFFFF.toInt(),
-                    surface = 0xFFFFFFFF.toInt(),
-                    surfaceAlt = 0xFFF3F0FF.toInt(),
-                    text = 0xFF111827.toInt(),
-                    muted = 0xFF64748B.toInt(),
-                    outline = 0xFFE2E8F0.toInt(),
-                    primary = 0xFF6750A4.toInt(),
-                    secondary = 0xFF006A6A.toInt(),
-                    success = 0xFF0F9F6E.toInt(),
-                    warning = 0xFFD48A00.toInt(),
-                    danger = 0xFFBA1A1A.toInt()
-                )
-                "matrix" -> dark(0xFF22C55E.toInt(), 0xFF14B8A6.toInt())
-                "violet" -> dark(0xFF8B5CF6.toInt(), 0xFFEC4899.toInt())
-                else -> dark(0xFF60A5FA.toInt(), 0xFF22D3EE.toInt())
-            }
-        }
+)
 
-        private fun dark(primary: Int, secondary: Int) = WorkbenchPalette(
-            bg = 0xFF080B10.toInt(),
-            nav = 0xFF0E131B.toInt(),
-            surface = 0xFF151B24.toInt(),
-            surfaceAlt = 0xFF101620.toInt(),
-            text = 0xFFE5E7EB.toInt(),
-            muted = 0xFF9CA3AF.toInt(),
-            outline = 0xFF243244.toInt(),
-            primary = primary,
-            secondary = secondary,
-            success = 0xFF34D399.toInt(),
-            warning = 0xFFFBBF24.toInt(),
-            danger = 0xFFF87171.toInt()
-        )
+/**
+ * 分割线组件
+ */
+fun View.divider(color: Int, height: Int = 1): View {
+    return View(context).apply {
+        setBackgroundColor(color)
+        layoutParams = LinearLayout.LayoutParams(-1, height)
     }
 }
 
+/**
+ * AIDev UI 构建器
+ */
 class AIDevUi(private val activity: Activity, private val prefs: SharedPreferences) {
-    val palette: WorkbenchPalette = WorkbenchPalette.from(prefs, activity.resources.configuration.uiMode)
+    val palette: WorkbenchPalette = ThemeManager.getPalette(activity)
 
     fun dp(value: Int): Int {
         val scale = prefs.getInt("ui_density", 100).coerceIn(86, 116) / 100f
@@ -124,10 +141,10 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
         LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(DesignTokens.SPACE_MD), 0, dp(DesignTokens.SPACE_SM), 0)
-            setBackgroundColor(palette.nav)
+            setPadding(dp(DesignTokens.SPACE_12), 0, dp(DesignTokens.SPACE_8), 0)
+            setBackgroundColor(palette.bg)
             layoutParams = LinearLayout.LayoutParams(-1, dp(DesignTokens.TOP_BAR_HEIGHT))
-            addView(text(title, 18f, palette.text, bold = true), LinearLayout.LayoutParams(0, -1, 1f))
+            addView(text(title, DesignTokens.TEXT_H2, palette.text, bold = true), LinearLayout.LayoutParams(0, -1, 1f))
             actions.forEach { (label, action) ->
                 addView(navItem(label, action), LinearLayout.LayoutParams(dp(58), -1))
             }
@@ -136,13 +153,13 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
     fun section(title: String, desc: String): View =
         LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(DesignTokens.SPACE_LG), 0, dp(DesignTokens.SPACE_SM))
-            addView(text(title, 16f, palette.text, bold = true).apply {
+            setPadding(0, dp(DesignTokens.SPACE_16), 0, dp(DesignTokens.SPACE_8))
+            addView(text(title, DesignTokens.TEXT_H2, palette.text, bold = true).apply {
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
             })
-            addView(text(desc, 12f, palette.muted).apply {
-                setPadding(0, dp(2), 0, 0)
+            addView(text(desc, DesignTokens.TEXT_CAPTION, palette.muted).apply {
+                setPadding(0, dp(DesignTokens.SPACE_2), 0, 0)
                 maxLines = 2
                 ellipsize = TextUtils.TruncateAt.END
             })
@@ -163,42 +180,37 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
             cornerRadius = dp(DesignTokens.RADIUS_MD).toFloat()
         }
 
-    fun effectNotice(): String {
-        val bgMode = prefs.getString("bg_mode", "solid") ?: "solid"
-        val blur = prefs.getInt("ui_blur", 18)
-        val alpha = prefs.getInt("ui_alpha", 94)
-        return when (bgMode) {
-            "image" -> "当前为自定义背景：透明度会影响卡片通透感；模糊强度用于背景遮罩和层次感，后续会继续升级为真实背景模糊。当前透明度 ${alpha}%，模糊感 ${blur}%。"
-            "gradient" -> "当前为主题渐变背景：透明度会影响卡片通透感；模糊感主要影响层次提示，不会像图片背景那样明显。当前透明度 ${alpha}%，模糊感 ${blur}%。"
-            else -> "当前为纯色背景：透明度只影响卡片与面板，模糊设置不会产生明显视觉差异。若希望看到模糊和通透效果，请切换为自定义背景或主题渐变背景。"
+    fun divider(): View =
+        View(activity).apply {
+            setBackgroundColor(palette.outline)
+            layoutParams = LinearLayout.LayoutParams(-1, 1)
         }
-    }
 
     fun listItem(title: String, value: String, ok: Boolean): View =
         LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(DesignTokens.SPACE_MD), dp(DesignTokens.SPACE_SM), dp(DesignTokens.SPACE_MD), dp(DesignTokens.SPACE_SM))
-            addView(text(title, 13f, palette.muted), LinearLayout.LayoutParams(0, -2, 1f))
-            addView(text(value, 14f, if (ok) palette.success else palette.warning, bold = true), LinearLayout.LayoutParams(-2, -2))
+            setPadding(dp(DesignTokens.SPACE_12), dp(DesignTokens.SPACE_8), dp(DesignTokens.SPACE_12), dp(DesignTokens.SPACE_8))
+            addView(text(title, DesignTokens.TEXT_CAPTION, palette.muted), LinearLayout.LayoutParams(0, -2, 1f))
+            addView(text(value, DesignTokens.TEXT_BODY, if (ok) palette.success else palette.warning, bold = true), LinearLayout.LayoutParams(-2, -2))
         }
 
     fun actionRow(title: String, desc: String, action: () -> Unit): View =
         LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(DesignTokens.SPACE_MD), dp(DesignTokens.SPACE_SM), dp(DesignTokens.SPACE_MD), dp(DesignTokens.SPACE_SM))
+            setPadding(dp(DesignTokens.SPACE_12), dp(DesignTokens.SPACE_8), dp(DesignTokens.SPACE_12), dp(DesignTokens.SPACE_8))
             isClickable = true
             isFocusable = true
             setOnClickListener {
                 pulse()
                 action()
             }
-            addView(text(title, 15f, palette.text, bold = true).apply {
+            addView(text(title, DesignTokens.TEXT_BODY, palette.text, bold = true).apply {
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
             })
-            addView(text(desc, 12f, palette.muted).apply {
-                setPadding(0, dp(2), 0, 0)
+            addView(text(desc, DesignTokens.TEXT_CAPTION, palette.muted).apply {
+                setPadding(0, dp(DesignTokens.SPACE_2), 0, 0)
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
             })
@@ -207,22 +219,34 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
     fun infoRow(title: String, body: String): View =
         LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(DesignTokens.SPACE_MD), dp(DesignTokens.SPACE_SM), dp(DesignTokens.SPACE_MD), dp(DesignTokens.SPACE_SM))
-            addView(text(title, 14f, palette.text, bold = true).apply {
+            setPadding(dp(DesignTokens.SPACE_12), dp(DesignTokens.SPACE_8), dp(DesignTokens.SPACE_12), dp(DesignTokens.SPACE_8))
+            addView(text(title, DesignTokens.TEXT_BODY, palette.text, bold = true).apply {
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
             })
-            addView(text(body, 12f, palette.muted).apply {
-                setPadding(0, dp(2), 0, 0)
+            addView(text(body, DesignTokens.TEXT_CAPTION, palette.muted).apply {
+                setPadding(0, dp(DesignTokens.SPACE_2), 0, 0)
             })
         }
+
+    fun effectNotice(): String {
+        val mode = prefs.getString("bg_mode", "solid")
+        val alpha = prefs.getInt("ui_alpha", 94)
+        val blur = prefs.getInt("ui_blur", 18)
+        val density = prefs.getInt("ui_density", 100)
+        return when (mode) {
+            "image" -> "背景：自定义图片"
+            "gradient" -> "背景：主题渐变"
+            else -> "背景：纯色"
+        } + " | 透明度：${alpha}% | 模糊：${blur} | 密度：${density}%"
+    }
 
     fun bottomNav(items: List<Pair<String, () -> Unit>>): View =
         LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(DesignTokens.SPACE_MD), 0, dp(DesignTokens.SPACE_MD), 0)
-            setBackgroundColor(palette.nav)
+            setPadding(dp(DesignTokens.SPACE_12), 0, dp(DesignTokens.SPACE_12), 0)
+            setBackgroundColor(palette.bg)
             items.forEach { (label, action) ->
                 addView(navItem(label, action), LinearLayout.LayoutParams(0, dp(DesignTokens.BOTTOM_NAV_HEIGHT), 1f))
             }
@@ -238,7 +262,7 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
             if (bold) typeface = Typeface.DEFAULT_BOLD
         }
 
-    fun muted(value: String): TextView = text(value, 12f, palette.muted)
+    fun muted(value: String): TextView = text(value, DesignTokens.TEXT_CAPTION, palette.muted)
 
     fun rowOf(left: View, right: View): View =
         LinearLayout(activity).apply {
@@ -286,7 +310,7 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
     }
 
     private fun navItem(label: String, action: () -> Unit): TextView =
-        text(label, 12f, palette.muted).apply {
+        text(label, DesignTokens.TEXT_CAPTION, palette.muted).apply {
             gravity = Gravity.CENTER
             setOnClickListener {
                 pulse()
@@ -296,7 +320,7 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
 
     fun heroSubtitle(value: String): TextView =
         text(value, 13f, Color.argb(221, 255, 255, 255)).apply {
-            setPadding(0, dp(DesignTokens.SPACE_SM), 0, 0)
+            setPadding(0, dp(DesignTokens.SPACE_8), 0, 0)
         }
 
     fun heroMeta(value: String): TextView =
@@ -327,7 +351,7 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
             "gradient" -> {
                 root.background = GradientDrawable(
                     GradientDrawable.Orientation.TL_BR,
-                    intArrayOf(palette.bg, palette.surfaceAlt, palette.nav)
+                    intArrayOf(palette.bg, palette.surfaceAlt, palette.bg)
                 )
             }
             else -> root.setBackgroundColor(palette.bg)

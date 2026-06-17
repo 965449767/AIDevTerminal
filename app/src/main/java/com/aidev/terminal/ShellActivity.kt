@@ -42,7 +42,7 @@ class ShellActivity : Activity() {
         listOf(
             EmbeddedTerminalPage(),
             EmbeddedFilesPage(),
-            EmbeddedTasksPage(),
+            EmbeddedAIPage(),
             EmbeddedSettingsPage()
         )
     }
@@ -239,7 +239,7 @@ class ShellActivity : Activity() {
         when (which) {
             0 -> switchTo(TAB_TERMINAL)
             1 -> switchTo(TAB_FILES)
-            2 -> switchTo(TAB_TASKS)
+            2 -> switchTo(TAB_AI)
             3 -> switchTo(TAB_SETTINGS)
             4 -> openTerminalCommand("ubuntu")
             5 -> openTerminalCommand("check-dev-env")
@@ -247,7 +247,7 @@ class ShellActivity : Activity() {
             7 -> openTerminalCommand("install-aitool")
             8 -> runCatching { KeepAliveService.start(this) }
             10 -> pickBackgroundImage()
-            11 -> switchTo(TAB_TASKS)
+            11 -> switchTo(TAB_AI)
             12 -> openTerminalCommand("task-run pyserver 'python3 -m http.server 8000'")
             13 -> openTerminalCommand("task-run npm-dev 'npm run dev'")
             14 -> openTerminalCommand("task-run gradle './gradlew assembleDebug'")
@@ -366,8 +366,8 @@ class ShellActivity : Activity() {
         bottomNavView = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(ui.dp(DesignTokens.SPACE_SM), ui.dp(DesignTokens.SPACE_SM), ui.dp(DesignTokens.SPACE_SM), ui.dp(DesignTokens.SPACE_SM))
-            setBackgroundColor(ui.palette.nav)
+            setPadding(ui.dp(DesignTokens.SPACE_8), ui.dp(DesignTokens.SPACE_8), ui.dp(DesignTokens.SPACE_8), ui.dp(DesignTokens.SPACE_8))
+            setBackgroundColor(ui.palette.bg)
             bottomLabels().forEachIndexed { index, label ->
                 val item = TextView(this@ShellActivity).apply {
                     text = label
@@ -382,7 +382,7 @@ class ShellActivity : Activity() {
                         val descriptions = listOf(
                             "终端：嵌入式 Shell 终端，支持 Ubuntu 和命令执行",
                             "文件：浏览和管理本地文件与项目目录",
-                            "任务：后台任务管理，支持创建和监控运行中任务",
+                            "AI代理：OpenCode AI 助手和代理会话管理",
                             "设置：主题、背景、密度等 UI 偏好设置"
                         )
                         Toast.makeText(this@ShellActivity, descriptions.getOrElse(index) { bottomLabels()[index] }, Toast.LENGTH_SHORT).show()
@@ -397,18 +397,18 @@ class ShellActivity : Activity() {
         updateBottomNavSelection()
     }
 
-    private fun bottomLabels(): List<String> = listOf("终端", "文件", "任务", "设置")
+    private fun bottomLabels(): List<String> = listOf("终端", "文件", "AI代理", "设置")
 
     private fun updateBottomNavSelection() {
         bottomNavItems.forEachIndexed { index, item ->
             val selected = index == currentIndex
-            item.setTextColor(if (selected) ui.palette.primary else ui.palette.text)
+            item.setTextColor(if (selected) ui.palette.accent else ui.palette.text)
             item.typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
             item.background = if (selected) {
                 GradientDrawable().apply {
                     cornerRadius = ui.dp(18).toFloat()
-                    setColor((ui.palette.primary and 0x00FFFFFF) or 0x22000000)
-                    setStroke(ui.dp(1), ui.palette.primary)
+                    setColor((ui.palette.accent and 0x00FFFFFF) or 0x22000000)
+                    setStroke(ui.dp(1), ui.palette.accent)
                 }
             } else {
                 null
@@ -514,7 +514,7 @@ class ShellActivity : Activity() {
         private const val REQ_NOTIFICATION = 4302
         const val TAB_TERMINAL = 0
         const val TAB_FILES = 1
-        const val TAB_TASKS = 2
+        const val TAB_AI = 2
         const val TAB_SETTINGS = 3
 
         fun open(activity: Activity, tab: Int) {

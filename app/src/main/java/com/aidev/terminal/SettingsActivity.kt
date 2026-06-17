@@ -205,7 +205,7 @@ class SettingsActivity : Activity() {
                     2 -> startActivity(Intent(this, ServerCenterActivity::class.java))
                     3 -> showKeepAliveMenu()
                     4 -> detail("服务通信诊断", "用于检查 OpenCode/Web 前端服务端口是否能被浏览器访问。\n\n常用命令：\naidev-net-explain\nlist-listen-ports\ncheck-local-server 3000", "查看说明", "aidev-net-explain")
-                    5 -> ShellActivity.open(this, ShellActivity.TAB_TASKS)
+                    5 -> ShellActivity.open(this, ShellActivity.TAB_AI)
                 }
             }
             .show()
@@ -387,10 +387,10 @@ class SettingsActivity : Activity() {
     }
 
     private fun showThemePresetDialog() {
-        val labels = arrayOf("深空蓝", "矩阵绿", "紫色专业", "亮色", "跟随系统动态")
-        val values = arrayOf("midnight", "matrix", "violet", "light", "dynamic")
+        val labels = arrayOf("深色", "亮色", "跟随系统")
+        val values = arrayOf("dark", "light", "system")
         val prefs = getSharedPreferences("aidev_ui", MODE_PRIVATE)
-        val current = values.indexOf(prefs.getString("theme_preset", "midnight")).coerceAtLeast(0)
+        val current = values.indexOf(prefs.getString("theme_preset", "system")).coerceAtLeast(0)
         AlertDialog.Builder(this)
             .setTitle("主题预设")
             .setSingleChoiceItems(labels, current) { d, which ->
@@ -621,7 +621,7 @@ class SettingsActivity : Activity() {
 
     private fun navItems(): List<Pair<String, () -> Unit>> = listOf(
         "终端" to { ShellActivity.open(this, ShellActivity.TAB_TERMINAL) },
-        "任务" to { ShellActivity.open(this, ShellActivity.TAB_TASKS) },
+        "AI代理" to { ShellActivity.open(this, ShellActivity.TAB_AI) },
         "文件" to { ShellActivity.open(this, ShellActivity.TAB_FILES) },
         "主题" to { ShellActivity.open(this, ShellActivity.TAB_SETTINGS) }
     )

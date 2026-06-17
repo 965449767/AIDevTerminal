@@ -151,7 +151,7 @@ class EmbeddedFilesPage : ShellPage {
             setPadding(ui.dp(4), ui.dp(4), ui.dp(4), ui.dp(4))
             background = ui.surfaceBackground()
         }
-        val path = ui.text("", 12f, ui.palette.primary, bold = true).apply {
+        val path = ui.text("", 12f, ui.palette.accent, bold = true).apply {
             setPadding(ui.dp(8), ui.dp(7), ui.dp(8), ui.dp(7))
             maxLines = 2
             ellipsize = TextUtils.TruncateAt.START
@@ -200,7 +200,7 @@ class EmbeddedFilesPage : ShellPage {
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.MIDDLE
             includeFontPadding = false
-            setBackgroundColor(if ((if (isLeft) leftSelected else rightSelected)?.absolutePath == file.absolutePath) ui.palette.primary else Color.TRANSPARENT)
+            setBackgroundColor(if ((if (isLeft) leftSelected else rightSelected)?.absolutePath == file.absolutePath) ui.palette.accent else Color.TRANSPARENT)
             setOnClickListener {
                 ui.pulse()
                 activeLeft = isLeft
