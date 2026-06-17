@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.content.pm.ApplicationInfo
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.view.View
 import android.widget.CheckBox
 import android.widget.LinearLayout
@@ -52,28 +53,30 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
         val desc: String,
         val isLarge: Boolean,
         val defaultSelected: Boolean,
-        val getSourcePath: () -> String,
+        val getSourcePaths: () -> List<String>,
         val isInRootfs: Boolean
     )
 
-    private val backupItems = listOf(
-        BackupItem("ubuntu_config", "Ubuntu 配置", ".bashrc, .bash_history 等", false, true,
-            { "root/.bashrc root/.bash_history root/.profile root/.gitconfig" }, true),
-        BackupItem("ubuntu_packages", "已安装软件包", "dpkg --get-selections 列表", false, true,
-            { "/host-home/tasks/.backup_packages.list" }, true),
-        BackupItem("ubuntu_projects", "Ubuntu 项目", "/root/projects/ 目录", false, true,
-            { "root/projects" }, true),
-        BackupItem("ubuntu_rootfs", "完整 Ubuntu 环境", "整个 rootfs (1-2GB)", true, false,
-            { "." }, true),
-        BackupItem("tasks", "任务数据", "后台任务日志和元数据", false, true,
-            { File(activity.filesDir, "home/tasks").absolutePath }, false),
-        BackupItem("ui_prefs", "UI 设置", "主题、背景、字号等", false, true,
-            { File(activity.filesDir, "shared_prefs/aidev_ui.xml").absolutePath }, false),
-        BackupItem("shell_prefs", "Shell 设置", "别名、收藏夹等", false, true,
-            { File(activity.filesDir, "shared_prefs/aidev_shell.xml").absolutePath }, false),
-        BackupItem("projects", "Android 项目", "/sdcard/AIDev/ 目录", true, false,
-            { "/sdcard/AIDev" }, false)
-    )
+    private val backupItems by lazy {
+        listOf(
+            BackupItem("ubuntu_config", "Ubuntu 配置", ".bashrc, .bash_history 等", false, true,
+                { listOf("root/.bashrc", "root/.bash_history", "root/.profile", "root/.gitconfig") }, true),
+            BackupItem("ubuntu_packages", "已安装软件包", "dpkg --get-selections 列表", false, true,
+                { listOf("/host-home/tasks/.backup_packages.list") }, true),
+            BackupItem("ubuntu_projects", "Ubuntu 项目", "/root/projects/ 目录", false, true,
+                { listOf("root/projects") }, true),
+            BackupItem("ubuntu_rootfs", "完整 Ubuntu 环境", "整个 rootfs (1-2GB)", true, false,
+                { listOf(".") }, true),
+            BackupItem("tasks", "任务数据", "后台任务日志和元数据", false, true,
+                { listOf(File(activity.filesDir, "home/tasks").absolutePath) }, false),
+            BackupItem("ui_prefs", "UI 设置", "主题、背景、字号等", false, true,
+                { listOf(File(activity.filesDir, "shared_prefs/aidev_ui.xml").absolutePath) }, false),
+            BackupItem("shell_prefs", "Shell 设置", "别名、收藏夹等", false, true,
+                { listOf(File(activity.filesDir, "shared_prefs/aidev_shell.xml").absolutePath) }, false),
+            BackupItem("projects", "Android 项目", "/sdcard/AIDev/ 目录", true, false,
+                { listOf("/sdcard/AIDev") }, false)
+        )
+    }
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
@@ -272,40 +275,67 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
                         itemStatusViews[item.id]?.setTextColor(ui.palette.accent)
                     }
 
-                    val sourcePath = item.getSourcePath()
+                    val sourcePaths = item.getSourcePaths()
                     val subTar = File(tempDir, "${item.id}.tar.gz")
+                    var exitCode = 1
 
-                    val exitCode = if (item.isInRootfs) {
-                        // proot 内打包
-                        val proc = runInProot("tar -czf /host-home/tasks/.backup_temp.tar.gz -C / $sourcePath 2>/dev/null || tar -czf /host-home/tasks/.backup_temp.tar.gz $sourcePath 2>/dev/null")
-                        val code = waitForProcess(proc)
-                        // 把临时文件移出来
-                        val tempTarInRootfs = File(activity.filesDir, "home/tasks/.backup_temp.tar.gz")
-                        if (tempTarInRootfs.exists()) {
-                            tempTarInRootfs.renameTo(subTar)
-                        }
-                        code
-                    } else {
-                        // 原生打包
-                        val sourceFile = File(sourcePath)
-                        if (!sourceFile.exists()) {
-                            1
-                        } else {
-                            val cmd = if (sourceFile.isDirectory) {
-                                arrayOf("tar", "-czf", subTar.absolutePath, "-C", sourceFile.parentFile?.absolutePath ?: ".", sourceFile.name)
+                    try {
+                        if (item.isInRootfs) {
+                            // proot 内打包：生成文件列表避免参数过长
+                            val fileListContent = sourcePaths.joinToString("\n") { it.trim() }
+                            val listFile = File(activity.filesDir, "home/tasks/.backup_filelist_${item.id}.txt")
+                            listFile.parentFile?.mkdirs()
+                            listFile.writeText(fileListContent)
+                            Log.d("AIDevBackup", "[${item.id}] fileList: $fileListContent")
+
+                            // 先检查文件是否存在
+                            val checkCmd = sourcePaths.joinToString(" && ") { "test -e $it" }
+                            val checkProc = runInProot("$checkCmd && echo 'EXISTS' || echo 'MISSING'")
+                            val checkResult = checkProc.inputStream.bufferedReader().readText().trim()
+                            drainStream(checkProc)
+                            checkProc.waitFor()
+                            Log.d("AIDevBackup", "[${item.id}] checkResult: $checkResult")
+
+                            if (checkResult == "EXISTS") {
+                                val tarCmd = "tar -czf /host-home/tasks/.backup_temp.tar.gz -C / -T /host-home/tasks/.backup_filelist_${item.id}.txt"
+                                val proc = runInProot(tarCmd)
+                                exitCode = waitForProcess(proc)
+                                Log.d("AIDevBackup", "[${item.id}] tar exitCode=$exitCode")
+
+                                val tempTarInRootfs = File(activity.filesDir, "home/tasks/.backup_temp.tar.gz")
+                                if (tempTarInRootfs.exists()) {
+                                    tempTarInRootfs.renameTo(subTar)
+                                    Log.d("AIDevBackup", "[${item.id}] moved to ${subTar.absolutePath}, size=${subTar.length()}")
+                                } else {
+                                    Log.w("AIDevBackup", "[${item.id}] temp tar not found after tar command")
+                                }
                             } else {
-                                arrayOf("tar", "-czf", subTar.absolutePath, "-C", sourceFile.parentFile?.absolutePath ?: ".", sourceFile.name)
+                                Log.w("AIDevBackup", "[${item.id}] source files missing")
                             }
-                            val proc = runNative(cmd)
-                            waitForProcess(proc)
+                        } else {
+                            // 原生打包
+                            val existingPaths = sourcePaths.filter { File(it).exists() }
+                            if (existingPaths.isEmpty()) {
+                                Log.w("AIDevBackup", "[${item.id}] no existing paths: $sourcePaths")
+                            } else {
+                                // 使用 -T 文件列表
+                                val listFile = File(tempDir, "${item.id}_filelist.txt")
+                                listFile.writeText(existingPaths.joinToString("\n"))
+                                val proc = runNative(arrayOf("tar", "-czf", subTar.absolutePath, "-T", listFile.absolutePath))
+                                exitCode = waitForProcess(proc)
+                                Log.d("AIDevBackup", "[${item.id}] native tar exitCode=$exitCode, size=${subTar.length()}")
+                            }
                         }
+                    } catch (e: Exception) {
+                        Log.e("AIDevBackup", "[${item.id}] exception: ${e.message}", e)
+                        exitCode = 1
                     }
 
                     completed++
                     val percent = (completed * 100 / total)
                     handler.post {
                         progressBar.progress = percent
-                        if (exitCode == 0 && subTar.exists()) {
+                        if (exitCode == 0 && subTar.exists() && subTar.length() > 0) {
                             itemStatusViews[item.id]?.text = "  ✓ ${item.name}"
                             itemStatusViews[item.id]?.setTextColor(ui.palette.success ?: ui.palette.accent)
                         } else {
@@ -549,39 +579,38 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
                         continue
                     }
 
-                    // 恢复前备份原数据
-                    val targetPath = item.getSourcePath()
-                    val targetFile = if (item.isInRootfs) {
-                        File(activity.filesDir, "home/ubuntu-rootfs/$targetPath")
-                    } else {
-                        File(targetPath)
+                    // 恢复前备份原数据（对每个路径）
+                    val targetPaths = item.getSourcePaths()
+                    val targetFiles = targetPaths.map { path ->
+                        if (item.isInRootfs) {
+                            File(activity.filesDir, "home/ubuntu-rootfs/$path")
+                        } else {
+                            File(path)
+                        }
                     }
 
-                    if (targetFile.exists()) {
-                        val backupOld = File(targetFile.parentFile, "${targetFile.name}.backup.old")
-                        if (backupOld.exists()) backupOld.deleteRecursively()
-                        targetFile.renameTo(backupOld)
+                    targetFiles.forEach { tf ->
+                        if (tf.exists()) {
+                            val backupOld = File(tf.parentFile, "${tf.name}.backup.old")
+                            if (backupOld.exists()) backupOld.deleteRecursively()
+                            tf.renameTo(backupOld)
+                        }
                     }
 
-                    // 解压子 tar
-                    val parentDir = targetFile.parentFile ?: continue
+                    // 确定解压目标目录：使用第一个路径的父目录
+                    val parentDir = targetFiles.firstOrNull()?.parentFile ?: continue
                     parentDir.mkdirs()
 
                     val restoreProc = if (item.isInRootfs) {
-                        // proot 内解压
-                        runInProot("tar -xzf /host-home/tasks/.restore_temp.tar.gz -C / 2>/dev/null")
-                    } else {
-                        runNative(arrayOf("tar", "-xzf", subTar.absolutePath, "-C", parentDir.absolutePath))
-                    }
-
-                    if (item.isInRootfs) {
-                        // 先把子 tar 复制到 proot 能访问的位置
-                        val restoreTemp = File(activity.filesDir, "home/tasks/.restore_temp.tar.gz")
+                        // 先把子 tar 复制到 proot 能访问的位置，再解压
+                        val restoreTemp = File(activity.filesDir, "home/tasks/.restore_temp_${item.id}.tar.gz")
                         subTar.copyTo(restoreTemp, overwrite = true)
-                        waitForProcess(restoreProc)
+                        val proc = runInProot("tar -xzf /host-home/tasks/.restore_temp_${item.id}.tar.gz -C / 2>/dev/null")
+                        waitForProcess(proc)
                         restoreTemp.delete()
                     } else {
-                        waitForProcess(restoreProc)
+                        val proc = runNative(arrayOf("tar", "-xzf", subTar.absolutePath, "-C", parentDir.absolutePath))
+                        waitForProcess(proc)
                     }
 
                     completed++
