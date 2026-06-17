@@ -98,15 +98,24 @@ class AIDevBottomSheet(private val activity: Activity, private val ui: AIDevUi) 
     
     private fun attachSwipeDismiss(view: View) {
         var downY = 0f
+        var isDragging = false
         view.setOnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downY = event.rawY
+                    isDragging = false
+                    false
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dy = event.rawY - downY
+                    if (dy > ui.dp(24)) {
+                        isDragging = true
+                    }
                     false
                 }
                 MotionEvent.ACTION_UP -> {
                     val dy = event.rawY - downY
-                    if (dy > ui.dp(120)) {
+                    if (isDragging && dy > ui.dp(80)) {
                         dismiss()
                         true
                     } else {

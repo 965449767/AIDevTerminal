@@ -15,7 +15,6 @@ class MenuBottomSheet(private val activity: Activity, private val ui: AIDevUi) {
         sheet.show(title) { content ->
             items.forEach { item ->
                 content.addView(menuItemView(item) {
-                    sheet.dismiss()
                     item.action()
                 })
             }
