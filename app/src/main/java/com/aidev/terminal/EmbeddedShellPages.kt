@@ -601,7 +601,7 @@ class EmbeddedTerminalPage : ShellPage {
                 ellipsize = TextUtils.TruncateAt.END
             }, LinearLayout.LayoutParams(0, -1, 1f))
             addView(button(activity, ui, "+") { newSession(activity) }, LinearLayout.LayoutParams(ui.dp(42), ui.dp(30)))
-            addView(button(activity, ui, "退出") { host.switchTab(ShellActivity.TAB_PROJECT) }, LinearLayout.LayoutParams(ui.dp(54), ui.dp(30)).apply {
+            addView(button(activity, ui, "退出") { host.switchTab(ShellActivity.TAB_TERMINAL) }, LinearLayout.LayoutParams(ui.dp(54), ui.dp(30)).apply {
                 leftMargin = ui.dp(4)
             })
             addView(button(activity, ui, "更多") { showTerminalTopMore(activity, host) }, LinearLayout.LayoutParams(ui.dp(54), ui.dp(30)).apply {
@@ -641,7 +641,7 @@ class EmbeddedTerminalPage : ShellPage {
             "会话 · 新建会话" to { newSession(activity) },
             "会话 · 重命名会话" to { renameCurrentSession(activity) },
             "会话 · 关闭当前会话" to { closeCurrent(activity) },
-            "导航 · 退出到项目" to { host.switchTab(ShellActivity.TAB_PROJECT) },
+            "导航 · 退出到终端" to { host.switchTab(ShellActivity.TAB_TERMINAL) },
             "终端 · 进入 Ubuntu" to { send("ubuntu") },
             "终端 · 诊断 Doctor" to { send("aidev-doctor") },
             "终端 · 清屏" to { send("clear") },

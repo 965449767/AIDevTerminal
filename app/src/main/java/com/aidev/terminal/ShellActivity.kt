@@ -36,7 +36,6 @@ class ShellActivity : Activity() {
     private val bottomNavItems = mutableListOf<TextView>()
     private val pages: List<ShellPage> by lazy {
         listOf(
-            ProjectPage(),
             EmbeddedTerminalPage(),
             EmbeddedFilesPage(),
             EmbeddedTasksPage(),
@@ -58,7 +57,7 @@ class ShellActivity : Activity() {
         if (shouldAutoBootstrapUbuntu) {
             TerminalCommandBus.post("aidev-auto-bootstrap")
         }
-        val initial = if (shouldAutoBootstrapUbuntu) TAB_TERMINAL else requestedTab.takeIf { it in pages.indices } ?: 0
+        val initial = if (shouldAutoBootstrapUbuntu) TAB_TERMINAL else requestedTab.takeIf { it in pages.indices } ?: TAB_TERMINAL
         switchTo(initial, animateForward = null, force = true)
     }
 
@@ -120,7 +119,6 @@ class ShellActivity : Activity() {
 
     fun showCommandPalette() {
         val items = arrayOf(
-            "打开项目",
             "打开终端",
             "打开文件",
             "打开任务",
@@ -233,16 +231,15 @@ class ShellActivity : Activity() {
 
     private fun handleCommandPalette(which: Int) {
         when (which) {
-            0 -> switchTo(TAB_PROJECT)
-            1 -> switchTo(TAB_TERMINAL)
-            2 -> switchTo(TAB_FILES)
-            3 -> switchTo(TAB_TASKS)
-            4 -> switchTo(TAB_SETTINGS)
-            5 -> openTerminalCommand("ubuntu")
-            6 -> openTerminalCommand("check-dev-env")
-            7 -> openTerminalCommand("list-listen-ports")
-            8 -> openTerminalCommand("install-aitool")
-            9 -> runCatching { KeepAliveService.start(this) }
+            0 -> switchTo(TAB_TERMINAL)
+            1 -> switchTo(TAB_FILES)
+            2 -> switchTo(TAB_TASKS)
+            3 -> switchTo(TAB_SETTINGS)
+            4 -> openTerminalCommand("ubuntu")
+            5 -> openTerminalCommand("check-dev-env")
+            6 -> openTerminalCommand("list-listen-ports")
+            7 -> openTerminalCommand("install-aitool")
+            8 -> runCatching { KeepAliveService.start(this) }
             10 -> pickBackgroundImage()
             11 -> switchTo(TAB_TASKS)
             12 -> openTerminalCommand("task-run pyserver 'python3 -m http.server 8000'")
@@ -377,7 +374,6 @@ class ShellActivity : Activity() {
                     setOnLongClickListener {
                         ui.pulse()
                         val descriptions = listOf(
-                            "项目：查看当前项目、快捷操作和开发状态",
                             "终端：嵌入式 Shell 终端，支持 Ubuntu 和命令执行",
                             "文件：浏览和管理本地文件与项目目录",
                             "任务：后台任务管理，支持创建和监控运行中任务",
@@ -395,7 +391,7 @@ class ShellActivity : Activity() {
         updateBottomNavSelection()
     }
 
-    private fun bottomLabels(): List<String> = listOf("项目", "终端", "文件", "任务", "设置")
+    private fun bottomLabels(): List<String> = listOf("终端", "文件", "任务", "设置")
 
     private fun updateBottomNavSelection() {
         bottomNavItems.forEachIndexed { index, item ->
@@ -509,11 +505,10 @@ class ShellActivity : Activity() {
 
     companion object {
         private const val REQ_BACKGROUND_IMAGE = 4301
-        const val TAB_PROJECT = 0
-        const val TAB_TERMINAL = 1
-        const val TAB_FILES = 2
-        const val TAB_TASKS = 3
-        const val TAB_SETTINGS = 4
+        const val TAB_TERMINAL = 0
+        const val TAB_FILES = 1
+        const val TAB_TASKS = 2
+        const val TAB_SETTINGS = 3
 
         fun open(activity: Activity, tab: Int) {
             val intent = Intent(activity, ShellActivity::class.java)

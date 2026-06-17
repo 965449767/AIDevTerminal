@@ -131,7 +131,7 @@ class MainActivity : Activity() {
         }
         AIDevUi(this, prefs).attachSwipeNavigation(
             root,
-            previous = { ShellActivity.open(this, ShellActivity.TAB_PROJECT) },
+            previous = { ShellActivity.open(this, ShellActivity.TAB_TERMINAL) },
             next = { ShellActivity.open(this, ShellActivity.TAB_FILES) }
         )
 
@@ -154,7 +154,7 @@ class MainActivity : Activity() {
             textSize = 11f
         }
         topBar.addView(debugButton)
-        topBar.addView(iconButton("退出") { _ -> ShellActivity.open(this, ShellActivity.TAB_PROJECT) }.apply { textSize = 11f })
+        topBar.addView(iconButton("退出") { _ -> ShellActivity.open(this, ShellActivity.TAB_TERMINAL) }.apply { textSize = 11f })
         topBar.addView(iconButton("+") { newSession() })
         topBar.addView(iconButton("⋮") { v -> showMenu(v) })
         root.addView(topBar)
@@ -201,7 +201,7 @@ class MainActivity : Activity() {
     private fun showMenu(anchor: View) {
         val popup = PopupMenu(this, anchor)
         popup.menu.add(0, 100, 0, "设置中心")
-        popup.menu.add(0, 101, 0, "返回工作台")
+        popup.menu.add(0, 101, 0, "返回终端")
         popup.menu.add(0, 7, 0, "关闭当前会话")
         popup.menu.add(0, 8, 0, "键盘布局")
         popup.menu.add(0, 9, 0, "重置键盘")
@@ -221,7 +221,7 @@ class MainActivity : Activity() {
                 12 -> toggleDebugMode()
                 13 -> showTabCloseModeDialog()
                 100 -> AppNav.open(this, SettingsActivity::class.java)
-                101 -> ShellActivity.open(this, ShellActivity.TAB_PROJECT)
+                101 -> ShellActivity.open(this, ShellActivity.TAB_TERMINAL)
             }
             true
         }

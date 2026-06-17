@@ -121,7 +121,7 @@ class SettingsActivity : Activity() {
                         顶级页面正在逐步接入左右滑动导航。
 
                         已接入：
-                        工作台、任务中心、AI 助手中心、服务器中心、主题中心、设置中心。
+                        终端、任务中心、AI 助手中心、服务器中心、主题中心、设置中心。
 
                         后续需要继续处理：
                         文件管理器和终端页面，因为这两个页面存在横向内容、选择态和终端输入区域，手势冲突要单独设计。
@@ -620,9 +620,9 @@ class SettingsActivity : Activity() {
     }
 
     private fun navItems(): List<Pair<String, () -> Unit>> = listOf(
-        "项目" to { ShellActivity.open(this, ShellActivity.TAB_PROJECT) },
-        "终端" to { AppNav.openTerminal(this, "") },
+        "终端" to { ShellActivity.open(this, ShellActivity.TAB_TERMINAL) },
         "任务" to { ShellActivity.open(this, ShellActivity.TAB_TASKS) },
+        "文件" to { ShellActivity.open(this, ShellActivity.TAB_FILES) },
         "主题" to { ShellActivity.open(this, ShellActivity.TAB_SETTINGS) }
     )
 
