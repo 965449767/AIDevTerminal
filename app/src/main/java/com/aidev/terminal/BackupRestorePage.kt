@@ -116,10 +116,9 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
             Log.e("AIDevBackup", "rootfs not found at: $rootfs")
         }
 
-        // 构建带环境变量的 shell 命令
+        // 使用 ProcessBuilder 正确设置环境变量
         // proot 需要 PROOT_LOADER 和 PROOT_TMP_DIR 才能正常工作
         val shellCmd = buildString {
-            append("export PROOT_LOADER=$prootLoader PROOT_TMP_DIR=$prootTmpDir LD_LIBRARY_PATH=$nativeDir && ")
             append("$proot --link2symlink -0 -r $rootfs ")
             append("-b /dev -b /proc -b /sys -b /system/bin -b /system/etc ")
             append("-b /system/framework -b /sdcard -b /storage ")
@@ -131,7 +130,13 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
         }
 
         Log.d("AIDevBackup", "runInProot cmd: ${shellCmd.take(200)}...")
-        return Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", shellCmd))
+
+        val pb = ProcessBuilder("/system/bin/sh", "-c", shellCmd)
+        val env = pb.environment()
+        env["PROOT_LOADER"] = prootLoader
+        env["PROOT_TMP_DIR"] = prootTmpDir
+        env["LD_LIBRARY_PATH"] = nativeDir
+        return pb.start()
     }
 
     private fun runNative(command: Array<String>): Process {
@@ -323,9 +328,14 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
                             val checkResultFile = File(activity.filesDir, "home/tasks/.backup_check_${item.id}.txt")
                             val checkCmd = sourcePaths.joinToString(" && ") { "test -e $it" }
                             val checkProc = runInProot("$checkCmd && echo EXISTS > /host-home/tasks/.backup_check_${item.id}.txt || echo MISSING > /host-home/tasks/.backup_check_${item.id}.txt")
-                            val checkCode = waitForProcess(checkProc)
+                            // 收集 stderr 诊断错误
+                            val checkStderr = checkProc.errorStream.bufferedReader().readText()
+                            val checkCode = checkProc.waitFor()
                             val checkResult = if (checkResultFile.exists()) checkResultFile.readText().trim() else "NO_RESULT"
                             Log.d("AIDevBackup", "[${item.id}] checkCode=$checkCode, checkResult=$checkResult")
+                            if (checkStderr.isNotBlank()) {
+                                Log.e("AIDevBackup", "[${item.id}] check stderr: $checkStderr")
+                            }
 
                             if (checkResult == "EXISTS") {
                                 val tarCmd = "tar -czf /host-home/tasks/.backup_temp.tar.gz -C / -T /host-home/tasks/.backup_filelist_${item.id}.txt"
