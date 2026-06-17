@@ -131,7 +131,7 @@ class MainActivity : Activity() {
         }
         AIDevUi(this, prefs).attachSwipeNavigation(
             root,
-            previous = { ShellActivity.open(this, ShellActivity.TAB_DASHBOARD) },
+            previous = { ShellActivity.open(this, ShellActivity.TAB_PROJECT) },
             next = { ShellActivity.open(this, ShellActivity.TAB_FILES) }
         )
 
@@ -154,7 +154,7 @@ class MainActivity : Activity() {
             textSize = 11f
         }
         topBar.addView(debugButton)
-        topBar.addView(iconButton("退出") { _ -> ShellActivity.open(this, ShellActivity.TAB_DASHBOARD) }.apply { textSize = 11f })
+        topBar.addView(iconButton("退出") { _ -> ShellActivity.open(this, ShellActivity.TAB_PROJECT) }.apply { textSize = 11f })
         topBar.addView(iconButton("+") { newSession() })
         topBar.addView(iconButton("⋮") { v -> showMenu(v) })
         root.addView(topBar)
@@ -221,7 +221,7 @@ class MainActivity : Activity() {
                 12 -> toggleDebugMode()
                 13 -> showTabCloseModeDialog()
                 100 -> AppNav.open(this, SettingsActivity::class.java)
-                101 -> ShellActivity.open(this, ShellActivity.TAB_DASHBOARD)
+                101 -> ShellActivity.open(this, ShellActivity.TAB_PROJECT)
             }
             true
         }

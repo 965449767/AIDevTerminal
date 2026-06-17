@@ -620,7 +620,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun navItems(): List<Pair<String, () -> Unit>> = listOf(
-        "工作台" to { ShellActivity.open(this, ShellActivity.TAB_DASHBOARD) },
+        "项目" to { ShellActivity.open(this, ShellActivity.TAB_PROJECT) },
         "终端" to { AppNav.openTerminal(this, "") },
         "任务" to { ShellActivity.open(this, ShellActivity.TAB_TASKS) },
         "主题" to { ShellActivity.open(this, ShellActivity.TAB_SETTINGS) }

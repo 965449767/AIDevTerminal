@@ -14,8 +14,8 @@ import android.widget.ScrollView
 import android.widget.TextView
 import java.io.File
 
-/** 工作台内容页：生成滚动卡片，不包含底部导航和背景。 */
-class DashboardPage : ShellPage {
+/** 项目页：显示当前项目快捷操作、最近项目和状态概览。 */
+class ProjectPage : ShellPage {
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         val scrollContent = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -27,7 +27,7 @@ class DashboardPage : ShellPage {
             scrollContent.addView(ui.section("当前项目", "围绕已标记项目快速执行常用动作"))
             scrollContent.addView(it)
         }
-        scrollContent.addView(ui.section("主要工作区", "进入终端、文件、任务、AI 与服务器模式"))
+        scrollContent.addView(ui.section("快捷入口", "进入终端、文件、任务、AI 与设置"))
         scrollContent.addView(actionGrid(activity, ui, host))
         scrollContent.addView(ui.section("开发状态", "移动端 Android 开发工作站的关键状态"))
         scrollContent.addView(devStatus(activity, ui))
@@ -40,7 +40,7 @@ class DashboardPage : ShellPage {
             setPadding(ui.dp(18), ui.dp(18), ui.dp(18), ui.dp(18))
             background = ui.card(hero = true)
             addView(TextView(activity).apply {
-                text = "AIDev Workstation"
+                text = "AIDev Project"
                 textSize = 26f
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(Color.WHITE)
@@ -226,68 +226,5 @@ class DashboardPage : ShellPage {
         if (Build.VERSION.SDK_INT < 23) return auto
         val pm = activity.getSystemService(Context.POWER_SERVICE) as PowerManager
         return auto && pm.isIgnoringBatteryOptimizations(activity.packageName)
-    }
-}
-
-/** 文件页的 Shell 内容：入口卡片，跳转到 ShellActivity 文件页。 */
-class FilesPage : ShellPage {
-    override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
-        val container = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(ui.dp(18), ui.dp(18), ui.dp(18), ui.dp(24))
-        }
-        container.addView(ui.section("文件", "双列文件管理、项目目录、APK 与日志"))
-        container.addView(ui.actionCard("打开双列文件管理器", "在独立场景里进行复制/移动/删除/重命名/安装", "FIL") {
-            host.switchTab(ShellActivity.TAB_FILES)
-        })
-        container.addView(ui.actionCard("项目目录", "进入 Ubuntu 后默认工作区 /root/projects", "DIR") {
-            host.openTerminal("ubuntu")
-        })
-        container.addView(ui.actionCard("下载目录", "查看 /sdcard/Download 内最近的下载文件", "DL") {
-            host.openTerminal("ls -al /sdcard/Download")
-        })
-        return ScrollView(activity).apply { addView(container) }
-    }
-}
-
-/** 任务页的 Shell 内容：入口卡片，跳转到 ShellActivity 任务页。 */
-class TasksPage : ShellPage {
-    override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
-        val container = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(ui.dp(18), ui.dp(18), ui.dp(18), ui.dp(24))
-        }
-        container.addView(ui.section("任务", "后台任务、长任务日志、服务运行状态"))
-        container.addView(ui.actionCard("打开任务中心", "查看运行中任务、PID 和日志", "TSK") {
-            host.switchTab(ShellActivity.TAB_TASKS)
-        })
-        container.addView(ui.actionCard("AI 助手中心", "OpenCode、代理服务和 Web UI", "AI") {
-            host.open(AIAgentActivity::class.java)
-        })
-        container.addView(ui.actionCard("服务器中心", "端口、常驻、本机访问诊断", "SRV") {
-            host.open(ServerCenterActivity::class.java)
-        })
-        return ScrollView(activity).apply { addView(container) }
-    }
-}
-
-/** 设置页的 Shell 内容：保留入口卡片，详细配置仍在 SettingsActivity 中处理。 */
-class SettingsPage : ShellPage {
-    override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
-        val container = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(ui.dp(18), ui.dp(18), ui.dp(18), ui.dp(24))
-        }
-        container.addView(ui.section("设置", "一级入口保持通用简洁，详细配置进入二级页"))
-        container.addView(ui.actionCard("外观与交互", "主题、背景、空间尺寸、触觉反馈", "UX") {
-            host.switchTab(ShellActivity.TAB_SETTINGS)
-        })
-        container.addView(ui.actionCard("打开设置中心", "开发环境、AI、文件、权限、系统高级", "SET") {
-            host.open(SettingsActivity::class.java)
-        })
-        container.addView(ui.actionCard("权限管理", "存储、安装、Shizuku、电池优化", "PERM") {
-            host.open(SettingsActivity::class.java)
-        })
-        return ScrollView(activity).apply { addView(container) }
     }
 }

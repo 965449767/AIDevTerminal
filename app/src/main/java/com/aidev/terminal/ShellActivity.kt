@@ -36,7 +36,7 @@ class ShellActivity : Activity() {
     private val bottomNavItems = mutableListOf<TextView>()
     private val pages: List<ShellPage> by lazy {
         listOf(
-            DashboardPage(),
+            ProjectPage(),
             EmbeddedTerminalPage(),
             EmbeddedFilesPage(),
             EmbeddedTasksPage(),
@@ -120,7 +120,7 @@ class ShellActivity : Activity() {
 
     fun showCommandPalette() {
         val items = arrayOf(
-            "打开工作台",
+            "打开项目",
             "打开终端",
             "打开文件",
             "打开任务",
@@ -233,7 +233,7 @@ class ShellActivity : Activity() {
 
     private fun handleCommandPalette(which: Int) {
         when (which) {
-            0 -> switchTo(TAB_DASHBOARD)
+            0 -> switchTo(TAB_PROJECT)
             1 -> switchTo(TAB_TERMINAL)
             2 -> switchTo(TAB_FILES)
             3 -> switchTo(TAB_TASKS)
@@ -377,7 +377,7 @@ class ShellActivity : Activity() {
                     setOnLongClickListener {
                         ui.pulse()
                         val descriptions = listOf(
-                            "工作台：查看系统状态、快捷操作和项目概览",
+                            "项目：查看当前项目、快捷操作和开发状态",
                             "终端：嵌入式 Shell 终端，支持 Ubuntu 和命令执行",
                             "文件：浏览和管理本地文件与项目目录",
                             "任务：后台任务管理，支持创建和监控运行中任务",
@@ -395,7 +395,7 @@ class ShellActivity : Activity() {
         updateBottomNavSelection()
     }
 
-    private fun bottomLabels(): List<String> = listOf("工作台", "终端", "文件", "任务", "设置")
+    private fun bottomLabels(): List<String> = listOf("项目", "终端", "文件", "任务", "设置")
 
     private fun updateBottomNavSelection() {
         bottomNavItems.forEachIndexed { index, item ->
@@ -509,7 +509,7 @@ class ShellActivity : Activity() {
 
     companion object {
         private const val REQ_BACKGROUND_IMAGE = 4301
-        const val TAB_DASHBOARD = 0
+        const val TAB_PROJECT = 0
         const val TAB_TERMINAL = 1
         const val TAB_FILES = 2
         const val TAB_TASKS = 3
