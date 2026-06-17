@@ -22,7 +22,11 @@ class KeepAliveService : Service() {
         startForeground(NOTIFICATION_ID, notification())
         // Phase 1: 让进程级单例的健康轮询启动；UI 不在前台也保持周期探测，
         // 一旦用户在 Ubuntu 内手动 `opencode serve`，AIDev Terminal 会立即识别。
-        runCatching { OpencodeManager.ensurePolling(applicationContext) }
+        try {
+            OpencodeManager.ensurePolling(applicationContext)
+        } catch (e: Exception) {
+            AIDevLogger.e(TAG, "Failed to start OpencodeManager polling", e)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -55,8 +59,16 @@ class KeepAliveService : Service() {
     }
 
     private fun releaseLocks() {
-        runCatching { if (wifiLock?.isHeld == true) wifiLock?.release() }
-        runCatching { if (wakeLock?.isHeld == true) wakeLock?.release() }
+        try {
+            if (wifiLock?.isHeld == true) wifiLock?.release()
+        } catch (e: Exception) {
+            AIDevLogger.w(TAG, "Failed to release wifi lock", e)
+        }
+        try {
+            if (wakeLock?.isHeld == true) wakeLock?.release()
+        } catch (e: Exception) {
+            AIDevLogger.w(TAG, "Failed to release wake lock", e)
+        }
         wifiLock = null
         wakeLock = null
     }
@@ -94,16 +106,25 @@ class KeepAliveService : Service() {
     }
 
     companion object {
+        private const val TAG = "KeepAlive"
         private const val CHANNEL_ID = "aidev_keepalive"
         private const val NOTIFICATION_ID = 4201
+        @Volatile
+        private var isRunning = false
 
         fun start(context: Context) {
+            if (isRunning) {
+                AIDevLogger.d(TAG, "KeepAliveService already running, skipping start")
+                return
+            }
             val intent = Intent(context, KeepAliveService::class.java)
             if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent) else context.startService(intent)
+            isRunning = true
         }
 
         fun stop(context: Context) {
             context.stopService(Intent(context, KeepAliveService::class.java))
+            isRunning = false
         }
     }
 }

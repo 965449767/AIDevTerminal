@@ -3,6 +3,7 @@ package com.aidev.terminal
 import android.os.FileObserver
 import android.util.Log
 import java.io.File
+import java.lang.ref.WeakReference
 
 /**
  * Shizuku 文件桥服务。
@@ -29,7 +30,10 @@ object ShizukuBridgeService {
 
     /** 启动桥服务 */
     fun start(homeDir: File) {
-        if (isRunning) return
+        if (isRunning) {
+            AIDevLogger.w(TAG, "Bridge service already running, skipping start")
+            return
+        }
 
         val requestDir = File(File(homeDir, BRIDGE_DIR), REQUEST_DIR)
         requestDir.mkdirs()
@@ -46,7 +50,7 @@ object ShizukuBridgeService {
         }
         observer?.startWatching()
         isRunning = true
-        Log.d(TAG, "Bridge service started, watching $requestDir")
+        AIDevLogger.d(TAG, "Bridge service started, watching $requestDir")
     }
 
     /** 停止桥服务 */
@@ -54,7 +58,7 @@ object ShizukuBridgeService {
         observer?.stopWatching()
         observer = null
         isRunning = false
-        Log.d(TAG, "Bridge service stopped")
+        AIDevLogger.d(TAG, "Bridge service stopped")
     }
 
     private fun handleRequest(requestDir: File, bridgeDir: File, fileName: String) {
@@ -79,7 +83,7 @@ object ShizukuBridgeService {
                 val lineCount = lines["LINES"]?.toIntOrNull() ?: 200
                 val follow = lines["FOLLOW"]?.isNotEmpty() == true
 
-                Log.d(TAG, "Processing request: pkg=$packageName, lines=$lineCount, follow=$follow")
+                AIDevLogger.d(TAG, "Processing request: pkg=$packageName, lines=$lineCount, follow=$follow")
 
                 if (follow) {
                     // 流式模式：写入 header 后持续追加
@@ -89,7 +93,9 @@ object ShizukuBridgeService {
                         onLine = { line ->
                             try {
                                 resFile.appendText("$line\n")
-                            } catch (_: Exception) {}
+                            } catch (e: Exception) {
+                                AIDevLogger.w(TAG, "Failed to append log line", e)
+                            }
                         },
                         onError = { err ->
                             resFile.appendText("\nERROR: $err\n")
@@ -106,6 +112,7 @@ object ShizukuBridgeService {
                         result.onSuccess { logs ->
                             resFile.writeText(logs)
                         }.onFailure { e ->
+                            AIDevLogger.e(TAG, "Failed to fetch log", e)
                             resFile.writeText("ERROR: ${e.message}\n")
                         }
                         done.countDown()
@@ -118,7 +125,7 @@ object ShizukuBridgeService {
                     reqFile.delete()
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to handle request: $fileName", e)
+                AIDevLogger.e(TAG, "Failed to handle request: $fileName", e)
                 resFile.writeText("ERROR: ${e.message}\n")
                 reqFile.delete()
             }
