@@ -334,7 +334,7 @@ class NetworkDiagnosticsPage : ShellPage {
     }
 
     private fun copyText(label: String, text: String) {
-        (activity.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager)?.setPrimaryClip(android.content.ClipData.newPlainText(label, text))
+        ClipboardHelper.copy(activity, label, text)
         Toast.makeText(activity, "已复制", Toast.LENGTH_SHORT).show()
     }
 }

@@ -190,6 +190,16 @@ private class TerminalImeProxyEditText(context: Context) : EditText(context) {
     }
 }
 
+/**
+ * 内嵌终端页面：终端会话管理、虚拟键盘、自动补全、TUI 模式。
+ *
+ * TODO: 未来拆分建议（当前因内部类交叉引用和共享状态过多，拆分风险较高）：
+ *   1. TerminalImeProxyEditText (L63-191) -> 独立文件，通过接口回调解耦
+ *   2. 自动补全相关方法 (L799-1035) -> CompletionEngine 辅助类
+ *   3. 虚拟键盘相关方法 (L1088-1341) -> VirtualKeyboardBuilder 辅助类
+ *   4. 会话管理相关方法 (L1416-1640) -> SessionManager 辅助类
+ *   5. TerminalSessionClient / TerminalViewClient (L1663-1753) -> 独立 Client 类
+ */
 class EmbeddedTerminalPage : ShellPage {
     private companion object {
         const val DEFAULT_FONT_SP = 10f

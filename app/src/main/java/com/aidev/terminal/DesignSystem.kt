@@ -14,6 +14,7 @@ import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.text.TextUtils
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import kotlin.math.abs
@@ -263,6 +264,40 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
         }
 
     fun muted(value: String): TextView = text(value, DesignTokens.TEXT_CAPTION, palette.muted)
+
+    /** 空状态占位视图：居中显示标题和提示文字 */
+    fun emptyState(message: String, hint: String): View =
+        LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(DesignTokens.SPACE_12), dp(DesignTokens.SPACE_24), dp(DesignTokens.SPACE_12), dp(DesignTokens.SPACE_24))
+            addView(text(message, DesignTokens.TEXT_H2, palette.text, bold = true))
+            addView(text(hint, DesignTokens.TEXT_CAPTION, palette.muted).apply {
+                setPadding(0, dp(DesignTokens.SPACE_4), 0, 0)
+            })
+        }
+
+    /** 状态指示圆点：绿色表示正常，红色表示异常 */
+    fun statusDot(ok: Boolean): View =
+        View(activity).apply {
+            val size = dp(8)
+            layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                setMargins(0, 0, dp(DesignTokens.SPACE_4), 0)
+            }
+            setBackgroundResource(android.R.drawable.btn_default)
+            setBackgroundColor(if (ok) palette.success else palette.danger)
+        }
+
+    /** 带主题样式的输入框 */
+    fun inputField(hint: String): EditText =
+        EditText(activity).apply {
+            setHint(hint)
+            setTextColor(palette.text)
+            setHintTextColor(palette.muted)
+            setBackgroundColor(palette.surfaceAlt)
+            setPadding(dp(DesignTokens.SPACE_12), dp(DesignTokens.SPACE_8), dp(DesignTokens.SPACE_12), dp(DesignTokens.SPACE_8))
+            textSize = DesignTokens.TEXT_BODY
+        }
 
     fun rowOf(left: View, right: View): View =
         LinearLayout(activity).apply {

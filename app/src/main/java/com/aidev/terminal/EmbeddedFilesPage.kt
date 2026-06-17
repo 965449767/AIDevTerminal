@@ -1083,7 +1083,7 @@ class EmbeddedFilesPage : ShellPage {
     }
     private fun info(text: String): TextView = ui.text(text, 12f, ui.palette.muted).apply { setPadding(ui.dp(8), ui.dp(10), ui.dp(8), ui.dp(10)) }
     private fun copyText(label: String, text: String) {
-        (activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.setPrimaryClip(ClipData.newPlainText(label, text))
+        ClipboardHelper.copy(activity, label, text)
     }
     private fun toast(text: String) = Toast.makeText(activity, text, Toast.LENGTH_SHORT).show()
 }

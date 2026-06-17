@@ -31,9 +31,9 @@ class EmbeddedSettingsPage : ShellPage {
             setPadding(ui.dp(18), ui.dp(12), ui.dp(18), ui.dp(24))
         }
         content.addView(ui.section("设置", "一级入口保持通用，二级动作以内嵌菜单展开，底部导航不离开 Shell"))
-        content.addView(row("外观与交互", "主题、背景、透明度、模糊说明、触觉反馈") { host.switchTab(ShellActivity.TAB_SETTINGS) })
+        content.addView(row("外观与交互", "主题、背景、透明度、模糊说明、触觉反馈") { appearanceMenu() })
         content.addView(row("终端设置", "字号、快捷键、会话行为和终端说明") { terminalMenu() })
-        content.addView(row("开发环境", "全面检测环境状态，一键修复问题") { devCheckAndRepair() })
+        content.addView(row("开发环境", "全面检测环境状态，一键修复问题") { devMenu() })
         content.addView(row("AI 与服务器", "安装 OpenCode、后台常驻、端口诊断") { aiServerMenu() })
         content.addView(row("文件与权限", "存储访问、安装权限、Shizuku、应用详情") { permissionMenu() })
         content.addView(ui.section("当前效果说明", ui.effectNotice()))
@@ -243,6 +243,25 @@ class EmbeddedSettingsPage : ShellPage {
                 toast("终端字号已更新，终端页可用字号按钮立即刷新")
             }
             .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun devMenu() {
+        AlertDialog.Builder(activity).setTitle("开发环境").setItems(arrayOf("环境检查与修复", "网络诊断")) { _, which ->
+            when (which) {
+                0 -> devCheckAndRepair()
+                1 -> openNetworkDiagnostics()
+            }
+        }.show()
+    }
+
+    private fun openNetworkDiagnostics() {
+        val page = NetworkDiagnosticsPage()
+        val view = page.create(activity, ui, host)
+        AlertDialog.Builder(activity)
+            .setTitle("网络诊断")
+            .setView(view)
+            .setNegativeButton("关闭") { _, _ -> page.onSelected(activity, view) }
             .show()
     }
 

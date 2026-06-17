@@ -184,7 +184,7 @@ class KnowledgeBasePage : ShellPage {
     }
 
     private fun copyText(text: String) {
-        (activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.setPrimaryClip(ClipData.newPlainText("AIDev 命令", text))
+        ClipboardHelper.copy(activity, "AIDev 命令", text)
     }
 }
 
