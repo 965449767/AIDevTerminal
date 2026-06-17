@@ -658,6 +658,7 @@ class EmbeddedTerminalPage : ShellPage {
             "终端 · 诊断 Doctor" to { send("aidev-doctor") },
             "终端 · 清屏" to { send("clear") },
             "终端 · 搜索输出" to { showTerminalSearch(activity) },
+            "终端 · Shell 增强" to { showShellEnhancements(activity) },
             "OpenCode · CLI 界面" to { sendAgentCommand("opencode") },
             "OpenCode · Serve 后台服务" to { sendAgentCommand("task-run opencode-serve 'opencode serve --port 4096 --hostname 127.0.0.1'") },
             "OpenCode · 原生协议面板" to { com.aidev.terminal.opencode.OpencodeNativePanel.showHome(activity) },
@@ -803,6 +804,17 @@ class EmbeddedTerminalPage : ShellPage {
                     .show()
             }
             .setNegativeButton("取消", null)
+            .show()
+    }
+
+    /** 打开 Shell 增强页面（命令历史统计、别名管理等） */
+    private fun showShellEnhancements(activity: Activity) {
+        val page = ShellEnhancementsPage()
+        val view = page.create(activity, ui ?: AIDevUi(activity, activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)), ShellHost(activity, activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE), ui ?: AIDevUi(activity, activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))))
+        AlertDialog.Builder(activity)
+            .setTitle("Shell 增强")
+            .setView(view)
+            .setNegativeButton("关闭") { _, _ -> page.onSelected(activity, view) }
             .show()
     }
 
