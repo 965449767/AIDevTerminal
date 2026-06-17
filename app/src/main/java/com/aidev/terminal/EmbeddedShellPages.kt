@@ -11,6 +11,8 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
 import android.text.InputType
@@ -1412,22 +1414,29 @@ class EmbeddedTerminalPage : ShellPage {
         }
 
     private fun ensureSession(activity: Activity) {
-        val shellAssets = runCatching { TerminalShellAssets.ensure(activity) }.getOrElse {
-            Toast.makeText(activity, "终端环境初始化失败：${it.message}", Toast.LENGTH_LONG).show()
-            return
-        }
-        homeDir = shellAssets.home
-        val entry = shellAssets.entry
-        if (current != null) {
-            session = current?.session
-            terminalView?.attachSession(session)
-            terminalView?.requestFocus()
-            refreshTabs(activity)
-            return
-        }
-        runCatching { newSession(activity) }.onFailure { e ->
-            Toast.makeText(activity, "会话创建失败：${e.message}", Toast.LENGTH_LONG).show()
-        }
+        // 异步初始化文件资源，避免主线程 IO 卡顿
+        Thread {
+            val shellAssets = runCatching { TerminalShellAssets.ensure(activity) }.getOrElse {
+                Handler(Looper.getMainLooper()).post {
+                    Toast.makeText(activity, "终端环境初始化失败：${it.message}", Toast.LENGTH_LONG).show()
+                }
+                return@Thread
+            }
+            Handler(Looper.getMainLooper()).post {
+                homeDir = shellAssets.home
+                val entry = shellAssets.entry
+                if (current != null) {
+                    session = current?.session
+                    terminalView?.attachSession(session)
+                    terminalView?.requestFocus()
+                    refreshTabs(activity)
+                    return@post
+                }
+                runCatching { newSession(activity) }.onFailure { e ->
+                    Toast.makeText(activity, "会话创建失败：${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.apply { isDaemon = true; start() }
     }
 
     private fun createTerminalSession(activity: Activity, id: Int): TerminalSession {

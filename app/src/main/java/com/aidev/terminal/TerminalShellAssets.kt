@@ -217,7 +217,7 @@ object TerminalShellAssets {
                 fi
                 TITLE="${'$'}1"; shift
                 MSG="${'$'}*"
-                am broadcast -p com.aidev.terminal -a com.aidev.terminal.SYSNOTIFY \
+                am broadcast -p com.aidev.terminal -a com.aidev.terminal.internal.NOTIFY \
                     --es title "${'$'}TITLE" --es msg "${'$'}MSG" >/dev/null
                 echo '{"status":"success","action":"notification sent"}'
                 """.trimIndent()
@@ -255,7 +255,7 @@ object TerminalShellAssets {
                     input keyevent "${'$'}KEY"
                     echo "{\"status\":\"success\",\"stream\":\"${'$'}STREAM\",\"action\":\"${'$'}VAL\"}"
                 else
-                    am broadcast -p com.aidev.terminal -a com.aidev.terminal.SYSVOLUME \
+                    am broadcast -p com.aidev.terminal -a com.aidev.terminal.internal.VOLUME \
                         --ei stream "${'$'}CODE" --ei volume "${'$'}VAL" >/dev/null
                     echo "{\"status\":\"success\",\"stream\":\"${'$'}STREAM\",\"volume\":${'$'}VAL}"
                 fi
@@ -269,11 +269,12 @@ object TerminalShellAssets {
                     CUR=$(settings get system screen_brightness 2>/dev/null || echo "unknown")
                     echo "{\"status\":\"success\",\"brightness\":${'$'}CUR}"
                 elif [ "${'$'}VAL" = "auto" ]; then
-                    settings put system screen_brightness_mode 1
+                    am broadcast -p com.aidev.terminal -a com.aidev.terminal.internal.BRIGHTNESS \
+                        --ez auto true >/dev/null
                     echo '{"status":"success","mode":"auto"}'
                 else
-                    settings put system screen_brightness_mode 0
-                    settings put system screen_brightness "${'$'}VAL"
+                    am broadcast -p com.aidev.terminal -a com.aidev.terminal.internal.BRIGHTNESS \
+                        --ei brightness "${'$'}VAL" >/dev/null
                     echo "{\"status\":\"success\",\"brightness\":${'$'}VAL}"
                 fi
                 """.trimIndent()
