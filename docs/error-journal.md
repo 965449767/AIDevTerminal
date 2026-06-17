@@ -90,3 +90,26 @@ Use `AppNav.openTerminal` or `ShellHost.openTerminal` for terminal navigation.
 
 - `app/src/main/java/com/aidev/terminal/AppNav.kt`
 - `app/src/main/AndroidManifest.xml`
+
+## 2026-06-17 - Corrupted file content caused conflicting imports
+
+### Symptom
+
+Compilation failed with hundreds of `Conflicting import` and `imports are only allowed in the beginning of file` errors, with absurd line numbers (e.g., 13001, 3543).
+
+### Root Cause
+
+`BackupRestorePage.kt` and the previous `MenuBottomSheet.kt` had their content repeatedly appended, creating malformed files with multiple `package` and `import` blocks. This likely happened when a prior write operation appended instead of overwriting.
+
+### Fix
+
+Deleted the corrupted `BackupRestorePage.kt` (it was unreferenced and untracked in Git). Overwrote `MenuBottomSheet.kt` with clean content.
+
+### Prevention
+
+Always verify file contents after write operations, especially when reusing file paths from previous sessions. Check file size and first few lines if compilation errors mention impossible line numbers.
+
+### Related Files
+
+- `app/src/main/java/com/aidev/terminal/BackupRestorePage.kt` (deleted)
+- `app/src/main/java/com/aidev/terminal/MenuBottomSheet.kt`

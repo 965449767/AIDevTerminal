@@ -108,3 +108,36 @@ Automatically commit scoped phase changes after validation passes.
 
 - The agent no longer needs to ask before normal `git commit`.
 - `git tag`, `git reset`, `git clean`, `git push`, and remote configuration still require explicit user approval.
+
+## 2026-06-17 - Introduce AIDevBottomSheet as custom BottomSheet base
+
+### Context
+
+The project does not include AndroidX Material dependency, so standard `BottomSheetDialog` is unavailable. `EmbeddedSettingsPage` previously used inline `MenuItem` data class and `AlertDialog` for menus.
+
+### Decision
+
+Create a pure custom `AIDevBottomSheet` using `Dialog` + `LinearLayout` + `ScrollView`, with drag indicator, title bar, divider, and swipe-to-dismiss. Build `MenuBottomSheet` on top of it with `MenuBottomSheet.MenuItem` nested data class.
+
+### Consequences
+
+- All menu popups in `EmbeddedSettingsPage` now route through `MenuBottomSheet` for consistent UX.
+- `MenuItem` is now a nested class of `MenuBottomSheet`; call sites must use `MenuBottomSheet.MenuItem`.
+- `BackupRestorePage` was removed due to prior file corruption; backup/restore menu items temporarily toast "开发中" until the page is reimplemented.
+
+## 2026-06-17 - Replace AlertDialog menus with MenuBottomSheet in EmbeddedSettingsPage
+
+### Context
+
+All secondary menus in `EmbeddedSettingsPage` were using `AlertDialog.Builder.setItems()`, which is an older Android pattern and does not support item descriptions.
+
+### Decision
+
+Introduce `MenuBottomSheet` (a custom bottom-sheet Dialog using the project's design tokens) and `MenuItem` data class, and migrate all menu methods (`appearanceMenu`, `terminalMenu`, `devMenu`, `aiServerMenu`, `permissionMenu`, `advancedMenu`, `backupRestoreMenu`) to use it.
+
+### Consequences
+
+- `AlertDialog` is still retained for content dialogs (`detail()`, `sliderDialog()`, `themePresetDialog()`, `backgroundModeDialog()`, `devCheckAndRepair()`, etc.) because they need custom views or single-choice items.
+- `MenuBottomSheet` is self-contained and reusable for other pages if needed.
+- Each menu item now has a title and an optional description, improving UX.
+- Future bottom-sheet enhancements should be made in `MenuBottomSheet.kt` to keep `EmbeddedSettingsPage` focused on business logic.

@@ -15,6 +15,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.Toast
+
 import java.io.File
 
 class EmbeddedSettingsPage : ShellPage {
@@ -37,6 +38,7 @@ class EmbeddedSettingsPage : ShellPage {
         content.addView(row("开发环境", "全面检测环境状态，一键修复问题") { devMenu() })
         content.addView(row("AI 与服务器", "安装 OpenCode、后台常驻、端口诊断") { aiServerMenu() })
         content.addView(row("文件与权限", "存储访问、安装权限、Shizuku、应用详情") { permissionMenu() })
+        content.addView(row("数据备份", "备份和恢复 Ubuntu 环境、任务数据、设置和项目文件") { backupRestoreMenu() })
         content.addView(ui.section("当前效果说明", ui.effectNotice()))
         return ScrollView(activity).apply { addView(content) }
     }
@@ -47,22 +49,21 @@ class EmbeddedSettingsPage : ShellPage {
         }
 
     private fun appearanceMenu() {
-        AlertDialog.Builder(activity).setTitle("外观与交互").setItems(arrayOf("主题预设", "背景模式", "透明度", "模糊感", "空间密度", "开启/关闭触觉反馈", "查看效果说明")) { _, which ->
-            when (which) {
-                0 -> themePresetDialog()
-                1 -> backgroundModeDialog()
-                2 -> sliderDialog("透明度", "ui_alpha", 70, 100, 94, "%")
-                3 -> sliderDialog("模糊感", "ui_blur", 0, 40, 18, "")
-                4 -> sliderDialog("空间密度", "ui_density", 86, 116, 100, "%")
-                5 -> {
-                    val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-                    val next = !prefs.getBoolean("haptic_tap", true)
-                    prefs.edit().putBoolean("haptic_tap", next).apply()
-                    toast(if (next) "触觉反馈已开启" else "触觉反馈已关闭")
-                }
-                6 -> detail("效果说明", ui.effectNotice())
-            }
-        }.show()
+        val items = listOf(
+            MenuBottomSheet.MenuItem("主题预设", "切换深色/浅色/跟随系统") { themePresetDialog() },
+            MenuBottomSheet.MenuItem("背景模式", "纯色/渐变/自定义图片") { backgroundModeDialog() },
+            MenuBottomSheet.MenuItem("透明度", "调整界面透明度") { sliderDialog("透明度", "ui_alpha", 70, 100, 94, "%") },
+            MenuBottomSheet.MenuItem("模糊感", "调整背景模糊程度") { sliderDialog("模糊感", "ui_blur", 0, 40, 18, "") },
+            MenuBottomSheet.MenuItem("空间密度", "调整界面元素密度") { sliderDialog("空间密度", "ui_density", 86, 116, 100, "%") },
+            MenuBottomSheet.MenuItem("触觉反馈", "开启或关闭点击振动反馈") {
+                val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+                val next = !prefs.getBoolean("haptic_tap", true)
+                prefs.edit().putBoolean("haptic_tap", next).apply()
+                toast(if (next) "触觉反馈已开启" else "触觉反馈已关闭")
+            },
+            MenuBottomSheet.MenuItem("查看效果说明", "当前主题、背景、透明度等状态") { detail("效果说明", ui.effectNotice()) }
+        )
+        MenuBottomSheet(activity, ui).show("外观与交互", items)
     }
 
     private fun themePresetDialog() {
@@ -137,22 +138,21 @@ class EmbeddedSettingsPage : ShellPage {
     }
 
     private fun terminalMenu() {
-        AlertDialog.Builder(activity).setTitle("终端设置").setItems(arrayOf("终端字号", "新增快捷键", "管理快捷键", "清除快捷键", "快捷键说明", "会话说明")) { _, which ->
-            when (which) {
-                0 -> terminalFontDialog()
-                1 -> customKeyDialog()
-                2 -> manageCustomKeys()
-                3 -> {
-                    activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).edit()
-                        .remove("terminal_custom_keys")
-                        .remove("terminal_key_overrides")
-                        .apply()
-                    toast("已清除自定义快捷键")
-                }
-                4 -> detail("快捷键说明", "内嵌终端保持两行六列：点击是主功能，上滑是拓展功能，长按可自定义单个键。\n\n例如 C 点击输入 c，上滑 clear；SPC 点击空格，上滑 pwd。\n\n自定义输入支持 \\n、\\t 和 \\e 转义。")
-                5 -> detail("会话说明", "终端 Tab 支持多会话标签、新建会话、关闭当前会话、点击标签切换、长按标签重命名。关闭最后一个会话时会自动创建新会话。")
-            }
-        }.show()
+        val items = listOf(
+            MenuBottomSheet.MenuItem("终端字号", "调整终端文字大小") { terminalFontDialog() },
+            MenuBottomSheet.MenuItem("新增快捷键", "添加自定义虚拟按键") { customKeyDialog() },
+            MenuBottomSheet.MenuItem("管理快捷键", "查看或删除已有快捷键") { manageCustomKeys() },
+            MenuBottomSheet.MenuItem("清除快捷键", "一键清空所有自定义快捷键") {
+                activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).edit()
+                    .remove("terminal_custom_keys")
+                    .remove("terminal_key_overrides")
+                    .apply()
+                toast("已清除自定义快捷键")
+            },
+            MenuBottomSheet.MenuItem("快捷键说明", "虚拟按键布局与自定义规则") { detail("快捷键说明", "内嵌终端保持两行六列：点击是主功能，上滑是拓展功能，长按可自定义单个键。\n\n例如 C 点击输入 c，上滑 clear；SPC 点击空格，上滑 pwd。\n\n自定义输入支持 \\n、\\t 和 \\e 转义。") },
+            MenuBottomSheet.MenuItem("会话说明", "多标签会话管理与操作说明") { detail("会话说明", "终端 Tab 支持多会话标签、新建会话、关闭当前会话、点击标签切换、长按标签重命名。关闭最后一个会话时会自动创建新会话。") }
+        )
+        MenuBottomSheet(activity, ui).show("终端设置", items)
     }
 
     private fun customKeyDialog() {
@@ -258,15 +258,14 @@ class EmbeddedSettingsPage : ShellPage {
     }
 
     private fun devMenu() {
-        AlertDialog.Builder(activity).setTitle("开发环境").setItems(arrayOf("环境检查与修复", "网络诊断", "系统监控", "安全审计", "容器管理")) { _, which ->
-            when (which) {
-                0 -> devCheckAndRepair()
-                1 -> openNetworkDiagnostics()
-                2 -> openSystemMonitor()
-                3 -> openSecurityAudit()
-                4 -> openContainerManager()
-            }
-        }.show()
+        val items = listOf(
+            MenuBottomSheet.MenuItem("环境检查与修复", "全面检测 Ubuntu 与开发工具状态") { devCheckAndRepair() },
+            MenuBottomSheet.MenuItem("网络诊断", "检测端口监听与网络连通性") { openNetworkDiagnostics() },
+            MenuBottomSheet.MenuItem("系统监控", "实时查看 CPU、内存与进程状态") { openSystemMonitor() },
+            MenuBottomSheet.MenuItem("安全审计", "检查权限、密钥与容器安全") { openSecurityAudit() },
+            MenuBottomSheet.MenuItem("容器管理", "管理 Docker/Podman 容器生命周期") { openContainerManager() }
+        )
+        MenuBottomSheet(activity, ui).show("开发环境", items)
     }
 
     private fun openNetworkDiagnostics() {
@@ -455,35 +454,50 @@ class EmbeddedSettingsPage : ShellPage {
     private data class CheckItem(val name: String, val ok: Boolean, val desc: String, val fixAction: String?)
 
     private fun aiServerMenu() {
-        AlertDialog.Builder(activity).setTitle("AI 与服务器").setItems(arrayOf("安装 OpenCode", "监听端口", "后台常驻")) { _, which ->
-            when (which) {
-                0 -> host.openTerminal("install-aitool")
-                1 -> host.openTerminal("list-listen-ports")
-                2 -> {
-                    KeepAliveService.start(activity)
-                    activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).edit().putBoolean("keepalive_auto", true).apply()
-                    toast("后台常驻已启动")
-                }
+        val items = listOf(
+            MenuBottomSheet.MenuItem("安装 OpenCode", "在 Ubuntu 环境中安装 AI 编程助手") { host.openTerminal("install-aitool") },
+            MenuBottomSheet.MenuItem("监听端口", "查看当前所有监听中的网络端口") { host.openTerminal("list-listen-ports") },
+            MenuBottomSheet.MenuItem("后台常驻", "启动保活服务防止进程被系统回收") {
+                KeepAliveService.start(activity)
+                activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).edit().putBoolean("keepalive_auto", true).apply()
+                toast("后台常驻已启动")
             }
-        }.show()
+        )
+        MenuBottomSheet(activity, ui).show("AI 与服务器", items)
     }
 
     private fun permissionMenu() {
-        AlertDialog.Builder(activity).setTitle("文件与权限").setItems(arrayOf("存储权限", "应用详情", "Shizuku 状态")) { _, which ->
-            when (which) {
-                0 -> openStorageSettings()
-                1 -> openAppSettings()
-                2 -> detail("Shizuku 状态", "如果 Shizuku 未运行，请先打开 Shizuku 应用并启动服务。应用已声明 Shizuku Provider，用于后续更高权限能力。")
-            }
-        }.show()
+        val items = listOf(
+            MenuBottomSheet.MenuItem("存储权限", "管理所有文件访问权限") { openStorageSettings() },
+            MenuBottomSheet.MenuItem("应用详情", "跳转到系统应用信息页") { openAppSettings() },
+            MenuBottomSheet.MenuItem("Shizuku 状态", "查看 Shizuku 服务运行状态") { detail("Shizuku 状态", "如果 Shizuku 未运行，请先打开 Shizuku 应用并启动服务。应用已声明 Shizuku Provider，用于后续更高权限能力。") }
+        )
+        MenuBottomSheet(activity, ui).show("文件与权限", items)
+    }
+
+    private fun backupRestoreMenu() {
+        val items = listOf(
+            MenuBottomSheet.MenuItem("备份数据", "备份 Ubuntu 环境、任务数据、设置和项目文件") { openBackupRestorePage(BackupRestorePage.Mode.BACKUP) },
+            MenuBottomSheet.MenuItem("恢复数据", "从备份文件恢复环境、任务、设置和项目") { openBackupRestorePage(BackupRestorePage.Mode.RESTORE) }
+        )
+        MenuBottomSheet(activity, ui).show("数据备份", items)
+    }
+
+    private fun openBackupRestorePage(mode: BackupRestorePage.Mode) {
+        val page = BackupRestorePage(mode)
+        val view = page.create(activity, ui, host)
+        AlertDialog.Builder(activity)
+            .setTitle(if (mode == BackupRestorePage.Mode.BACKUP) "数据备份" else "数据恢复")
+            .setView(view)
+            .setNegativeButton("关闭", null)
+            .show()
     }
 
     private fun advancedMenu() {
-        AlertDialog.Builder(activity).setTitle("系统与高级").setItems(arrayOf("命令速查")) { _, which ->
-            when (which) {
-                0 -> detail("命令速查", "ubuntu\npmx list packages\namx start ...\ngetpropx ro.product.model\nlogcatx -d\ntask-list\ncheck-dev-env")
-            }
-        }.show()
+        val items = listOf(
+            MenuBottomSheet.MenuItem("命令速查", "常用内置命令快速参考") { detail("命令速查", "ubuntu\npmx list packages\namx start ...\ngetpropx ro.product.model\nlogcatx -d\ntask-list\ncheck-dev-env") }
+        )
+        MenuBottomSheet(activity, ui).show("系统与高级", items)
     }
 
     private fun openStorageSettings() {

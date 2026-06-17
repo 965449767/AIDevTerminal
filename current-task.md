@@ -69,6 +69,12 @@ JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 /data/user/work/gradle/gradle-8.14.
 2. Decide whether to add path completion.
 3. Continue with clipboard/session enhancements.
 
+## Side Notes
+
+- `AIDevBottomSheet.kt` and `MenuBottomSheet.kt` created (2026-06-17).
+- `BackupRestorePage.kt` removed due to prior corruption; backup/restore menu temporarily toasts "开发中".
+- `MenuItem` is now nested inside `MenuBottomSheet`; all call sites updated.
+
 ## Last Updated
 
 2026-06-14

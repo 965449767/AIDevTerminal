@@ -703,15 +703,16 @@ class EmbeddedTerminalPage : ShellPage {
     private fun showGroupedActionMenu(activity: Activity, title: String, prefKey: String, actions: List<Pair<String, () -> Unit>>) {
         val recent = recentMenuLabels(activity, prefKey).filter { label -> actions.any { it.first == label } }
         val display = (recent.map { "最近 · ${it.substringAfter(" · ")}" to it } + actions.filterNot { recent.contains(it.first) }.map { it.first to it.first })
-        AlertDialog.Builder(activity)
-            .setTitle(title)
-            .setItems(display.map { it.first }.toTypedArray()) { _, which ->
-                val original = display[which].second
+        val ui = AIDevUi(activity, activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
+        val items = display.map { (showLabel, original) ->
+            MenuBottomSheet.MenuItem(showLabel, "") {
                 rememberMenuLabel(activity, prefKey, original)
                 actions.firstOrNull { it.first == original }?.second?.invoke()
             }
-            .setNeutralButton("搜索") { _, _ -> searchGroupedActionMenu(activity, title, prefKey, actions) }
-            .show()
+        } + MenuBottomSheet.MenuItem("搜索", "关键词搜索菜单项") {
+            searchGroupedActionMenu(activity, title, prefKey, actions)
+        }
+        MenuBottomSheet(activity, ui).show(title, items)
     }
 
     private fun searchGroupedActionMenu(activity: Activity, title: String, prefKey: String, actions: List<Pair<String, () -> Unit>>) {
@@ -723,13 +724,14 @@ class EmbeddedTerminalPage : ShellPage {
                 val keyword = edit.text.toString().trim()
                 val matches = actions.filter { keyword.isBlank() || it.first.contains(keyword, true) }.take(30)
                 if (matches.isEmpty()) return@setPositiveButton Toast.makeText(activity, "没有匹配项", Toast.LENGTH_SHORT).show()
-                AlertDialog.Builder(activity)
-                    .setTitle("搜索结果")
-                    .setItems(matches.map { it.first }.toTypedArray()) { _, which ->
-                        rememberMenuLabel(activity, prefKey, matches[which].first)
-                        matches[which].second.invoke()
+                val ui = AIDevUi(activity, activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
+                val items = matches.map { (label, action) ->
+                    MenuBottomSheet.MenuItem(label, "") {
+                        rememberMenuLabel(activity, prefKey, label)
+                        action.invoke()
                     }
-                    .show()
+                }
+                MenuBottomSheet(activity, ui).show("搜索结果", items)
             }
             .setNegativeButton("取消", null)
             .show()
