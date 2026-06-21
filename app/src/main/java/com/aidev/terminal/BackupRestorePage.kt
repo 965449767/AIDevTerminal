@@ -103,14 +103,18 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
         val prootLoader = File(nativeDir, "libproot_loader.so").absolutePath
         val rootfs = File(activity.filesDir, "home/ubuntu-rootfs").absolutePath
         val aidevHome = File(activity.filesDir, "home").absolutePath
+        val prootLibDir = File(activity.filesDir, "home/proot-lib").absolutePath
         val prootTmpDir = File(activity.cacheDir, "proot_tmp").apply { mkdirs() }.absolutePath
 
-        // 检查 proot 和 rootfs 是否存在
+        // 检查 proot、rootfs 和依赖库是否存在
         if (!File(proot).exists()) {
             Log.e("AIDevBackup", "libproot.so not found at: $proot")
         }
         if (!File(prootLoader).exists()) {
             Log.e("AIDevBackup", "libproot_loader.so not found at: $prootLoader")
+        }
+        if (!File(prootLibDir, "libtalloc.so.2").exists()) {
+            Log.e("AIDevBackup", "libtalloc.so.2 not found at: $prootLibDir")
         }
         if (!File(rootfs).exists()) {
             Log.e("AIDevBackup", "rootfs not found at: $rootfs")
@@ -135,7 +139,7 @@ class BackupRestorePage(private val mode: Mode = Mode.BACKUP) : ShellPage {
         val env = pb.environment()
         env["PROOT_LOADER"] = prootLoader
         env["PROOT_TMP_DIR"] = prootTmpDir
-        env["LD_LIBRARY_PATH"] = nativeDir
+        env["LD_LIBRARY_PATH"] = "$prootLibDir:$nativeDir"
         return pb.start()
     }
 

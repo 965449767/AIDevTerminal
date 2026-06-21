@@ -35,7 +35,7 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix = ""
+            applicationIdSuffix = ".dev"
             isDebuggable = true
             signingConfig = signingConfigs.getByName("debug")
         }
