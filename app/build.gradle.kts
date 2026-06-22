@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace = "com.aidev.terminal"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.aidev.terminal"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 74
         versionName = "0.12.32-terminal-file-sync-debug"
         ndk {
