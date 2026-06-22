@@ -73,8 +73,15 @@ object TerminalShellAssets {
         writeSystemScript(bin, "installapk", "install apk")
         writeSystemScript(bin, "uninstallapp", "uninstall app")
         // 两端共用脚本（agent 辅助 + 系统工具）
-        UbuntuBootstrapScripts.agentShellScripts().forEach { (name, content) ->
+        UbuntuBootstrapScripts.agentHostScripts().forEach { (name, content) ->
             val out = File(bin, name)
+            out.writeText(content + "\n")
+            out.setExecutable(true, false)
+            out.setReadable(true, false)
+        }
+        val prootBin = File(bin, ".privot").apply { mkdirs() }
+        UbuntuBootstrapScripts.agentPrivotScripts().forEach { (name, content) ->
+            val out = File(prootBin, name)
             out.writeText(content + "\n")
             out.setExecutable(true, false)
             out.setReadable(true, false)

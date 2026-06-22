@@ -1,7 +1,7 @@
 package com.aidev.terminal
 
 object UbuntuBootstrapScripts {
-    fun agentShellScripts(): Map<String, String> = mapOf(
+    fun agentHostScripts(): Map<String, String> = mapOf(
         "aidev-current-project" to """#!/system/bin/sh
             pwd
             [ -d .git ] && git status --short --branch 2>/dev/null
@@ -19,7 +19,7 @@ object UbuntuBootstrapScripts {
             echo "version: ${'$'}{AIDEV_VERSION:-unknown}"
             echo
             echo "== project =="
-            aidev-current-project
+            /system/bin/sh "${'$'}AIDEV_BIN/aidev-current-project"
             echo
             echo "== files =="
             find . -maxdepth 2 -type f 2>/dev/null | sed 's#^\./##' | head -120
@@ -29,14 +29,14 @@ object UbuntuBootstrapScripts {
             git diff --stat 2>/dev/null | head -80 || true
             echo
             echo "== tasks =="
-            task-list 2>/dev/null || true
+            /system/bin/sh "${'$'}AIDEV_BIN/task-list" 2>/dev/null || true
         """.trimIndent(),
         "aidev-agent-context-file" to """#!/system/bin/sh
             out="aidev-agent-context.txt"
-            aidev-agent-context > "${'$'}{out}"
+            /system/bin/sh "${'$'}AIDEV_BIN/aidev-agent-context" > "${'$'}{out}"
             echo >> "${'$'}{out}"
             echo "== recent errors ==" >> "${'$'}{out}"
-            aidev-agent-summary >> "${'$'}{out}" 2>/dev/null || true
+            /system/bin/sh "${'$'}AIDEV_BIN/aidev-agent-summary" >> "${'$'}{out}" 2>/dev/null || true
             echo "已导出上下文文件：$(pwd)/${'$'}{out}"
         """.trimIndent(),
         "aidev-agent-summary" to """#!/system/bin/sh
@@ -110,6 +110,121 @@ object UbuntuBootstrapScripts {
               echo "cmd=${'$'}{*}"
             } > "${'$'}{dir}/${'$'}{id}.meta"
             nohup /system/bin/sh -c "${'$'}{*}" > "${'$'}{log}" 2>&1 &
+            pid=$!
+            echo "pid=${'$'}{pid}" >> "${'$'}{dir}/${'$'}{id}.meta"
+            echo "任务已启动: ${'$'}{name} (PID ${'$'}{pid})"
+        """.trimIndent(),
+    )
+
+    fun agentPrivotScripts(): Map<String, String> = mapOf(
+        "aidev-current-project" to """#!/bin/sh
+            pwd
+            [ -d .git ] && git status --short --branch 2>/dev/null
+            [ -f package.json ] && node -e "const p=require('./package.json'); console.log('package:',p.name||'-'); console.log('scripts:',Object.keys(p.scripts||{}).join(','))" 2>/dev/null
+            [ -f pyproject.toml ] && echo "python: pyproject.toml"
+            [ -f requirements.txt ] && echo "python: requirements.txt"
+            [ -f build.gradle ] || [ -f build.gradle.kts ] && echo "gradle project"
+            [ -f go.mod ] && echo "go module"
+            [ -f Cargo.toml ] && echo "rust cargo"
+        """.trimIndent(),
+        "aidev-agent-context" to """#!/bin/sh
+            echo "== AIDev Agent Context =="
+            echo "time: $(date '+%F %T')"
+            echo "pwd: $(pwd)"
+            echo "version: ${'$'}{AIDEV_VERSION:-unknown}"
+            echo
+            echo "== project =="
+            aidev-current-project
+            echo
+            echo "== files =="
+            find . -maxdepth 2 -type f 2>/dev/null | sed 's#^\./##' | head -120
+            echo
+            echo "== recent git =="
+            git status --short --branch 2>/dev/null || true
+            git diff --stat 2>/dev/null | head -80 || true
+            echo
+            echo "== tasks =="
+            task-list 2>/dev/null || true
+        """.trimIndent(),
+        "aidev-agent-context-file" to """#!/bin/sh
+            out="aidev-agent-context.txt"
+            aidev-agent-context > "${'$'}{out}"
+            echo >> "${'$'}{out}"
+            echo "== recent errors ==" >> "${'$'}{out}"
+            aidev-agent-summary >> "${'$'}{out}" 2>/dev/null || true
+            echo "已导出上下文文件：$(pwd)/${'$'}{out}"
+        """.trimIndent(),
+        "aidev-agent-summary" to """#!/bin/sh
+            log="$(ls -t "${'$'}{AIDEV_HOME}/tasks"/*.log 2>/dev/null | head -1)"
+            [ -n "${'$'}{log}" ] || { echo "暂无任务日志"; exit 0; }
+            echo "== log =="
+            echo "${'$'}{log}"
+            echo
+            echo "== recent commands =="
+            grep -iE "command|running|exec|npm |python|gradle|go |cargo|git " "${'$'}{log}" 2>/dev/null | tail -20 || true
+            echo
+            echo "== recent errors =="
+            grep -iE "error|failed|exception|traceback|cannot|not found|denied" "${'$'}{log}" 2>/dev/null | tail -40 || true
+            echo
+            echo "== possible modified files =="
+            grep -iE "modified|created|updated|wrote|write|saved|changed" "${'$'}{log}" 2>/dev/null | tail -30 || true
+        """.trimIndent(),
+        "aidev-agent-log" to """#!/bin/sh
+            ls -lt "${'$'}{AIDEV_HOME}/tasks"/*.log 2>/dev/null | head -20
+        """.trimIndent(),
+        "aidev-agent-tail" to """#!/bin/sh
+            log="$(ls -t "${'$'}{AIDEV_HOME}/tasks"/*.log 2>/dev/null | head -1)"
+            [ -n "${'$'}{log}" ] || { echo "暂无任务日志"; exit 1; }
+            tail -f "${'$'}{log}"
+        """.trimIndent(),
+        "list-listen-ports" to """#!/bin/sh
+            if command -v ss >/dev/null 2>&1; then
+              ss -tlnp 2>/dev/null
+            elif command -v netstat >/dev/null 2>&1; then
+              netstat -tlnp 2>/dev/null
+            else
+              echo "=== /proc/net/tcp ==="
+              cat /proc/net/tcp 2>/dev/null | head -40 || echo "(无法读取)"
+              echo "=== /proc/net/tcp6 ==="
+              cat /proc/net/tcp6 2>/dev/null | head -40 || true
+            fi
+        """.trimIndent(),
+        "task-list" to """#!/bin/sh
+            dir="${'$'}{AIDEV_HOME}/tasks"
+            [ -d "${'$'}{dir}" ] || { echo "暂无任务"; exit 0; }
+            for meta in "${'$'}{dir}"/*.meta; do
+              [ -f "${'$'}{meta}" ] || continue
+              id="${'$'}{meta##*/}"; id="${'$'}{id%.meta}"
+              name=""; pid=""; cmd=""
+              while IFS='=' read -r k v; do
+                case "${'$'}{k}" in
+                  name) name="${'$'}{v}" ;;
+                  pid) pid="${'$'}{v}" ;;
+                  cmd) cmd="${'$'}{v}" ;;
+                esac
+              done < "${'$'}{meta}"
+              if [ -n "${'$'}{pid}" ]; then
+                kill -0 "${'$'}{pid}" 2>/dev/null && status="运行中" || status="已结束"
+              else
+                status="未知"
+              fi
+              echo "${'$'}{id}  ${'$'}{status}  ${'$'}{name:-${'$'}{cmd:0:40}}"
+            done
+        """.trimIndent(),
+        "task-run" to """#!/bin/sh
+            [ $# -ge 2 ] || { echo "用法: task-run <name> <command>"; exit 1; }
+            name="${'$'}{1}"; shift
+            dir="${'$'}{AIDEV_HOME}/tasks"
+            mkdir -p "${'$'}{dir}"
+            id="$(date +%s)_${'$'}{name}"
+            log="${'$'}{dir}/${'$'}{id}.log"
+            {
+              echo "name=${'$'}{name}"
+              echo "id=${'$'}{id}"
+              echo "started=$(date '+%F %T')"
+              echo "cmd=${'$'}{*}"
+            } > "${'$'}{dir}/${'$'}{id}.meta"
+            nohup /bin/sh -c "${'$'}{*}" > "${'$'}{log}" 2>&1 &
             pid=$!
             echo "pid=${'$'}{pid}" >> "${'$'}{dir}/${'$'}{id}.meta"
             echo "任务已启动: ${'$'}{name} (PID ${'$'}{pid})"
@@ -365,8 +480,8 @@ AIDEV_BOOTSTRAP_EOF
 
           # 将 dev-env/bin 中的两端共用脚本复制到 rootfs（单来源 → 双端可用）
           for script in aidev-current-project aidev-agent-context aidev-agent-context-file aidev-agent-summary aidev-agent-log aidev-agent-tail list-listen-ports task-list task-run; do
-            if [ -f "${'$'}AIDEV_BIN/${'$'}script" ]; then
-              cp "${'$'}AIDEV_BIN/${'$'}script" "${'$'}AIDEV_ROOTFS/usr/local/bin/${'$'}script"
+            if [ -f "${'$'}AIDEV_BIN/.privot/${'$'}script" ]; then
+              cp "${'$'}AIDEV_BIN/.privot/${'$'}script" "${'$'}AIDEV_ROOTFS/usr/local/bin/${'$'}script"
               chmod 755 "${'$'}AIDEV_ROOTFS/usr/local/bin/${'$'}script" 2>/dev/null || true
             fi
           done
