@@ -33,10 +33,7 @@ class AIAgentActivity : Activity() {
                 ui.actionRow("安装 OpenCode", "调用官方安装入口") { openTerminal("install-aitool\n") },
                 ui.actionRow("检测环境", "查看 AI/Web 通信与工具链") { openTerminal("check-dev-env\naidev-net-explain\n") }
             ))
-            addView(ui.rowOf(
-                ui.actionRow("启动服务", "用后台任务运行 AI 服务命令") { openTerminal("task-run opencode 'opencode --help'\n") },
-                ui.actionRow("查看日志", "打开终端查看任务输出") { AppNav.openTerminal(this@AIAgentActivity, "aidev-agent-log\n") }
-            ))
+            addView(ui.actionRow("查看日志", "打开终端查看任务输出") { AppNav.openTerminal(this@AIAgentActivity, "aidev-agent-log\n") })
 
             addView(ui.section("设计目标", "AI 中心不再让用户记命令，而是把安装、配置、启动、端口和日志组织成一组清晰操作"))
             addView(infoRow())

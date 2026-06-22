@@ -167,13 +167,9 @@ class ShellActivity : Activity() {
             "当前项目诊断",
             "当前项目日志",
             "当前项目修复",
-            "OpenCode 前台",
-            "OpenCode 后台",
-            "OpenCode Serve",
             "AI 代理上下文",
             "AI 上下文文件",
             "AI 日志摘要",
-            "OpenCode 启动检查",
             "AI 代理日志"
         )
         AlertDialog.Builder(this)
@@ -280,37 +276,11 @@ class ShellActivity : Activity() {
             24 -> openCurrentProject(ProjectCommands.healthCommand(currentProjectDir()))
             25 -> openTerminalCommand("ls -lt \"${filesDir.absolutePath}/home/tasks\"/*.log 2>/dev/null | head -20")
             26 -> confirmCurrentProjectRepair()
-            27 -> showOpenCodeLaunchOptions()
-            28 -> openCurrentProject("task-run opencode \"opencode\"")
-            29 -> openCurrentProject("task-run opencode-serve 'opencode serve'")
-            30 -> openCurrentProject("aidev-agent-context")
-            31 -> openCurrentProject("aidev-agent-context-file")
-            32 -> openTerminalCommand("aidev-agent-summary")
-            33 -> openCurrentProject("opencode --help")
-            34 -> openTerminalCommand("aidev-agent-log")
+            27 -> openCurrentProject("aidev-agent-context")
+            28 -> openCurrentProject("aidev-agent-context-file")
+            29 -> openTerminalCommand("aidev-agent-summary")
+            30 -> openTerminalCommand("aidev-agent-log")
         }
-    }
-
-    private fun showOpenCodeLaunchOptions() {
-        val dir = currentProjectDir()
-        if (dir == null) {
-            switchTo(TAB_FILES)
-            return
-        }
-        val status = listOf(
-            "项目：${dir.name}",
-            "路径：${dir.absolutePath}",
-            "Git：${if (File(dir, ".git").exists()) "有" else "无"}",
-            "README：${if (listOf("README.md", "README.txt", "readme.md").any { File(dir, it).isFile }) "有" else "无"}",
-            "项目标记：${ProjectCommands.detectMarkers(dir).ifEmpty { listOf("未识别") }.joinToString("、")}"
-        ).joinToString("\n")
-        AlertDialog.Builder(this)
-            .setTitle("OpenCode 启动前检查")
-            .setMessage(status)
-            .setPositiveButton("直接启动") { _, _ -> openCurrentProject("opencode") }
-            .setNeutralButton("先导出上下文") { _, _ -> openCurrentProject("aidev-agent-context-file") }
-            .setNegativeButton("后台启动") { _, _ -> openCurrentProject("task-run opencode \"opencode\"") }
-            .show()
     }
 
     private fun openTerminalCommand(command: String) {

@@ -639,7 +639,7 @@ class EmbeddedTerminalPage : ShellPage {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(0xFF05070A.toInt())
             setPadding(ui.dp(6), ui.dp(3), ui.dp(6), ui.dp(3))
-            addView(button(activity, ui, "OpenCode") { sendAgentCommand("opencode") }, LinearLayout.LayoutParams(0, ui.dp(30), 1f).apply { setMargins(0, 0, ui.dp(3), 0) })
+
             addView(button(activity, ui, "上下文") { sendAgentCommand("aidev-agent-context") }, LinearLayout.LayoutParams(0, ui.dp(30), 1f).apply { setMargins(ui.dp(3), 0, ui.dp(3), 0) })
             addView(button(activity, ui, "任务") { send("task-list") }.apply {
                 setOnLongClickListener {
@@ -659,7 +659,6 @@ class EmbeddedTerminalPage : ShellPage {
     private fun showTerminalTopMore(activity: Activity, host: ShellHost) {
         showGroupedActionMenu(activity, "更多设置", "recent_terminal_more", listOf(
             "终端 · 诊断 Doctor" to { send("aidev-doctor") },
-            "终端 · 搜索输出" to { showTerminalSearch(activity) },
             "终端 · Shell 增强" to { showShellEnhancements(activity) },
             "SSH · 连接管理" to { showSshBookmarks(activity, host) },
             "设置 · 字号" to { showFontDialog(activity) },
@@ -671,15 +670,9 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun showAgentMenu(activity: Activity) {
         showGroupedActionMenu(activity, "AI 代理终端", "recent_agent_more", listOf(
-            "启动 · OpenCode 后台任务" to { sendAgentCommand("task-run opencode \"opencode\"") },
-            "启动 · OpenCode Serve" to { sendAgentCommand("task-run opencode-serve 'opencode serve'") },
             "上下文 · 导出上下文文件" to { sendAgentCommand("aidev-agent-context-file") },
             "日志 · 代理日志摘要" to { send("aidev-agent-summary") },
-            "检查 · OpenCode 启动检查" to { sendAgentCommand("opencode --help") },
             "项目 · 当前项目目录" to { sendAgentCommand("pwd && git status --short --branch 2>/dev/null || true && ls -la") },
-            "系统 · 监听端口" to { send("list-listen-ports") },
-            "显示 · 终端紧凑显示" to { applyFontPreset(activity, 12f) },
-            "显示 · 终端大字显示" to { applyFontPreset(activity, 18f) }
         ))
     }
 
@@ -732,64 +725,6 @@ class EmbeddedTerminalPage : ShellPage {
     private fun sendAgentCommand(command: String) {
         val dir = currentProjectDir()
         if (dir != null) send("cd \"${dir.absolutePath}\" && $command") else send(command)
-    }
-
-    private fun getScreenText(): String {
-        val s = session ?: return ""
-        return runCatching {
-            val emulator = s.javaClass.getMethod("getEmulator").invoke(s)
-            val screen = emulator.javaClass.getMethod("getScreen").invoke(emulator)
-            val rows = screen.javaClass.getMethod("getRows").invoke(screen) as? Int ?: 0
-            val cols = screen.javaClass.getMethod("getColumns").invoke(screen) as? Int ?: 0
-            val sb = StringBuilder()
-            for (row in 0 until rows) {
-                val line = StringBuilder()
-                for (col in 0 until cols) {
-                    val cell = screen.javaClass.getMethod("getCell", Int::class.java, Int::class.java).invoke(screen, col, row)
-                    val ch = cell?.javaClass?.getMethod("getChar")?.invoke(cell) as? Char ?: ' '
-                    if (ch.code != 0) line.append(ch)
-                }
-                val trimmed = line.toString().trimEnd()
-                if (trimmed.isNotEmpty()) sb.append(trimmed).append("\n")
-            }
-            sb.toString()
-        }.getOrDefault("")
-    }
-
-    private fun showTerminalSearch(activity: Activity) {
-        val edit = EditText(activity).apply {
-            hint = "搜索终端输出内容..."
-            setSingleLine(true)
-            setPadding(48, 24, 48, 24)
-        }
-        AlertDialog.Builder(activity)
-            .setTitle("搜索终端输出")
-            .setView(edit)
-            .setPositiveButton("搜索") { _, _ ->
-                val keyword = edit.text.toString().trim()
-                if (keyword.isEmpty()) return@setPositiveButton
-                val fullText = getScreenText()
-                val lines = fullText.lines()
-                val matches = lines.filterIndexed { idx, line ->
-                    line.contains(keyword, ignoreCase = true)
-                }.take(30)
-                if (matches.isEmpty()) {
-                    Toast.makeText(activity, "未找到匹配内容", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                AlertDialog.Builder(activity)
-                    .setTitle("找到 ${matches.size} 条匹配")
-                    .setItems(matches.toTypedArray()) { _, _ ->
-                        // 复制选中行到剪贴板
-                        (activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)
-                            ?.setPrimaryClip(ClipData.newPlainText("AIDev Terminal", matches[0]))
-                        Toast.makeText(activity, "已复制: ${matches[0].take(40)}", Toast.LENGTH_SHORT).show()
-                    }
-                    .setNegativeButton("关闭", null)
-                    .show()
-            }
-            .setNegativeButton("取消", null)
-            .show()
     }
 
     /** 打开 Shell 增强页面（命令历史统计、别名管理等） */
@@ -860,8 +795,7 @@ class EmbeddedTerminalPage : ShellPage {
             "aidev-doctor",
             "aidev-agent-context",
             "aidev-agent-context-file",
-            "opencode",
-            "opencode --help",
+
             "ubuntu",
             "help",
             "history",
@@ -872,21 +806,6 @@ class EmbeddedTerminalPage : ShellPage {
             "ll",
             "ls",
             "ls -la",
-            "la",
-            "cd /root/projects",
-            "apt update",
-            "apt install ",
-            "apt search ",
-            "apt list --installed",
-            "python3",
-            "python3 -m pip install ",
-            "python3 -m venv .venv",
-            "pip install ",
-            "node --version",
-            "npm install",
-            "npm run dev",
-            "npm test",
-            "npm run build",
             "git status",
             "git status --short",
             "git add .",

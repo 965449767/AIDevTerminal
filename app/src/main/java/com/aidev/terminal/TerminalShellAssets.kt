@@ -72,6 +72,13 @@ object TerminalShellAssets {
         writeSystemScript(bin, "stopapp", "stop app")
         writeSystemScript(bin, "installapk", "install apk")
         writeSystemScript(bin, "uninstallapp", "uninstall app")
+        // 两端共用脚本（agent 辅助 + 系统工具）
+        UbuntuBootstrapScripts.agentShellScripts().forEach { (name, content) ->
+            val out = File(bin, name)
+            out.writeText(content + "\n")
+            out.setExecutable(true, false)
+            out.setReadable(true, false)
+        }
         File(home, ".aidev_shell_fallback").delete()
     }
 
@@ -104,7 +111,15 @@ object TerminalShellAssets {
             install-ubuntu() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" install-ubuntu "${'$'}@"; }
             aidev-auto-bootstrap() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-auto-bootstrap "${'$'}@"; }
             aidev-doctor() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-doctor "${'$'}@"; }
-            ${UbuntuBootstrapScripts.agentShellFunctions()}
+            aidev-current-project() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-current-project" "${'$'}@"; }
+            aidev-agent-context() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-agent-context" "${'$'}@"; }
+            aidev-agent-context-file() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-agent-context-file" "${'$'}@"; }
+            aidev-agent-summary() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-agent-summary" "${'$'}@"; }
+            aidev-agent-log() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-agent-log" "${'$'}@"; }
+            aidev-agent-tail() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-agent-tail" "${'$'}@"; }
+            list-listen-ports() { /system/bin/sh "${'$'}AIDEV_BIN/list-listen-ports" "${'$'}@"; }
+            task-list() { /system/bin/sh "${'$'}AIDEV_BIN/task-list" "${'$'}@"; }
+            task-run() { /system/bin/sh "${'$'}AIDEV_BIN/task-run" "${'$'}@"; }
             """.trimIndent() + "\n"
         )
     }

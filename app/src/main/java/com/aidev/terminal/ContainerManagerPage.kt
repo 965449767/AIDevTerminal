@@ -147,7 +147,7 @@ class ContainerManagerPage : ShellPage {
             host.openTerminal("apt clean && rm -rf /var/cache/apt/archives/*")
         })
         list.addView(ui.actionRow("清理临时文件", "删除 /tmp 和日志文件") {
-            host.openTerminal("rm -rf /tmp/* && rm -rf /var/log/*.old && journalctl --vacuum-time=3d 2>/dev/null")
+            host.openTerminal("rm -rf /tmp/* && rm -rf /var/log/*.old")
         })
         list.addView(ui.actionRow("查看磁盘使用", "详细查看各目录占用空间") {
             host.openTerminal("du -sh /* 2>/dev/null | sort -rh | head -20")

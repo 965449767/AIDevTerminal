@@ -63,14 +63,13 @@ class EmbeddedTasksPage : ShellPage {
 
     private fun showTaskTemplates() {
         val names = arrayOf(
-            "OpenCode 服务", "Python HTTP 8000", "Node Dev", "Gradle Debug 构建",
+            "Python HTTP 8000", "Node Dev", "Gradle Debug 构建",
             "Logcat 记录", "当前端口检查", "Git 状态", "Python 测试", "Node 测试",
             "Go 测试", "当前项目 Git", "当前项目测试", "当前项目构建",
-            "当前项目诊断", "当前项目修复", "当前项目 OpenCode",
-            "当前项目后台代理", "当前项目代理上下文", "AI 代理日志"
+            "当前项目诊断", "当前项目修复", "当前项目代理上下文", "AI 代理日志"
         )
         val commands = arrayOf(
-            "task-run opencode 'opencode serve'", "task-run pyserver 'python3 -m http.server 8000'",
+            "task-run pyserver 'python3 -m http.server 8000'",
             "task-run npm-dev 'npm run dev'", "task-run gradle './gradlew assembleDebug'",
             "task-run logcat 'logcat'", "list-listen-ports",
             "task-run git-status 'git status --short --branch'", "task-run pytest 'python3 -m pytest'",
@@ -80,8 +79,6 @@ class EmbeddedTasksPage : ShellPage {
             currentProjectTask("if [ -f package.json ]; then npm run build; elif [ -f build.gradle ] || [ -f build.gradle.kts ]; then ./gradlew assembleDebug; elif [ -f go.mod ]; then go build ./...; elif [ -f Cargo.toml ]; then cargo build; else ls -la; fi"),
             currentProjectTask("if [ -f package.json ]; then npm pkg get scripts; elif [ -f build.gradle ] || [ -f build.gradle.kts ]; then ./gradlew tasks --all | head -80; elif [ -f go.mod ]; then go list ./...; elif [ -f Cargo.toml ]; then cargo metadata --no-deps; else python3 -m pytest --collect-only; fi"),
             currentProjectTask("if [ -f package.json ]; then rm -rf node_modules package-lock.json && npm install; elif [ -f build.gradle ] || [ -f build.gradle.kts ]; then ./gradlew --stop; ./gradlew clean; elif [ -f go.mod ]; then go clean -cache && go mod tidy; elif [ -f Cargo.toml ]; then cargo clean && cargo fetch; elif [ -f requirements.txt ]; then python3 -m pip install -r requirements.txt --break-system-packages; else ls -la; fi"),
-            currentProjectTask("opencode"),
-            currentProjectTask("task-run opencode \"opencode\""),
             currentProjectTask("aidev-agent-context"),
             "aidev-agent-log"
         )
