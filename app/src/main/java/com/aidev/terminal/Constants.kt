@@ -32,7 +32,7 @@ object Constants {
     const val SYSTEM_BIN_PATH = "/system/bin"
 
     // 脚本版本标记
-    const val ASSET_VERSION = "0.12.33-proot-lib-bind-fix"
+    const val ASSET_VERSION = "0.12.34-agent-scripts-unified"
 
     // SharedPreferences
     const val PREFS_NAME = "aidev_ui"
