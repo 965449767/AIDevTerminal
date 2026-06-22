@@ -139,14 +139,14 @@ object ShizukuBridgeService {
         val resFile = File(File(bridgeDir, RESULT_DIR), fileName)
         if (resFile.exists()) return
 
-        // 获取当前前台 Activity 来启动 CameraBridgeActivity
+        // 获取当前前台 Activity（保留供后续 IPC 使用）
         val activity = AIDevApp.getCurrentActivity() ?: run {
             resFile.writeText("""{"status":"error","error":"No foreground activity available","timestamp":${System.currentTimeMillis()}}""")
             reqFile.delete()
             return
         }
 
-        CameraBridgeActivity.start(activity, reqFile.absolutePath, resFile.absolutePath)
-        // 请求文件由 CameraBridgeActivity 处理完成后删除
+        resFile.writeText("""{"status":"error","error":"Camera bridge removed","timestamp":${System.currentTimeMillis()}}""")
+        reqFile.delete()
     }
 }

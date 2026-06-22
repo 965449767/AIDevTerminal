@@ -633,20 +633,15 @@ class EmbeddedTerminalPage : ShellPage {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(0xFF05070A.toInt())
             setPadding(ui.dp(6), ui.dp(3), ui.dp(6), ui.dp(3))
-            addView(button(activity, ui, "AI") { com.aidev.terminal.opencode.OpencodeNativePanel.showHome(activity) }.apply {
-                setOnLongClickListener {
-                    sendAgentCommand("aidev-opencode")
-                    true
-                }
-            }, LinearLayout.LayoutParams(0, ui.dp(30), 1f).apply { setMargins(0, 0, ui.dp(3), 0) })
+            addView(button(activity, ui, "OpenCode") { sendAgentCommand("opencode") }, LinearLayout.LayoutParams(0, ui.dp(30), 1f).apply { setMargins(0, 0, ui.dp(3), 0) })
             addView(button(activity, ui, "上下文") { sendAgentCommand("aidev-agent-context") }, LinearLayout.LayoutParams(0, ui.dp(30), 1f).apply { setMargins(ui.dp(3), 0, ui.dp(3), 0) })
-            addView(button(activity, ui, "任务") { com.aidev.terminal.opencode.OpencodeNativePanel.showActiveTodo(activity) }.apply {
+            addView(button(activity, ui, "任务") { send("task-list") }.apply {
                 setOnLongClickListener {
                     send("task-list")
                     true
                 }
             }, LinearLayout.LayoutParams(0, ui.dp(30), 1f).apply { setMargins(ui.dp(3), 0, ui.dp(3), 0) })
-            addView(button(activity, ui, "事件") { com.aidev.terminal.opencode.OpencodeNativePanel.showEventConsole(activity) }.apply {
+            addView(button(activity, ui, "日志") { send("ls -lt \"${'$'}AIDEV_HOME/tasks\"/*.log 2>/dev/null | head -20") }.apply {
                 setOnLongClickListener {
                     send("ls -lt \"${'$'}AIDEV_HOME/tasks\"/*.log 2>/dev/null | head -20")
                     true
@@ -668,16 +663,6 @@ class EmbeddedTerminalPage : ShellPage {
             "终端 · 搜索输出" to { showTerminalSearch(activity) },
             "终端 · Shell 增强" to { showShellEnhancements(activity) },
             "SSH · 连接管理" to { showSshBookmarks(activity, host) },
-            "OpenCode · CLI 界面" to { sendAgentCommand("opencode") },
-            "OpenCode · Serve 后台服务" to { sendAgentCommand("task-run opencode-serve 'opencode serve --port 4096 --hostname 127.0.0.1'") },
-            "OpenCode · 原生协议面板" to { com.aidev.terminal.opencode.OpencodeNativePanel.showHome(activity) },
-            "协议 · 协议状态详情" to {
-                com.aidev.terminal.opencode.OpencodeStatusBadge.showDetail(
-                    activity,
-                    com.aidev.terminal.opencode.OpencodeManager.lastStatus
-                )
-            },
-            "协议 · 重新探测健康" to { com.aidev.terminal.opencode.OpencodeManager.probeNow(activity.applicationContext) },
             "设置 · 字号" to { showFontDialog(activity) },
             "设置 · 紧凑显示" to { applyFontPreset(activity, 12f) },
             "设置 · 大字显示" to { applyFontPreset(activity, 18f) },
@@ -687,13 +672,6 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun showAgentMenu(activity: Activity) {
         showGroupedActionMenu(activity, "AI 代理终端", "recent_agent_more", listOf(
-            "原生 · OpenCode 面板" to { com.aidev.terminal.opencode.OpencodeNativePanel.showHome(activity) },
-            "原生 · 新建会话并提问" to { com.aidev.terminal.opencode.OpencodeNativePanel.createSessionAndPrompt(activity) },
-            "原生 · 原生多会话" to { com.aidev.terminal.opencode.OpencodeNativePanel.showSessions(activity) },
-            "原生 · 当前 TODO" to { com.aidev.terminal.opencode.OpencodeNativePanel.showActiveTodo(activity) },
-            "原生 · 当前 Diff" to { com.aidev.terminal.opencode.OpencodeNativePanel.showActiveDiff(activity) },
-            "原生 · SSE 事件监听" to { com.aidev.terminal.opencode.OpencodeNativePanel.showEventConsole(activity) },
-            "原生 · 中止当前会话" to { com.aidev.terminal.opencode.OpencodeNativePanel.abortActive(activity) },
             "启动 · OpenCode 前台" to { sendAgentCommand("opencode") },
             "启动 · OpenCode 后台任务" to { sendAgentCommand("task-run opencode \"opencode\"") },
             "启动 · OpenCode Serve" to { sendAgentCommand("task-run opencode-serve 'opencode serve'") },
@@ -1274,7 +1252,6 @@ class EmbeddedTerminalPage : ShellPage {
             EmbeddedVirtualKey("~", "~"),
             EmbeddedVirtualKey("清屏", "clear\n"),
             EmbeddedVirtualKey("Ubuntu", "ubuntu\n"),
-            EmbeddedVirtualKey("OpenCode CLI", "opencode\n"),
             EmbeddedVirtualKey("任务", "task-list\n")
         ).toMutableList()
         keys.addAll(parseCustomKeys(prefs.getString("terminal_custom_keys", "") ?: ""))
@@ -1559,7 +1536,6 @@ class EmbeddedTerminalPage : ShellPage {
         val item = EmbeddedTermSession(id, "AI-会话$id", createTerminalSession(activity, id), aiSession = true)
         sessions.add(item)
         switchSession(activity, item)
-        terminalView?.postDelayed({ sendAgentCommand("aidev-opencode-preflight") }, 250)
     }
 
     private fun renameCurrentSession(activity: Activity) {

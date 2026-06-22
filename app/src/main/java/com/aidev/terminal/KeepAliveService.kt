@@ -10,7 +10,6 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
-import com.aidev.terminal.opencode.OpencodeManager
 
 class KeepAliveService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
@@ -20,13 +19,6 @@ class KeepAliveService : Service() {
         super.onCreate()
         acquireLocks()
         startForeground(NOTIFICATION_ID, notification())
-        // Phase 1: 让进程级单例的健康轮询启动；UI 不在前台也保持周期探测，
-        // 一旦用户在 Ubuntu 内手动 `opencode serve`，AIDev Terminal 会立即识别。
-        try {
-            OpencodeManager.ensurePolling(applicationContext)
-        } catch (e: Exception) {
-            AIDevLogger.e(TAG, "Failed to start OpencodeManager polling", e)
-        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

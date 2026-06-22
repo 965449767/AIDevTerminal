@@ -63,9 +63,6 @@ object TerminalShellAssets {
             out.writeText("# AIDev command marker. Android 私有目录禁止直接执行脚本；实际入口由 .aidevrc 函数转发。\n")
             out.setReadable(true, false)
         }
-        // camera-photo 和 camera-pick 是可执行脚本，不依赖 .aidevrc 函数
-        writeCameraScript(bin, "camera-photo", "photo")
-        writeCameraScript(bin, "camera-pick", "pick")
         // 系统控制脚本（通知、截图、音量、亮度、应用管理）
         writeSystemScript(bin, "sysnotify", "send notification")
         writeSystemScript(bin, "screencap", "take screenshot")
@@ -107,102 +104,9 @@ object TerminalShellAssets {
             install-ubuntu() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" install-ubuntu "${'$'}@"; }
             aidev-auto-bootstrap() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-auto-bootstrap "${'$'}@"; }
             aidev-doctor() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-doctor "${'$'}@"; }
-            camera-photo() {
-              local out="${'$'}{1:-/sdcard/DCIM/AIDev/photo_$(date +%Y%m%d_%H%M%S).jpg}"
-              local req="${'$'}AIDEV_HOME/.aidev-shizuku-bridge/request/camera_$(date +%s)_${'$'}PPID"
-              local res="${'$'}AIDEV_HOME/.aidev-shizuku-bridge/result/camera_$(date +%s)_${'$'}PPID"
-              mkdir -p "${'$'}AIDEV_HOME/.aidev-shizuku-bridge/request" "${'$'}AIDEV_HOME/.aidev-shizuku-bridge/result"
-              echo "MODE=photo" > "${'$'}req"
-              echo "OUTPUT=${'$'}out" >> "${'$'}req"
-              echo "[CAMERA] 请求已发送，等待拍照..."
-              local count=0
-              while [ ! -f "${'$'}res" ] && [ ${'$'}count -lt 60 ]; do
-                sleep 1
-                count=$((count + 1))
-              done
-              if [ -f "${'$'}res" ]; then
-                cat "${'$'}res"
-                rm -f "${'$'}req" "${'$'}res"
-              else
-                echo '{"status":"error","error":"拍照超时"}'
-                rm -f "${'$'}req"
-              fi
-            }
-            camera-pick() {
-              local req="${'$'}AIDEV_HOME/.aidev-shizuku-bridge/request/camera_$(date +%s)_${'$'}PPID"
-              local res="${'$'}AIDEV_HOME/.aidev-shizuku-bridge/result/camera_$(date +%s)_${'$'}PPID"
-              mkdir -p "${'$'}AIDEV_HOME/.aidev-shizuku-bridge/request" "${'$'}AIDEV_HOME/.aidev-shizuku-bridge/result"
-              echo "MODE=pick" > "${'$'}req"
-              echo "[CAMERA] 请求已发送，等待选择图片..."
-              local count=0
-              while [ ! -f "${'$'}res" ] && [ ${'$'}count -lt 60 ]; do
-                sleep 1
-                count=$((count + 1))
-              done
-              if [ -f "${'$'}res" ]; then
-                cat "${'$'}res"
-                rm -f "${'$'}req" "${'$'}res"
-              else
-                echo '{"status":"error","error":"选择超时"}'
-                rm -f "${'$'}req"
-              fi
-            }
             ${UbuntuBootstrapScripts.agentShellFunctions()}
             """.trimIndent() + "\n"
         )
-    }
-
-    private fun writeCameraScript(binDir: File, name: String, mode: String) {
-        val script = File(binDir, name)
-        script.writeText(
-            """#!/bin/sh
-            # AIDev camera bridge script. Works in both Android shell and Ubuntu proot.
-            # Usage: $name [output_path]
-
-            # Detect AIDEV_HOME
-            if [ -z "${'$'}AIDEV_HOME" ]; then
-                # Fallback: derive from script location
-                AIDEV_HOME="$(dirname "$(dirname "$(dirname "${'$'}0")")")"
-            fi
-
-            BRIDGE_DIR="${'$'}AIDEV_HOME/.aidev-shizuku-bridge"
-            REQ_DIR="${'$'}BRIDGE_DIR/request"
-            RES_DIR="${'$'}BRIDGE_DIR/result"
-            mkdir -p "${'$'}REQ_DIR" "${'$'}RES_DIR"
-
-            TS=$(date +%s)
-            PID=${'$'}PPID
-            REQ="${'$'}REQ_DIR/camera_${'$'}TS_${'$'}PID"
-            RES="${'$'}RES_DIR/camera_${'$'}TS_${'$'}PID"
-
-            if [ "$mode" = "photo" ]; then
-                OUT="${'$'}{1:-/sdcard/DCIM/AIDev/photo_$(date +%Y%m%d_%H%M%S).jpg}"
-                echo "MODE=photo" > "${'$'}REQ"
-                echo "OUTPUT=${'$'}OUT" >> "${'$'}REQ"
-                echo "[CAMERA] Sending photo request..."
-            else
-                echo "MODE=pick" > "${'$'}REQ"
-                echo "[CAMERA] Sending pick request..."
-            fi
-
-            COUNT=0
-            while [ ! -f "${'$'}RES" ] && [ ${'$'}COUNT -lt 60 ]; do
-                sleep 1
-                COUNT=$((COUNT + 1))
-            done
-
-            if [ -f "${'$'}RES" ]; then
-                cat "${'$'}RES"
-                rm -f "${'$'}REQ" "${'$'}RES"
-            else
-                echo '{"status":"error","error":"${'$'}{mode} timeout"}'
-                rm -f "${'$'}REQ"
-                exit 1
-            fi
-            """.trimIndent() + "\n"
-        )
-        script.setExecutable(true, false)
-        script.setReadable(true, false)
     }
 
     private fun writeSystemScript(binDir: File, name: String, desc: String) {

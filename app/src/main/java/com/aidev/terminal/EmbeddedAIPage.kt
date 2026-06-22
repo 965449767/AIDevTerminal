@@ -61,12 +61,6 @@ class EmbeddedAIPage : ShellPage {
 
         // AI 操作
         list.addView(ui.section("AI 操作", "启动 OpenCode 或创建新会话"))
-        list.addView(ui.actionRow("原生 OpenCode", "多会话、Prompt、SSE、TODO、Diff") {
-            com.aidev.terminal.opencode.OpencodeNativePanel.showHome(activity)
-        })
-        list.addView(ui.actionRow("新建原生会话", "直接通过 HTTP API 提交任务") {
-            com.aidev.terminal.opencode.OpencodeNativePanel.createSessionAndPrompt(activity)
-        })
 
         currentProject()?.let { project ->
             list.addView(ui.actionRow("OpenCode 项目", "在当前项目启动 AI 代理") {
