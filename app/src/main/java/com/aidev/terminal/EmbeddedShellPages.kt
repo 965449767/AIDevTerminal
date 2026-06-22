@@ -667,6 +667,7 @@ class EmbeddedTerminalPage : ShellPage {
             "终端 · 粘贴" to { ClipboardHelper.paste(activity)?.let { session?.write(it) } ?: Toast.makeText(activity, "剪贴板为空", Toast.LENGTH_SHORT).show() },
             "终端 · 搜索输出" to { showTerminalSearch(activity) },
             "终端 · Shell 增强" to { showShellEnhancements(activity) },
+            "SSH · 连接管理" to { showSshBookmarks(activity, host) },
             "OpenCode · CLI 界面" to { sendAgentCommand("opencode") },
             "OpenCode · Serve 后台服务" to { sendAgentCommand("task-run opencode-serve 'opencode serve --port 4096 --hostname 127.0.0.1'") },
             "OpenCode · 原生协议面板" to { com.aidev.terminal.opencode.OpencodeNativePanel.showHome(activity) },
@@ -825,6 +826,16 @@ class EmbeddedTerminalPage : ShellPage {
             .setTitle("Shell 增强")
             .setView(view)
             .setNegativeButton("关闭") { _, _ -> page.onSelected(activity, view) }
+            .show()
+    }
+
+    private fun showSshBookmarks(activity: Activity, host: ShellHost) {
+        val page = SshBookmarksPage()
+        val view = page.create(activity, ui ?: AIDevUi(activity, activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)), host)
+        AlertDialog.Builder(activity)
+            .setTitle("SSH 连接管理")
+            .setView(view)
+            .setCancelable(false)
             .show()
     }
 
