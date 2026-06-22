@@ -2,79 +2,70 @@
 
 ## Goal
 
-Complete `0.12.16-terminal-completion-lite`.
+Complete `0.12.17-audit-fixes` — fix valid issues from project audit report.
 
 ## Current Status
 
-`0.12.16` is in progress.
+In progress.
 
-## Scope
+## Scope — This Phase
 
-Allowed:
+- screen rotation handling (`configChanges` + `onConfigurationChanged`)
+- clipboard enhancement (`paste()` + terminal integration)
 
-- add terminal command completion suggestion bar
-- track lightweight command input buffer
-- add built-in command completions
-- add recent command history completions
-- keep terminal enhancement roadmap focused on performance, diagnostics, sessions, clipboard, virtual keys, and completion
+## Not Allowed in This Phase
 
-Not allowed in this phase:
-
-- dependency changes
+- dependency changes (except clipboard/SSH)
 - PRoot launch behavior changes
 - Ubuntu rootfs reinstall logic
 - Git tag, reset, clean, push, or remote configuration
-
-## Relevant Files
-
-- `app/src/main/java/com/aidev/terminal/EmbeddedShellPages.kt`
-- `app/src/main/java/com/aidev/terminal/TerminalShellAssets.kt`
-- `app/build.gradle.kts`
+- SSH client implementation (deferred)
+- VT terminal emulation investigation (deferred)
 
 ## Plan
 
-1. Add suggestion bar between terminal content and virtual keyboard.
-2. Add command completion model and built-in command dictionary.
-3. Track virtual key, paste, menu, and common keyboard input.
-4. Add recent command history suggestions.
-5. Build and export debug APK.
-6. Auto commit after validation.
+| Step | Description | Files |
+|------|-------------|-------|
+| 1 | Screen rotation: add `configChanges` to ShellActivity | `AndroidManifest.xml` |
+| 2 | Screen rotation: add `onConfigurationChanged` | `ShellActivity.kt` |
+| 3 | Clipboard: add `paste()` + `listen()` | `ClipboardHelper.kt` |
+| 4 | Clipboard: integrate paste into terminal UX | `EmbeddedShellPages.kt` |
+| 5 | Build and export debug APK | — |
+| 6 | Auto commit after validation | — |
 
 ## Validation Commands
 
 ```bash
 bash scripts/harness_check.sh
-git status --short
-JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 /data/user/work/gradle/gradle-8.14.5/bin/gradle -p "/workspace/AIDevTerminal" :app:assembleDebug --no-daemon
+/usr/local/bin/wrap-android-native.sh
+./gradlew assembleDebug
 ```
 
 ## Acceptance Criteria
 
-- suggestion bar appears above virtual keyboard
-- click suggestion completes text without Enter
-- long press suggestion executes the command
-- Enter records command history
-- `scripts/harness_check.sh` passes.
-- Android debug build passes.
+- app survives screen rotation without Activity recreation
+- terminal view resizes correctly on rotation
+- clipboard: long-press terminal → "粘贴" reads from system clipboard
+- `scripts/harness_check.sh` passes
+- Android debug build passes
 
-## Risks
+## Future Roadmap (Deferred from Audit)
 
-- system IME composition may not be perfectly tracked in this first version
-- cursor-middle editing is approximate
-- path completion is intentionally deferred
-
-## Next 3 Steps
-
-1. Test command suggestion click/long-press behavior.
-2. Decide whether to add path completion.
-3. Continue with clipboard/session enhancements.
+| Feature | Priority | Estimate | Dependencies |
+|---------|----------|----------|-------------|
+| SSH client (JSch/sshj) | High | 600-800 lines | New Gradle dependency |
+| Clipboard listen auto-paste | Low | 30 lines | None |
+| VT terminal emulation audit | Low | 1h research | termux-terminal-view |
+| CameraBridgeActivity → QR lib | Low | 200 lines | New dependency |
+| SecurityAuditPage → Settings sub-page | Low | 50 lines | None |
 
 ## Side Notes
 
-- `AIDevBottomSheet.kt` and `MenuBottomSheet.kt` created (2026-06-17).
-- `BackupRestorePage.kt` removed due to prior corruption; backup/restore menu temporarily toasts "开发中".
-- `MenuItem` is now nested inside `MenuBottomSheet`; all call sites updated.
+- Audit report `AdvTerminal_Audit_Report.md` reviewed 2026-06-22.
+- Many audit claims were inaccurate (multi-session, keys, font size already exist).
+- Three valid findings addressed in this phase: rotation, clipboard.
+- SSH deferred to separate version due to scope.
 
 ## Last Updated
 
-2026-06-14
+2026-06-22

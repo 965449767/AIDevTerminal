@@ -7,6 +7,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.res.Configuration
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
@@ -17,6 +18,8 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -66,6 +69,10 @@ class ShellActivity : Activity() {
         }
         val initial = if (shouldAutoBootstrapUbuntu) TAB_TERMINAL else requestedTab.takeIf { it in pages.indices } ?: TAB_TERMINAL
         switchTo(initial, animateForward = null, force = true)
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
     }
 
     private fun shouldAutoBootstrapUbuntu(requestedTab: Int): Boolean {
@@ -353,6 +360,11 @@ class ShellActivity : Activity() {
         rebuildBottomNav()
         applyShellSkin()
         setContentView(navHost)
+        ViewCompat.setOnApplyWindowInsetsListener(navHost) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(insets.left, insets.top, insets.right, insets.bottom)
+            windowInsets
+        }
         attachSwipe(navHost)
     }
 

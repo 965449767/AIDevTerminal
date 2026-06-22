@@ -125,6 +125,36 @@ Create a pure custom `AIDevBottomSheet` using `Dialog` + `LinearLayout` + `Scrol
 - `MenuItem` is now a nested class of `MenuBottomSheet`; call sites must use `MenuBottomSheet.MenuItem`.
 - `BackupRestorePage` was removed due to prior file corruption; backup/restore menu items temporarily toast "开发中" until the page is reimplemented.
 
+## 2026-06-22 - Opt out of Edge-to-Edge enforcement (temporary)
+
+### Context
+
+`targetSdk = 36` (Android 16) 触发了系统 Edge-to-Edge 强制执行。`ShellActivity` 未适配 window insets，导致 APP bar 重叠系统状态栏。
+
+### Decision
+
+短期：在 `AppTheme` 中添加 `android:windowOptOutEdgeToEdgeEnforcement = true`，让系统恢复旧版布局行为，`statusBarColor` 生效。
+
+### Consequences
+
+- 问题立即修复，不影响现有功能
+- 长期来看仍需正式迁移到 Edge-to-Edge，计划在 `0.14.x` 实施
+
+## 2026-06-22 - Planned Edge-to-Edge migration (future)
+
+### Context
+
+`windowOptOutEdgeToEdgeEnforcement` 是临时方案。Android 15+ 逐步淘汰旧式状态栏行为，未来 SDK 版本可能移除该标志。
+
+### Decision
+
+在 `0.14.x` 中实施正式迁移，步骤：引入 `androidx.activity:activity` 依赖 → 在 `ShellActivity` 中调用 `enableEdgeToEdge()` → 用 `ViewCompat.setOnApplyWindowInsetsListener` 处理 navHost insets → 移除 opt-out 标志。
+
+### Consequences
+
+- 迁移前需要验证虚拟键盘、底部导航栏、全屏模式的行为
+- 终端页面（`EmbeddedShellPages.kt`）需额外适配 keyboard insets
+
 ## 2026-06-17 - Replace AlertDialog menus with MenuBottomSheet in EmbeddedSettingsPage
 
 ### Context

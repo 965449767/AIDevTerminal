@@ -616,6 +616,13 @@ class EmbeddedTerminalPage : ShellPage {
             addView(button(activity, ui, "退出") { host.switchTab(ShellActivity.TAB_TERMINAL) }, LinearLayout.LayoutParams(ui.dp(54), ui.dp(30)).apply {
                 leftMargin = ui.dp(4)
             })
+            addView(button(activity, ui, "粘贴") {
+                val text = ClipboardHelper.paste(activity)
+                if (text != null) session?.write(text)
+                else Toast.makeText(activity, "剪贴板为空", Toast.LENGTH_SHORT).show()
+            }, LinearLayout.LayoutParams(ui.dp(54), ui.dp(30)).apply {
+                leftMargin = ui.dp(4)
+            })
             addView(button(activity, ui, "更多") { showTerminalTopMore(activity, host) }, LinearLayout.LayoutParams(ui.dp(54), ui.dp(30)).apply {
                 leftMargin = ui.dp(4)
             })
@@ -657,6 +664,7 @@ class EmbeddedTerminalPage : ShellPage {
             "终端 · 进入 Ubuntu" to { send("ubuntu") },
             "终端 · 诊断 Doctor" to { send("aidev-doctor") },
             "终端 · 清屏" to { send("clear") },
+            "终端 · 粘贴" to { ClipboardHelper.paste(activity)?.let { session?.write(it) } ?: Toast.makeText(activity, "剪贴板为空", Toast.LENGTH_SHORT).show() },
             "终端 · 搜索输出" to { showTerminalSearch(activity) },
             "终端 · Shell 增强" to { showShellEnhancements(activity) },
             "OpenCode · CLI 界面" to { sendAgentCommand("opencode") },
