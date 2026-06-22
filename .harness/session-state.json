@@ -1,41 +1,49 @@
 {
-  "task_id": "0.12.17-design-system-refactor",
+  "task_id": "0.16.2-terminal-bug-audit-round2-plus-ime-fix",
   "status": "completed",
-  "current_phase": "phase-4-build-verify",
+  "current_phase": "round2-complete",
   "last_updated": "2026-06-22",
   "overall_progress_percent": 100,
   "active_plan": [
-    "Phase 1: Update DesignSystem.kt (palette, tokens, helpers)",
-    "Phase 2: Rewrite SshBookmarksPage.kt (design system consume, dialog pattern)",
-    "Phase 3: Update EmbeddedShellPages.kt showSshBookmarks()",
-    "Phase 4: Build, verify, commit"
+    "Fix 2: SessionClient callbacks wrapped in Handler.post",
+    "Fix 3: Remove useless removeCallbacks(null)",
+    "Fix 5: pulse() window null guard",
+    "Fix 1B: ShellActivity onDestroy + page iteration",
+    "Fix 8R: clearProxyText setText(\"\") revert to text?.clear()",
+    "小bug: completionBarView assignment",
+    "IME fix: HyperOS keyboard overlap — ADJUST_NOTHING + contentHost IME padding with deduction"
   ],
   "next_3_steps": [
-    "Phase 5: Migrate remaining ShellPages to design system",
-    "Add elevation/shadow system to DesignTokens",
-    "Further UI polish"
+    "(Optional) DesignTokens elevation/shadow system",
+    "(Optional) GradientDrawable → roundedBackground migration"
   ],
   "changed_files": [
     "DesignSystem.kt",
-    "SshBookmarksPage.kt",
-    "EmbeddedShellPages.kt"
+    "ShellActivity.kt",
+    "EmbeddedShellPages.kt",
+    "AGENTS.md"
   ],
   "validation": {
     "last_commands": [
       "wrap-android-native.sh",
-      "./gradlew assembleDebug"
+      "./gradlew assembleDebug --no-daemon"
     ],
     "last_result": "BUILD SUCCESSFUL — only pre-existing deprecation warnings",
     "known_failures": []
   },
   "cognitive_state": {
-    "failure_count": 0,
-    "current_mode": "verification",
-    "tried_approaches": [],
+    "failure_count": 1,
+    "current_mode": "idle",
+    "tried_approaches": [
+      "setText(\"\") in clearProxyText → Binder deadlock → reverted to text?.clear()",
+      "ADJUST_RESIZE alone → IME covers keyboard",
+      "ADJUST_NOTHING + pageRoot IME padding → gap (unaccounted bottomNav + navBar)",
+      "ADJUST_NOTHING + contentHost IME padding with deduction → SUCCESS"
+    ],
     "blocked_on": null
   },
   "handoff": {
-    "last_summary": "Design system refactoring complete. MD3-inspired palette with Matrix-green accent, roundedBackground/showAsDialog helpers. SSH page rewritten with design system consumption and proper dialog dismiss callback. Builds cleanly.",
-    "resume_from": "Start Phase 5: migrate remaining ShellPages to design system, add elevation tokens."
+    "last_summary": "Round 2 terminal bug fixes complete (6 fixes). TUI clearProxyText Binder deadlock fixed. IME keyboard overlap on HyperOS fixed: ADJUST_NOTHING + contentHost IME padding with formula max(0, imeHeight - sysBarsBottom - bottomNavHeight). Key lessons written to AGENTS.md Hard Lessons #4 and #5.",
+    "resume_from": "No active plan. Optional: DesignTokens elevation/shadow system or GradientDrawable migration."
   }
 }

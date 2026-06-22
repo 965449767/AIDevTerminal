@@ -101,3 +101,15 @@ SSH 页面重写时直接把硬编码字号映射到 token，没逐行对照：�
 ### 3. Dialog 模式切换必须审查完整窗口生命周期
 `AlertDialog` → `Theme_Translucent_NoTitleBar` + `MATCH_PARENT` 没考虑 system bars insets 和 max size。
 **规则**: 换 dialog 底座时检查：(1) 是否处理 system window insets？(2) 是否限制最大高度？(3) dismiss 通路是否正常？(4) 极端内容（太长、横屏、分屏）是否溢出？
+
+### 4. IME 代理 EditText 中 `setText("")` 与 Binder 并发死锁
+在 `InputConnectionWrapper` 回调路径内，`clearProxyText()` 的 `post {}` 中用 `setText("")` 替代 `text?.clear()` 导致 TUI 模式卡死。`setText("")` 走 `TextView.setText()` 完整管道 → `checkForRelayout()` + `Editor.afterTextChanged()` → `IMM.updateSelection()` → Binder 回调 IME。若 `post {}` 的执行与 `sendKeyEvent(KEYCODE_ENTER)` 的 Binder 同步调用并发，三者（主线程等 IMM、IME Binder 线程等 sendKeyEvent 返回、线程池等待）形成死锁。`text?.clear()` 原地改 `SpannableStringBuilder`，不走 `TextView.setText()`，不触发布局/`restartInput` /额外 Binder 调用。
+**规则**: 在 IME 代理 EditText（`InputConnection` 回调路径以及任何 `post {}` Runnable）中清缓冲区，只用 `text?.clear()`（`Editable` 原地改），永不调用 `setText("")`。所有在 `post {}` 中操作 EditText 且可能与 Binder 线程并发的改动，优先用 `getText().clear()` / `getText().delete()` / `getText().replace()` 等原地修改方式。
+
+### 5. IME 手动 padding 必须扣除 `contentHost` 到窗口底的全部间隔
+用 `ADJUST_NOTHING` + 手动 IME padding 防键盘遮挡时，padding 不能直接用 `Type.ime().bottom`。布局层次中，`contentHost`（页面容器）下方可能还有底部导航栏 + 系统导航栏，它们已经占了空间。直接对 `contentHost` 设 `imeHeight` padding 会多出一段空隙 = `bottomNavView.height + systemBars.bottom`。
+**规则**: 手动 IME padding 的计算公式：
+```
+extra = max(0, imeHeight - sysBarsBottom - bottomNavHeight)
+```
+其中 `sysBarsBottom` = `Type.systemBars().bottom`（系统导航栏），`bottomNavHeight` = 应用底部导航栏高度。对 `contentHost`（或 root 容器）设这个 padding，而非对页面根布局设。IME 关闭时 `imeHeight=0` → `extra=0`，padding 自动归零。

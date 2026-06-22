@@ -30,14 +30,25 @@ object TaskManagerHelper {
     /** 检查指定 PID 的进程是否仍在运行 */
     fun isRunning(pid: String): Boolean = pid.toIntOrNull()?.let {
         runCatching {
-            val p = Runtime.getRuntime().exec(arrayOf("kill", "-0", it.toString()))
+            val p = ProcessBuilder("kill", "-0", it.toString())
+                .redirectErrorStream(true)
+                .start()
+            p.inputStream.use { it.readBytes() }
             p.waitFor() == 0
         }.getOrDefault(false)
     } ?: false
 
     /** 停止指定任务（发送 SIGTERM） */
     fun stopTask(task: EmbeddedTaskInfo) {
-        task.pid.toIntOrNull()?.let { Runtime.getRuntime().exec(arrayOf("kill", it.toString())).waitFor() }
+        task.pid.toIntOrNull()?.let {
+            runCatching {
+                val p = ProcessBuilder("kill", it.toString())
+                    .redirectErrorStream(true)
+                    .start()
+                p.inputStream.use { it.readBytes() }
+                p.waitFor()
+            }
+        }
     }
 
     /** 构建单条任务的行视图 */

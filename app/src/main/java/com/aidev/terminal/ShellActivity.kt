@@ -13,6 +13,7 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -45,7 +46,6 @@ class ShellActivity : Activity() {
         listOf(
             EmbeddedTerminalPage(),
             EmbeddedFilesPage(),
-            EmbeddedAIPage(),
             EmbeddedSettingsPage(),
             KnowledgeBasePage()
         )
@@ -55,12 +55,13 @@ class ShellActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
         prefs = getSharedPreferences("aidev_ui", MODE_PRIVATE)
         ui = AIDevUi(this, prefs)
         requestEssentialPermissions()
         ensureNotificationChannel()
         if (prefs.getBoolean("keepalive_auto", true)) runCatching { KeepAliveService.start(this) }
+            .onFailure { Log.e("ShellActivity", "KeepAliveService start failed", it) }
         buildShell()
         val requestedTab = intent?.getIntExtra("shell_tab", -1) ?: -1
         val shouldAutoBootstrapUbuntu = shouldAutoBootstrapUbuntu(requestedTab)
@@ -73,6 +74,13 @@ class ShellActivity : Activity() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        refreshShellSkin()
+        renderCurrent(currentIndex, animateForward = null)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        pages.forEach { it.onDestroy(this) }
     }
 
     private fun shouldAutoBootstrapUbuntu(requestedTab: Int): Boolean {
@@ -135,7 +143,6 @@ class ShellActivity : Activity() {
         val items = arrayOf(
             "打开终端",
             "打开文件",
-            "打开 AI代理",
             "打开设置",
             "打开知识库",
             "进入 Ubuntu",
@@ -248,41 +255,39 @@ class ShellActivity : Activity() {
         when (which) {
             0 -> switchTo(TAB_TERMINAL)
             1 -> switchTo(TAB_FILES)
-            2 -> switchTo(TAB_AI)
-            3 -> switchTo(TAB_SETTINGS)
-            4 -> switchTo(TAB_KNOWLEDGE)
-            5 -> openTerminalCommand("ubuntu")
-            6 -> openTerminalCommand("check-dev-env")
-            7 -> openTerminalCommand("list-listen-ports")
-            8 -> openTerminalCommand("install-aitool")
-            9 -> runCatching { KeepAliveService.start(this) }
-            11 -> pickBackgroundImage()
-            12 -> switchTo(TAB_AI)
-            13 -> openTerminalCommand("task-run pyserver 'python3 -m http.server 8000'")
-            14 -> openTerminalCommand("task-run npm-dev 'npm run dev'")
-            15 -> openTerminalCommand("task-run gradle './gradlew assembleDebug'")
-            16 -> openTerminalCommand("task-run logcat 'logcat'")
-            17 -> openTerminalCommand("git status")
-            18 -> openTerminalCommand("clear")
-            19 -> openCurrentProject("pwd && ls -la")
-            21 -> openCurrentProject(ProjectCommands.testCommand(currentProjectDir()))
-            22 -> openCurrentProject(ProjectCommands.buildCommand(currentProjectDir()))
-            23 -> {
+            2 -> switchTo(TAB_SETTINGS)
+            3 -> switchTo(TAB_KNOWLEDGE)
+            4 -> openTerminalCommand("ubuntu")
+            5 -> openTerminalCommand("check-dev-env")
+            6 -> openTerminalCommand("list-listen-ports")
+            7 -> openTerminalCommand("install-aitool")
+            8 -> runCatching { KeepAliveService.start(this) }
+            10 -> pickBackgroundImage()
+            11 -> openTerminalCommand("task-run pyserver 'python3 -m http.server 8000'")
+            13 -> openTerminalCommand("task-run npm-dev 'npm run dev'")
+            14 -> openTerminalCommand("task-run gradle './gradlew assembleDebug'")
+            15 -> openTerminalCommand("task-run logcat 'logcat'")
+            16 -> openTerminalCommand("git status")
+            17 -> openTerminalCommand("clear")
+            18 -> openCurrentProject("pwd && ls -la")
+            20 -> openCurrentProject(ProjectCommands.testCommand(currentProjectDir()))
+            21 -> openCurrentProject(ProjectCommands.buildCommand(currentProjectDir()))
+            22 -> {
                 prefs.edit().remove("current_project_path").apply()
                 switchTo(TAB_FILES)
             }
-            24 -> openTerminalCommand("ls -lah \"${filesDir.absolutePath}/home/tasks\"")
-            25 -> openCurrentProject(ProjectCommands.healthCommand(currentProjectDir()))
-            26 -> openTerminalCommand("ls -lt \"${filesDir.absolutePath}/home/tasks\"/*.log 2>/dev/null | head -20")
-            27 -> confirmCurrentProjectRepair()
-            28 -> showOpenCodeLaunchOptions()
-            29 -> openCurrentProject("task-run opencode \"opencode\"")
-            30 -> openCurrentProject("task-run opencode-serve 'opencode serve'")
-            31 -> openCurrentProject("aidev-agent-context")
-            32 -> openCurrentProject("aidev-agent-context-file")
-            33 -> openTerminalCommand("aidev-agent-summary")
-            34 -> openCurrentProject("opencode --help")
-            35 -> openTerminalCommand("aidev-agent-log")
+            23 -> openTerminalCommand("ls -lah \"${filesDir.absolutePath}/home/tasks\"")
+            24 -> openCurrentProject(ProjectCommands.healthCommand(currentProjectDir()))
+            25 -> openTerminalCommand("ls -lt \"${filesDir.absolutePath}/home/tasks\"/*.log 2>/dev/null | head -20")
+            26 -> confirmCurrentProjectRepair()
+            27 -> showOpenCodeLaunchOptions()
+            28 -> openCurrentProject("task-run opencode \"opencode\"")
+            29 -> openCurrentProject("task-run opencode-serve 'opencode serve'")
+            30 -> openCurrentProject("aidev-agent-context")
+            31 -> openCurrentProject("aidev-agent-context-file")
+            32 -> openTerminalCommand("aidev-agent-summary")
+            33 -> openCurrentProject("opencode --help")
+            34 -> openTerminalCommand("aidev-agent-log")
         }
     }
 
@@ -361,8 +366,12 @@ class ShellActivity : Activity() {
         applyShellSkin()
         setContentView(navHost)
         ViewCompat.setOnApplyWindowInsetsListener(navHost) { view, windowInsets ->
-            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(insets.left, insets.top, insets.right, insets.bottom)
+            val sysBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            view.setPadding(sysBars.left, sysBars.top, sysBars.right, sysBars.bottom)
+            val imeHeight = windowInsets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            val bottomNavH = bottomNavView.height
+            val extra = imeHeight.coerceAtLeast(sysBars.bottom + bottomNavH) - sysBars.bottom - bottomNavH
+            contentHost.setPadding(0, 0, 0, extra.coerceAtLeast(0))
             windowInsets
         }
         attachSwipe(navHost)
@@ -396,7 +405,6 @@ class ShellActivity : Activity() {
                         val descriptions = listOf(
                             "终端：嵌入式 Shell 终端，支持 Ubuntu 和命令执行",
                             "文件：浏览和管理本地文件与项目目录",
-                            "AI代理：OpenCode AI 助手和代理会话管理",
                             "设置：主题、背景、密度等 UI 偏好设置",
                             "知识库：命令速查手册，支持搜索和一键执行"
                         )
@@ -412,7 +420,7 @@ class ShellActivity : Activity() {
         updateBottomNavSelection()
     }
 
-    private fun bottomLabels(): List<String> = listOf("终端", "文件", "AI代理", "设置", "知识库")
+    private fun bottomLabels(): List<String> = listOf("终端", "文件", "设置", "知识库")
 
     private fun updateBottomNavSelection() {
         bottomNavItems.forEachIndexed { index, item ->
@@ -529,9 +537,8 @@ class ShellActivity : Activity() {
         private const val REQ_NOTIFICATION = 4302
         const val TAB_TERMINAL = 0
         const val TAB_FILES = 1
-        const val TAB_AI = 2
-        const val TAB_SETTINGS = 3
-        const val TAB_KNOWLEDGE = 4
+        const val TAB_SETTINGS = 2
+        const val TAB_KNOWLEDGE = 3
 
         fun open(activity: Activity, tab: Int) {
             val intent = Intent(activity, ShellActivity::class.java)

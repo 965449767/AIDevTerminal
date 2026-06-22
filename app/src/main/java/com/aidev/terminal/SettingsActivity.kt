@@ -205,7 +205,7 @@ class SettingsActivity : Activity() {
                     2 -> startActivity(Intent(this, ServerCenterActivity::class.java))
                     3 -> showKeepAliveMenu()
                     4 -> detail("服务通信诊断", "用于检查 OpenCode/Web 前端服务端口是否能被浏览器访问。\n\n常用命令：\naidev-net-explain\nlist-listen-ports\ncheck-local-server 3000", "查看说明", "aidev-net-explain")
-                    5 -> ShellActivity.open(this, ShellActivity.TAB_AI)
+                    5 -> AppNav.openTerminal(this, "aidev-agent-log\n")
                 }
             }
             .show()
@@ -621,7 +621,6 @@ class SettingsActivity : Activity() {
 
     private fun navItems(): List<Pair<String, () -> Unit>> = listOf(
         "终端" to { ShellActivity.open(this, ShellActivity.TAB_TERMINAL) },
-        "AI代理" to { ShellActivity.open(this, ShellActivity.TAB_AI) },
         "文件" to { ShellActivity.open(this, ShellActivity.TAB_FILES) },
         "主题" to { ShellActivity.open(this, ShellActivity.TAB_SETTINGS) }
     )

@@ -23,6 +23,7 @@ import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputConnectionWrapper
@@ -206,6 +207,7 @@ class EmbeddedTerminalPage : ShellPage {
         const val DEFAULT_FONT_SP = 10f
         const val MIN_FONT_SP = 10f
         const val MAX_FONT_SP = 24f
+        const val MAX_SESSIONS = 8
     }
 
     private var activity: Activity? = null
@@ -232,6 +234,8 @@ class EmbeddedTerminalPage : ShellPage {
     private var syncIndicator: TextView? = null
     private var tuiIndicator: TextView? = null
     private var tuiActive = false
+    private var cachedCompletionPwd = ""
+    private val sharedHandler = Handler(Looper.getMainLooper())
 
     private var manualTuiOverride = false
 
@@ -380,12 +384,13 @@ class EmbeddedTerminalPage : ShellPage {
         HorizontalScrollView(activity).apply {
             isHorizontalScrollBarEnabled = false
             setBackgroundColor(0xFF0D1117.toInt())
-            completionRow = LinearLayout(activity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(ui.dp(6), ui.dp(3), ui.dp(6), ui.dp(3))
-            }
-            addView(completionRow)
+        completionBarView = this
+        completionRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(ui.dp(6), ui.dp(3), ui.dp(6), ui.dp(3))
+        }
+        addView(completionRow)
             post { refreshCompletions(activity) }
         }
 
@@ -493,8 +498,6 @@ class EmbeddedTerminalPage : ShellPage {
             view.removeCallbacks(runnable)
         }
         pendingRunnables.clear()
-        // 清理 terminalView 上的所有延迟任务
-        terminalView?.removeCallbacks(null)
         // 重置状态
         this.activity = null
     }
@@ -507,6 +510,7 @@ class EmbeddedTerminalPage : ShellPage {
     }
 
     private fun initPwdObserver(activity: Activity) {
+        if (this.activity == null) return
         val home = homeDir ?: return
         val pwdFile = File(home, ".aidev-current-pwd")
         pwdObserver?.stop()
@@ -522,6 +526,7 @@ class EmbeddedTerminalPage : ShellPage {
         pwdObserver = PwdFileObserver(pwdFile) { ubuntuPwd ->
             if (ubuntuPwd == lastSyncedPwd) return@PwdFileObserver
             lastSyncedPwd = ubuntuPwd
+            cachedCompletionPwd = ubuntuPwd
             val act = this.activity ?: return@PwdFileObserver
             val prefs = act.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
             SyncCoordinator.onTerminalPwdChanged(ubuntuPwd, home, prefs) { targetDir ->
@@ -963,7 +968,9 @@ class EmbeddedTerminalPage : ShellPage {
     }
 
     private fun currentUbuntuDirFile(home: File): File {
-        val pwd = File(home, ".aidev-current-pwd").takeIf { it.isFile }?.readText()?.trim().orEmpty().ifBlank { "/root" }
+        val pwd = cachedCompletionPwd.takeIf { it.isNotBlank() }
+            ?: File(home, ".aidev-current-pwd").takeIf { it.isFile }?.readText()?.trim().orEmpty()
+            .ifBlank { "/root" }
         return when {
             pwd == "/host-home" -> home
             pwd.startsWith("/host-home/") -> File(home, pwd.removePrefix("/host-home/"))
@@ -1141,6 +1148,7 @@ class EmbeddedTerminalPage : ShellPage {
             setTextColor(0xFFD1D5DB.toInt())
             gravity = Gravity.CENTER
             includeFontPadding = false
+            if (key.input == "__CTRL__") tag = "ctrl_key"
             background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(if (key.input == "__CTRL__" && ctrlLatched) 0xFF374151.toInt() else 0xFF1F2937.toInt())
                 cornerRadius = ui.dp(8).toFloat()
@@ -1206,9 +1214,6 @@ class EmbeddedTerminalPage : ShellPage {
     private fun hapticTap(activity: Activity) {
         val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
         if (!prefs.getBoolean("haptic_tap", true)) return
-        if (Build.VERSION.SDK_INT >= 29) {
-            activity.getSystemService(android.view.HapticFeedbackConstants::class.java)
-        }
         val view = terminalView ?: return
         view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP, android.view.HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
     }
@@ -1223,13 +1228,21 @@ class EmbeddedTerminalPage : ShellPage {
     }
 
     private fun refreshKeyboard(activity: Activity) {
-        val uiRef = ui ?: return
         val parent = terminalView?.parent as? LinearLayout ?: return
-        val keyboard = parent.getChildAt(parent.childCount - 1)
-        val idx = parent.indexOfChild(keyboard)
-        if (idx >= 0) {
-            parent.removeViewAt(idx)
-            parent.addView(keys(activity, uiRef), idx, LinearLayout.LayoutParams(-1, uiRef.dp(70)))
+        val keyboard = parent.getChildAt(parent.childCount - 1) as? ViewGroup ?: return
+        // 找到 Ctrl 键只更新背景色，避免重建整个键盘
+        for (i in 0 until keyboard.childCount) {
+            val row = keyboard.getChildAt(i) as? ViewGroup ?: continue
+            for (j in 0 until row.childCount) {
+                val key = row.getChildAt(j)
+                if (key.tag == "ctrl_key") {
+                    key.background = android.graphics.drawable.GradientDrawable().apply {
+                        setColor(if (ctrlLatched) 0xFF374151.toInt() else 0xFF1F2937.toInt())
+                        cornerRadius = (ui?.dp(8) ?: 8).toFloat()
+                    }
+                    return
+                }
+            }
         }
     }
 
@@ -1432,6 +1445,7 @@ class EmbeddedTerminalPage : ShellPage {
                 return@Thread
             }
             Handler(Looper.getMainLooper()).post {
+                if (this.activity == null || this.activity !== activity) return@post
                 homeDir = shellAssets.home
                 val entry = shellAssets.entry
                 if (current != null) {
@@ -1478,6 +1492,23 @@ class EmbeddedTerminalPage : ShellPage {
     }
 
     private fun newSession(activity: Activity) {
+        if (sessions.size >= MAX_SESSIONS) {
+            val oldest = sessions.firstOrNull()
+            AlertDialog.Builder(activity)
+                .setTitle("会话上限")
+                .setMessage("已达到最大会话数（$MAX_SESSIONS 个）。关闭最早的「${oldest?.title ?: "会话"}」后创建新会话吗？")
+                .setPositiveButton("确认") { _, _ ->
+                    oldest?.let { closeSessionItem(activity, it) }
+                    homeDir = File(activity.filesDir, "home").apply { mkdirs() }
+                    val id = (sessions.maxOfOrNull { it.id } ?: 0) + 1
+                    val item = EmbeddedTermSession(id, "会话$id", createTerminalSession(activity, id))
+                    sessions.add(item)
+                    switchSession(activity, item)
+                }
+                .setNegativeButton("取消", null)
+                .show()
+            return
+        }
         homeDir = File(activity.filesDir, "home").apply { mkdirs() }
         val id = (sessions.maxOfOrNull { it.id } ?: 0) + 1
         val item = EmbeddedTermSession(id, "会话$id", createTerminalSession(activity, id))
@@ -1495,6 +1526,23 @@ class EmbeddedTerminalPage : ShellPage {
     }
 
     private fun newAiSession(activity: Activity) {
+        if (sessions.size >= MAX_SESSIONS) {
+            val oldest = sessions.firstOrNull()
+            AlertDialog.Builder(activity)
+                .setTitle("会话上限")
+                .setMessage("已达到最大会话数（$MAX_SESSIONS 个）。关闭最早的「${oldest?.title ?: "会话"}」后创建新 AI 会话吗？")
+                .setPositiveButton("确认") { _, _ ->
+                    oldest?.let { closeSessionItem(activity, it) }
+                    homeDir = File(activity.filesDir, "home").apply { mkdirs() }
+                    val id = (sessions.maxOfOrNull { it.id } ?: 0) + 1
+                    val item = EmbeddedTermSession(id, "AI-会话$id", createTerminalSession(activity, id), aiSession = true)
+                    sessions.add(item)
+                    switchSession(activity, item)
+                }
+                .setNegativeButton("取消", null)
+                .show()
+            return
+        }
         homeDir = File(activity.filesDir, "home").apply { mkdirs() }
         val id = (sessions.maxOfOrNull { it.id } ?: 0) + 1
         val item = EmbeddedTermSession(id, "AI-会话$id", createTerminalSession(activity, id), aiSession = true)
@@ -1562,11 +1610,17 @@ class EmbeddedTerminalPage : ShellPage {
         val threshold = (ui?.dp(18) ?: 18).toFloat()
         val touchSlop = android.view.ViewConfiguration.get(view.context).scaledTouchSlop
         val longPressTimeout = android.view.ViewConfiguration.getLongPressTimeout().toLong()
-        val handler = Handler(Looper.getMainLooper())
         var startY = 0f
         var startX = 0f
         var moved = false
         var longPressed = false
+        // View 被移除时清理 pending 回调
+        view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {}
+            override fun onViewDetachedFromWindow(v: View) {
+                (v.tag as? Runnable)?.let { sharedHandler.removeCallbacks(it) }
+            }
+        })
         view.setOnTouchListener { v, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
@@ -1578,11 +1632,13 @@ class EmbeddedTerminalPage : ShellPage {
                     v.alpha = 1f
                     v.translationY = 0f
                     if (onLongPress != null) {
-                        handler.postDelayed({
+                        val longPressRunnable = Runnable {
                             longPressed = true
                             v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                             onLongPress()
-                        }, longPressTimeout)
+                        }
+                        sharedHandler.postDelayed(longPressRunnable, longPressTimeout)
+                        v.tag = longPressRunnable
                     }
                     true
                 }
@@ -1590,7 +1646,7 @@ class EmbeddedTerminalPage : ShellPage {
                     val dy = event.rawY - startY
                     val dx = kotlin.math.abs(event.rawX - startX)
                     if (kotlin.math.abs(dy) > touchSlop || dx > touchSlop) {
-                        handler.removeCallbacksAndMessages(null)
+                        (v.tag as? Runnable)?.let { sharedHandler.removeCallbacks(it) }
                     }
                     if (dy > touchSlop * 0.5f && dy > dx * 0.4f) {
                         moved = true
@@ -1601,7 +1657,8 @@ class EmbeddedTerminalPage : ShellPage {
                 }
                 MotionEvent.ACTION_UP -> {
                     v.parent?.requestDisallowInterceptTouchEvent(false)
-                    handler.removeCallbacksAndMessages(null)
+                    (v.tag as? Runnable)?.let { sharedHandler.removeCallbacks(it) }
+                    v.tag = null
                     val dy = event.rawY - startY
                     if (dy >= threshold) {
                         onClose()
@@ -1613,7 +1670,8 @@ class EmbeddedTerminalPage : ShellPage {
                 }
                 MotionEvent.ACTION_CANCEL -> {
                     v.parent?.requestDisallowInterceptTouchEvent(false)
-                    handler.removeCallbacksAndMessages(null)
+                    (v.tag as? Runnable)?.let { sharedHandler.removeCallbacks(it) }
+                    v.tag = null
                     v.animate().translationY(0f).alpha(1f).setDuration(120).start()
                     true
                 }
@@ -1658,27 +1716,40 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun sessionClient(activity: Activity): TerminalSessionClient =
         object : TerminalSessionClient {
+            private val mainHandler = Handler(Looper.getMainLooper())
             override fun onTextChanged(changedSession: TerminalSession) {
-                terminalView?.onScreenUpdated()
-                updateTuiMode()
+                mainHandler.post {
+                    terminalView?.onScreenUpdated()
+                    updateTuiMode()
+                }
             }
             override fun onTitleChanged(changedSession: TerminalSession) {}
-            override fun onSessionFinished(finishedSession: TerminalSession) { terminalView?.onScreenUpdated() }
+            override fun onSessionFinished(finishedSession: TerminalSession) {
+                mainHandler.post { terminalView?.onScreenUpdated() }
+            }
             override fun onCopyTextToClipboard(session: TerminalSession, text: String) {
-                (activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.setPrimaryClip(ClipData.newPlainText("AIDev Terminal", text))
-                val preview = text.replace("\n", " ").take(40)
-                Toast.makeText(activity, "已复制: $preview${if (text.length > 40) "..." else ""}", Toast.LENGTH_SHORT).show()
+                mainHandler.post {
+                    (activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.setPrimaryClip(ClipData.newPlainText("AIDev Terminal", text))
+                    val preview = text.replace("\n", " ").take(40)
+                    Toast.makeText(activity, "已复制: $preview${if (text.length > 40) "..." else ""}", Toast.LENGTH_SHORT).show()
+                }
             }
             override fun onPasteTextFromClipboard(session: TerminalSession) {
                 val text = (activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(activity)?.toString()
                 if (!text.isNullOrEmpty()) {
                     session.write(text)
-                    updateInputBuffer(text)
+                    mainHandler.post { updateInputBuffer(text) }
                 }
             }
-            override fun onBell(session: TerminalSession) { terminalView?.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
-            override fun onColorsChanged(session: TerminalSession) { terminalView?.invalidate() }
-            override fun onTerminalCursorStateChange(state: Boolean) { terminalView?.invalidate() }
+            override fun onBell(session: TerminalSession) {
+                mainHandler.post { terminalView?.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
+            }
+            override fun onColorsChanged(session: TerminalSession) {
+                mainHandler.post { terminalView?.invalidate() }
+            }
+            override fun onTerminalCursorStateChange(state: Boolean) {
+                mainHandler.post { terminalView?.invalidate() }
+            }
             override fun getTerminalCursorStyle(): Int = TerminalEmulator.DEFAULT_TERMINAL_CURSOR_STYLE
             override fun logError(tag: String, message: String) { Log.e(tag, message) }
             override fun logWarn(tag: String, message: String) { Log.w(tag, message) }

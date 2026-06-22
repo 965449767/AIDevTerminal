@@ -2,28 +2,40 @@
 
 ## Goal
 
-Complete design system refactoring (Phase 1–4) — update DesignSystem.kt palette, rewrite SSH page, migrate to Dialog pattern.
+Round 2 terminal bug fixes: thread safety cleanup, TUI mode regression fix, IME keyboard overlap fix.
 
 ## Current Status
 
-Phase 1–4 complete. DesignSystem.kt updated with MD3-inspired Matrix-green palette, `surfaceHighlight`, `roundedBackground()`, `showAsDialog()`. SshBookmarksPage.kt rewritten to consume design system, close button uses `dismiss` callback. EmbeddedShellPages.kt `showSshBookmarks()` uses `showAsDialog()`. Debug APK builds successfully.
+All Round 2 bug fixes done. IME keyboard overlap resolved (Plan C: `ADJUST_NOTHING` + `contentHost` inset deduction).
 
-## Scope
+## Scope (Round 2 + IME fix)
 
-- DesignTokens: radius MD 8→12dp, LG 12→16dp; ACCENT teal→Matrix green; added SPACE_32
-- DarkTheme/LightTheme palette: updated all color values, added `surfaceHighlight`
-- `roundedBackground(color, radius)` helper on `AIDevUi`
-- `showAsDialog(view, onDismiss)` wrapper for Theme_Translucent_NoTitleBar pattern
-- SshBookmarksPage: all hardcoded colors → `ui.palette.*`; close button uses `dismiss?.invoke()` callback
-- EmbeddedShellPages: `showSshBookmarks()` → `ui.showAsDialog()` + `page.dismiss = { dialog.dismiss() }`
+| # | File | Fix |
+|---|------|-----|
+| 2 | `EmbeddedShellPages.kt` | `sessionClient()` UI callbacks wrapped in `Handler(Looper.getMainLooper()).post` |
+| 3 | `EmbeddedShellPages.kt` | Removed useless `terminalView?.removeCallbacks(null)` from `onDestroy` |
+| 5 | `DesignSystem.kt` | `pulse()` — null-safe `activity.window?.decorView?` |
+| 1B | `ShellActivity.kt` | Added `onDestroy()` that iterates pages and calls each `ShellPage.onDestroy()` |
+| 8R | `EmbeddedShellPages.kt` | `clearProxyText()` reverted: `setText("")` → `text?.clear()` (Binder deadlock fix) |
+| — | `EmbeddedShellPages.kt` | `completionBarView = this` in `completionBar()` |
+| IME | `ShellActivity.kt` | `buildShell()`: IME padding on `contentHost` via `navHost` insets listener, formula `max(0, imeHeight - sysBarsBottom - bottomNavHeight)` |
 
-## Next Steps
+### Key Fix Chain
 
-1. Future: Migrate remaining ShellPages to design system (ShellEnhancementsPage, SystemMonitorPage, etc.)
-2. Future: Add elevation/shadow system to DesignTokens
+| Step | Approach | Result |
+|------|----------|--------|
+| A | `ADJUST_RESIZE`, no manual padding | IME 遮挡拓展键盘 |
+| B | `ADJUST_NOTHING` + `pageRoot` IME padding | 空隙（未扣 bottomNavView + navBar） |
+| C | `ADJUST_NOTHING` + `contentHost` IME padding 扣减法 | **成功** |
 
-## Changed Files
+## Deferred
 
-- `DesignSystem.kt` — palette, tokens, helpers updated
-- `SshBookmarksPage.kt` — full rewrite
-- `EmbeddedShellPages.kt` — `showSshBookmarks()` updated
+- DesignTokens elevation/shadow system (optional)
+- `GradientDrawable` → `roundedBackground()` migration in ShellEnhancementsPage / SystemMonitorPage (low priority)
+
+## Changed Files (this round)
+
+- `DesignSystem.kt` — pulse() null guard
+- `ShellActivity.kt` — onDestroy, IME padding on contentHost
+- `EmbeddedShellPages.kt` — SessionClient handler, clearProxyText revert, completionBarView, onDestroy cleanup
+- `AGENTS.md` — Hard Lesson #4 (setText Binder deadlock) + #5 (IME padding deduction)

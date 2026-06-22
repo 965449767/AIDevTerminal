@@ -87,7 +87,7 @@ object ShizukuBridgeService {
 
                 if (follow) {
                     // 流式模式：写入 header 后持续追加
-                    resFile.writeText("[持续监听中... 按 Ctrl+C 停止]\n")
+                    atomicWriteText(resFile, "[持续监听中... 按 Ctrl+C 停止]\n")
                     val process = ShizukuLogcat.startLogStream(
                         packageName = packageName,
                         onLine = { line ->
@@ -110,23 +110,23 @@ object ShizukuBridgeService {
                         lines = lineCount
                     ) { result ->
                         result.onSuccess { logs ->
-                            resFile.writeText(logs)
+                            atomicWriteText(resFile, logs)
                         }.onFailure { e ->
                             AIDevLogger.e(TAG, "Failed to fetch log", e)
-                            resFile.writeText("ERROR: ${e.message}\n")
+                            atomicWriteText(resFile, "ERROR: ${e.message}\n")
                         }
                         done.countDown()
                     }
                     done.await(30, java.util.concurrent.TimeUnit.SECONDS)
                     if (done.count > 0) {
-                        resFile.writeText("ERROR: 请求超时\n")
+                        atomicWriteText(resFile, "ERROR: 请求超时\n")
                     }
                     // 清理请求文件
                     reqFile.delete()
                 }
             } catch (e: Exception) {
                 AIDevLogger.e(TAG, "Failed to handle request: $fileName", e)
-                resFile.writeText("ERROR: ${e.message}\n")
+                atomicWriteText(resFile, "ERROR: ${e.message}\n")
                 reqFile.delete()
             }
         }.apply { isDaemon = true }.start()
@@ -148,5 +148,12 @@ object ShizukuBridgeService {
 
         resFile.writeText("""{"status":"error","error":"Camera bridge removed","timestamp":${System.currentTimeMillis()}}""")
         reqFile.delete()
+    }
+
+    /** 原子写入：先写 .tmp 再 rename，避免进程被杀导致文件损坏 */
+    private fun atomicWriteText(file: File, text: String) {
+        val tmp = File(file.parentFile, "${file.name}.tmp")
+        tmp.writeText(text)
+        tmp.renameTo(file)
     }
 }

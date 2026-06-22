@@ -35,7 +35,7 @@ class AIAgentActivity : Activity() {
             ))
             addView(ui.rowOf(
                 ui.actionRow("启动服务", "用后台任务运行 AI 服务命令") { openTerminal("task-run opencode 'opencode --help'\n") },
-                ui.actionRow("查看日志", "打开任务中心查看输出") { ShellActivity.open(this@AIAgentActivity, ShellActivity.TAB_AI) }
+                ui.actionRow("查看日志", "打开终端查看任务输出") { AppNav.openTerminal(this@AIAgentActivity, "aidev-agent-log\n") }
             ))
 
             addView(ui.section("设计目标", "AI 中心不再让用户记命令，而是把安装、配置、启动、端口和日志组织成一组清晰操作"))

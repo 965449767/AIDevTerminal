@@ -97,6 +97,7 @@ class SystemMonitorPage : ShellPage {
     }
 
     override fun onDestroy(activity: Activity) {
+        isVisible = false
         stopRefreshing()
         unregisterBatteryReceiver()
     }
@@ -249,13 +250,11 @@ class SystemMonitorPage : ShellPage {
     }
 
     private fun collectBatteryInfo() {
-        // 尝试直接发送广播获取一次电池信息
+        // 使用 BatteryManager API 获取基本电池信息（替代废弃的粘滞广播）
         try {
-            val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-            val stickyIntent = activity.registerReceiver(null, filter)
-            if (stickyIntent != null) {
-                collectBatteryFromIntent(stickyIntent)
-            }
+            val bm = activity.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager ?: return
+            val cap = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            if (cap >= 0) batteryLevel = cap
         } catch (_: Exception) {
             // 忽略
         }

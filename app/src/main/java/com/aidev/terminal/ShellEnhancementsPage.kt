@@ -6,6 +6,8 @@ import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Handler
+import android.os.Looper
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
@@ -58,13 +60,23 @@ class ShellEnhancementsPage : ShellPage {
     private fun reload() {
         content.removeAllViews()
         content.addView(ui.section("Shell 增强", "命令历史统计、别名管理、收藏夹与快速模板"))
-        content.addView(buildCommandHistorySection())
-        content.addView(ui.divider())
-        content.addView(buildAliasSection())
-        content.addView(ui.divider())
-        content.addView(buildOnelinersSection())
-        content.addView(ui.divider())
-        content.addView(buildTemplatesSection())
+        content.addView(ui.muted("正在加载..."))
+        Thread {
+            val stats = parseBashHistory()
+            val aliases = parseAliases()
+            val oneliners = loadOneliners()
+            Handler(Looper.getMainLooper()).post {
+                content.removeAllViews()
+                content.addView(ui.section("Shell 增强", "命令历史统计、别名管理、收藏夹与快速模板"))
+                content.addView(buildCommandHistorySection(stats))
+                content.addView(ui.divider())
+                content.addView(buildAliasSection(aliases))
+                content.addView(ui.divider())
+                content.addView(buildOnelinersSection(oneliners))
+                content.addView(ui.divider())
+                content.addView(buildTemplatesSection())
+            }
+        }.apply { isDaemon = true; start() }
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -72,7 +84,7 @@ class ShellEnhancementsPage : ShellPage {
     // ─────────────────────────────────────────────────────────────────
 
     /** 构建"命令历史统计"区域 */
-    private fun buildCommandHistorySection(): View {
+    private fun buildCommandHistorySection(stats: List<Pair<String, Int>>): View {
         val section = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
         }
@@ -80,7 +92,6 @@ class ShellEnhancementsPage : ShellPage {
             setPadding(0, ui.dp(DesignTokens.SPACE_8), 0, ui.dp(DesignTokens.SPACE_4))
         })
 
-        val stats = parseBashHistory()
         if (stats.isEmpty()) {
             section.addView(ui.emptyState("暂无历史记录", "bash_history 文件不存在或为空"))
         } else {
@@ -148,7 +159,7 @@ class ShellEnhancementsPage : ShellPage {
     // ─────────────────────────────────────────────────────────────────
 
     /** 构建"别名管理"区域 */
-    private fun buildAliasSection(): View {
+    private fun buildAliasSection(aliases: List<Pair<String, String>>): View {
         val section = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
         }
@@ -156,7 +167,6 @@ class ShellEnhancementsPage : ShellPage {
             setPadding(0, ui.dp(DesignTokens.SPACE_8), 0, ui.dp(DesignTokens.SPACE_4))
         })
 
-        val aliases = parseAliases()
         if (aliases.isEmpty()) {
             section.addView(ui.emptyState("暂无别名", "点击下方按钮添加新别名"))
         } else {
@@ -269,13 +279,17 @@ class ShellEnhancementsPage : ShellPage {
                 }
                 // 追加到 .bashrc
                 val line = "\nalias $name='$cmd'"
-                runCatching {
-                    bashrcFile.appendText(line)
-                    toast("别名 $name 已添加，新会话生效")
-                    reload()
-                }.onFailure {
-                    toast("写入失败：${it.message}")
-                }
+                Thread {
+                    runCatching {
+                        bashrcFile.appendText(line)
+                        Handler(Looper.getMainLooper()).post {
+                            toast("别名 $name 已添加，新会话生效")
+                            reload()
+                        }
+                    }.onFailure {
+                        Handler(Looper.getMainLooper()).post { toast("写入失败：${it.message}") }
+                    }
+                }.apply { isDaemon = true; start() }
             }
             .setNegativeButton("取消", null)
             .show()
@@ -300,17 +314,21 @@ class ShellEnhancementsPage : ShellPage {
             toast(".bashrc 文件不存在")
             return
         }
-        runCatching {
-            val lines = file.readLines().filter { line ->
-                val trimmed = line.trimStart()
-                !trimmed.startsWith("alias ") || !trimmed.removePrefix("alias ").trim().startsWith("$name=")
+        Thread {
+            runCatching {
+                val lines = file.readLines().filter { line ->
+                    val trimmed = line.trimStart()
+                    !trimmed.startsWith("alias ") || !trimmed.removePrefix("alias ").trim().startsWith("$name=")
+                }
+                file.writeText(lines.joinToString("\n"))
+                Handler(Looper.getMainLooper()).post {
+                    toast("别名 $name 已删除")
+                    reload()
+                }
+            }.onFailure {
+                Handler(Looper.getMainLooper()).post { toast("删除失败：${it.message}") }
             }
-            file.writeText(lines.joinToString("\n"))
-            toast("别名 $name 已删除")
-            reload()
-        }.onFailure {
-            toast("删除失败：${it.message}")
-        }
+        }.apply { isDaemon = true; start() }
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -329,7 +347,7 @@ class ShellEnhancementsPage : ShellPage {
     )
 
     /** 构建"One-liners 收藏夹"区域 */
-    private fun buildOnelinersSection(): View {
+    private fun buildOnelinersSection(saved: List<String>): View {
         val section = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
         }
@@ -337,7 +355,6 @@ class ShellEnhancementsPage : ShellPage {
             setPadding(0, ui.dp(DesignTokens.SPACE_8), 0, ui.dp(DesignTokens.SPACE_4))
         })
 
-        val saved = loadOneliners()
         if (saved.isEmpty()) {
             section.addView(ui.emptyState("暂无收藏", "点击下方按钮添加常用命令"))
         } else {

@@ -327,7 +327,7 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
 
     fun pulse() {
         if (prefs.getBoolean("haptic_tap", true)) {
-            activity.window.decorView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            activity.window?.decorView?.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
         }
     }
 

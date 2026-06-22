@@ -333,11 +333,11 @@ AIDEV_PWD_HOOK_EOF
 
         # 公共 proot 绑定参数（enter_ubuntu 和 run_ubuntu_command 共用）
         proot_common_binds() {
-          echo "-b /dev -b /proc -b /sys -b /system/bin -b /system/etc -b /system/framework -b /sdcard -b /storage -b ${'$'}AIDEV_HOME:/host-home"
+          echo "-b /dev -b /proc -b /sys -b /system/lib64 -b /system/lib -b /system/bin -b /system/etc -b /system/framework -b /sdcard -b /storage -b ${'$'}AIDEV_HOME:/host-home"
         }
 
         proot_common_env() {
-          echo "HOME=/root AIDEV_HOME=/host-home AIDEV_VERSION=${'$'}{AIDEV_VERSION:-unknown} PATH=/host-home/dev-env/bin:/system/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin TERM=${'$'}{TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8"
+          echo "HOME=/root AIDEV_HOME=/host-home AIDEV_VERSION=${'$'}{AIDEV_VERSION:-unknown} PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/system/bin:/system/xbin:/host-home/dev-env/bin TERM=${'$'}{TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8"
         }
 
         enter_ubuntu() {
@@ -347,6 +347,7 @@ AIDEV_PWD_HOOK_EOF
           shell="/bin/bash"
           [ -x "${'$'}AIDEV_ROOTFS/bin/bash" ] || shell="/bin/sh"
           cd "${'$'}AIDEV_HOME" || exit 1
+          mkdir -p "${'$'}{PROOT_TMP_DIR:-${'$'}AIDEV_HOME/proot-tmp}"
           eval exec "${'$'}AIDEV_PROOT" --link2symlink -0 -r "${'$'}AIDEV_ROOTFS" \
             $(proot_common_binds) \
             -w /root /usr/bin/env -i \
