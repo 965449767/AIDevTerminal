@@ -14,8 +14,11 @@ import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.text.TextUtils
 import android.widget.EditText
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import android.widget.LinearLayout
 import android.widget.TextView
 import kotlin.math.abs
@@ -34,10 +37,10 @@ object DesignTokens {
     const val SPACE_24 = 24
     const val SPACE_32 = 32
 
-    // 圆角（Material Design 3 规范）
+    // 圆角（基于原值，后续视觉确认后统一升级）
     const val RADIUS_SM = 6
-    const val RADIUS_MD = 12
-    const val RADIUS_LG = 16
+    const val RADIUS_MD = 8
+    const val RADIUS_LG = 12
 
     // 尺寸
     const val TOP_BAR_HEIGHT = 48
@@ -406,7 +409,15 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
     fun showAsDialog(contentView: View, onDismiss: (() -> Unit)? = null): Dialog {
         val dialog = Dialog(activity, android.R.style.Theme_Translucent_NoTitleBar)
         dialog.setContentView(contentView)
-        dialog.window?.setLayout(-1, -1)
+        dialog.window?.let { w ->
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            w.setGravity(Gravity.CENTER)
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(contentView) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(bars.left, v.paddingTop, bars.right, v.paddingBottom)
+            insets
+        }
         dialog.setOnDismissListener { onDismiss?.invoke() }
         dialog.show()
         return dialog

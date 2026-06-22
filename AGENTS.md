@@ -87,3 +87,17 @@ Before ending session, update:
 1. `current-task.md`
 2. `.harness/session-state.json`
 3. `.harness/session-log.md`
+
+## Hard Lessons (2026-06-22)
+
+### 1. 全局 token 改动必须先 grep 审计所有引用点
+改 `RADIUS_MD` (8→12) / `RADIUS_LG` (12→16) 之前没有 grep 外部文件 → `ShellEnhancementsPage`、`SystemMonitorPage` 受影响。
+**规则**: 动任何全局 token，必须先 `grep -r TOKEN src/` 列全所有引用，逐一评估 Visual diff。
+
+### 2. UI 改写必须逐行对比新旧视觉效果
+SSH 页面重写时直接把硬编码字号映射到 token，没逐行对照：连接名 15→14、端口 13→12、时间戳 12→10，全面变小。
+**规则**: 替换硬编码值前先建对照表 `oldValue → newToken`；如果旧值 > token 值，保留旧值或用更大的 token，不准默默缩小。
+
+### 3. Dialog 模式切换必须审查完整窗口生命周期
+`AlertDialog` → `Theme_Translucent_NoTitleBar` + `MATCH_PARENT` 没考虑 system bars insets 和 max size。
+**规则**: 换 dialog 底座时检查：(1) 是否处理 system window insets？(2) 是否限制最大高度？(3) dismiss 通路是否正常？(4) 极端内容（太长、横屏、分屏）是否溢出？

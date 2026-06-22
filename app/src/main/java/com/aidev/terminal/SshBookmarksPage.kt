@@ -43,7 +43,7 @@ class SshBookmarksPage : ShellPage {
             }, LinearLayout.LayoutParams(0, -1, 1f))
             addView(TextView(activity).apply {
                 text = "+ 添加"
-                textSize = DesignTokens.TEXT_CAPTION
+                textSize = DesignTokens.TEXT_BODY
                 gravity = Gravity.CENTER
                 setPadding(ui.dp(DesignTokens.SPACE_12), ui.dp(DesignTokens.SPACE_8), ui.dp(DesignTokens.SPACE_12), ui.dp(DesignTokens.SPACE_8))
                 setTextColor(ui.palette.accent)
@@ -115,13 +115,13 @@ class SshBookmarksPage : ShellPage {
                 }
                 addView(TextView(activity).apply {
                     text = conn.name
-                    textSize = DesignTokens.TEXT_BODY
+                    textSize = DesignTokens.TEXT_H2
                     setTypeface(null, Typeface.BOLD)
                     setTextColor(ui.palette.text)
                 })
                 addView(TextView(activity).apply {
                     text = "${conn.user}@${conn.host}:${conn.port}"
-                    textSize = DesignTokens.TEXT_CAPTION
+                    textSize = DesignTokens.TEXT_BODY
                     setTextColor(ui.palette.accent)
                 })
                 if (conn.lastConnected > 0L) {
@@ -133,7 +133,7 @@ class SshBookmarksPage : ShellPage {
                             ago < 86400 -> "${ago / 3600}小时前"
                             else -> "${ago / 86400}天前"
                         }
-                        textSize = DesignTokens.TEXT_LABEL
+                        textSize = DesignTokens.TEXT_CAPTION
                         setTextColor(ui.palette.muted)
                     })
                 }
