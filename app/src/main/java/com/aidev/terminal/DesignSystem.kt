@@ -1,6 +1,7 @@
 package com.aidev.terminal
 
 import android.app.Activity
+import android.app.Dialog
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.res.Configuration
@@ -23,7 +24,7 @@ import kotlin.math.abs
  * 设计令牌：统一的间距、圆角、字体层级
  */
 object DesignTokens {
-    // 间距 7 级
+    // 间距 8 级（4dp 网格）
     const val SPACE_2 = 2
     const val SPACE_4 = 4
     const val SPACE_8 = 8
@@ -31,11 +32,12 @@ object DesignTokens {
     const val SPACE_16 = 16
     const val SPACE_20 = 20
     const val SPACE_24 = 24
+    const val SPACE_32 = 32
 
-    // 圆角
+    // 圆角（Material Design 3 规范）
     const val RADIUS_SM = 6
-    const val RADIUS_MD = 8
-    const val RADIUS_LG = 12
+    const val RADIUS_MD = 12
+    const val RADIUS_LG = 16
 
     // 尺寸
     const val TOP_BAR_HEIGHT = 48
@@ -51,9 +53,9 @@ object DesignTokens {
     const val TEXT_CAPTION = 12f
     const val TEXT_LABEL = 10f
 
-    // 统一强调色：青绿色
-    const val ACCENT = 0xFF22D3A7.toInt()
-    const val ACCENT_DARK = 0xFF0D9488.toInt()
+    // 统一强调色：Matrix 终端绿
+    const val ACCENT = 0xFF00FF41.toInt()
+    const val ACCENT_DARK = 0xFF008F11.toInt()
 }
 
 /**
@@ -69,12 +71,13 @@ object ThemeManager {
     }
 
     private val DarkTheme = WorkbenchPalette(
-        bg = 0xFF0A0A0F.toInt(),
-        surface = 0xFF141419.toInt(),
-        surfaceAlt = 0xFF1A1A20.toInt(),
-        text = 0xFFE8E8ED.toInt(),
-        muted = 0xFF8A8A93.toInt(),
-        outline = 0xFF2A2A30.toInt(),
+        bg = 0xFF0B0C0E.toInt(),
+        surface = 0xFF141619.toInt(),
+        surfaceAlt = 0xFF1C1E22.toInt(),
+        surfaceHighlight = 0xFF23252A.toInt(),
+        text = 0xFFF0F0F0.toInt(),
+        muted = 0xFF9CA3AF.toInt(),
+        outline = 0xFF262A30.toInt(),
         accent = DesignTokens.ACCENT,
         success = 0xFF34D399.toInt(),
         warning = 0xFFFBBF24.toInt(),
@@ -85,10 +88,11 @@ object ThemeManager {
         bg = 0xFFF5F5F7.toInt(),
         surface = 0xFFFFFFFF.toInt(),
         surfaceAlt = 0xFFF0F0F2.toInt(),
+        surfaceHighlight = 0xFFE5E5E8.toInt(),
         text = 0xFF1A1A1A.toInt(),
         muted = 0xFF6B6B73.toInt(),
         outline = 0xFFE0E0E5.toInt(),
-        accent = 0xFF0D9488.toInt(),
+        accent = 0xFF00AA33.toInt(),
         success = 0xFF059669.toInt(),
         warning = 0xFFD97706.toInt(),
         danger = 0xFFDC2626.toInt()
@@ -102,6 +106,7 @@ data class WorkbenchPalette(
     val bg: Int,
     val surface: Int,
     val surfaceAlt: Int,
+    val surfaceHighlight: Int,
     val text: Int,
     val muted: Int,
     val outline: Int,
@@ -179,6 +184,11 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
     fun subtleButtonBackground(): GradientDrawable =
         GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(palette.surfaceAlt, palette.surfaceAlt)).apply {
             cornerRadius = dp(DesignTokens.RADIUS_MD).toFloat()
+        }
+
+    fun roundedBackground(color: Int, radius: Int = DesignTokens.RADIUS_MD): GradientDrawable =
+        GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(color, color)).apply {
+            cornerRadius = dp(radius).toFloat()
         }
 
     fun divider(): View =
@@ -391,6 +401,15 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
             }
             else -> root.setBackgroundColor(palette.bg)
         }
+    }
+
+    fun showAsDialog(contentView: View, onDismiss: (() -> Unit)? = null): Dialog {
+        val dialog = Dialog(activity, android.R.style.Theme_Translucent_NoTitleBar)
+        dialog.setContentView(contentView)
+        dialog.window?.setLayout(-1, -1)
+        dialog.setOnDismissListener { onDismiss?.invoke() }
+        dialog.show()
+        return dialog
     }
 
     private fun pillBackground(stroke: Int, fill: Int): GradientDrawable =

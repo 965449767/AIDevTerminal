@@ -2,70 +2,28 @@
 
 ## Goal
 
-Complete `0.12.17-audit-fixes` — fix valid issues from project audit report.
+Complete design system refactoring (Phase 1–4) — update DesignSystem.kt palette, rewrite SSH page, migrate to Dialog pattern.
 
 ## Current Status
 
-In progress.
+Phase 1–4 complete. DesignSystem.kt updated with MD3-inspired Matrix-green palette, `surfaceHighlight`, `roundedBackground()`, `showAsDialog()`. SshBookmarksPage.kt rewritten to consume design system, close button uses `dismiss` callback. EmbeddedShellPages.kt `showSshBookmarks()` uses `showAsDialog()`. Debug APK builds successfully.
 
-## Scope — This Phase
+## Scope
 
-- screen rotation handling (`configChanges` + `onConfigurationChanged`)
-- clipboard enhancement (`paste()` + terminal integration)
+- DesignTokens: radius MD 8→12dp, LG 12→16dp; ACCENT teal→Matrix green; added SPACE_32
+- DarkTheme/LightTheme palette: updated all color values, added `surfaceHighlight`
+- `roundedBackground(color, radius)` helper on `AIDevUi`
+- `showAsDialog(view, onDismiss)` wrapper for Theme_Translucent_NoTitleBar pattern
+- SshBookmarksPage: all hardcoded colors → `ui.palette.*`; close button uses `dismiss?.invoke()` callback
+- EmbeddedShellPages: `showSshBookmarks()` → `ui.showAsDialog()` + `page.dismiss = { dialog.dismiss() }`
 
-## Not Allowed in This Phase
+## Next Steps
 
-- dependency changes (except clipboard/SSH)
-- PRoot launch behavior changes
-- Ubuntu rootfs reinstall logic
-- Git tag, reset, clean, push, or remote configuration
-- SSH client implementation (deferred)
-- VT terminal emulation investigation (deferred)
+1. Future: Migrate remaining ShellPages to design system (ShellEnhancementsPage, SystemMonitorPage, etc.)
+2. Future: Add elevation/shadow system to DesignTokens
 
-## Plan
+## Changed Files
 
-| Step | Description | Files |
-|------|-------------|-------|
-| 1 | Screen rotation: add `configChanges` to ShellActivity | `AndroidManifest.xml` |
-| 2 | Screen rotation: add `onConfigurationChanged` | `ShellActivity.kt` |
-| 3 | Clipboard: add `paste()` + `listen()` | `ClipboardHelper.kt` |
-| 4 | Clipboard: integrate paste into terminal UX | `EmbeddedShellPages.kt` |
-| 5 | Build and export debug APK | — |
-| 6 | Auto commit after validation | — |
-
-## Validation Commands
-
-```bash
-bash scripts/harness_check.sh
-/usr/local/bin/wrap-android-native.sh
-./gradlew assembleDebug
-```
-
-## Acceptance Criteria
-
-- app survives screen rotation without Activity recreation
-- terminal view resizes correctly on rotation
-- clipboard: long-press terminal → "粘贴" reads from system clipboard
-- `scripts/harness_check.sh` passes
-- Android debug build passes
-
-## Future Roadmap (Deferred from Audit)
-
-| Feature | Priority | Estimate | Dependencies |
-|---------|----------|----------|-------------|
-| SSH client (JSch/sshj) | High | 600-800 lines | New Gradle dependency |
-| Clipboard listen auto-paste | Low | 30 lines | None |
-| VT terminal emulation audit | Low | 1h research | termux-terminal-view |
-| CameraBridgeActivity → QR lib | Low | 200 lines | New dependency |
-| SecurityAuditPage → Settings sub-page | Low | 50 lines | None |
-
-## Side Notes
-
-- Audit report `AdvTerminal_Audit_Report.md` reviewed 2026-06-22.
-- Many audit claims were inaccurate (multi-session, keys, font size already exist).
-- Three valid findings addressed in this phase: rotation, clipboard.
-- SSH deferred to separate version due to scope.
-
-## Last Updated
-
-2026-06-22
+- `DesignSystem.kt` — palette, tokens, helpers updated
+- `SshBookmarksPage.kt` — full rewrite
+- `EmbeddedShellPages.kt` — `showSshBookmarks()` updated

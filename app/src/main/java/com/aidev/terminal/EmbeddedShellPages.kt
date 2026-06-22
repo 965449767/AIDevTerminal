@@ -830,13 +830,11 @@ class EmbeddedTerminalPage : ShellPage {
     }
 
     private fun showSshBookmarks(activity: Activity, host: ShellHost) {
+        val ui = ui ?: AIDevUi(activity, activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
         val page = SshBookmarksPage()
-        val view = page.create(activity, ui ?: AIDevUi(activity, activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)), host)
-        AlertDialog.Builder(activity)
-            .setTitle("SSH 连接管理")
-            .setView(view)
-            .setCancelable(false)
-            .show()
+        val view = page.create(activity, ui, host)
+        val dialog = ui.showAsDialog(view)
+        page.dismiss = { dialog.dismiss() }
     }
 
     private fun completionSuggestions(activity: Activity): List<TerminalCompletion> {

@@ -1,53 +1,41 @@
 {
-  "task_id": "0.13.2-c-embedded-page-split",
-  "status": "complete",
-  "current_phase": "handoff",
-  "last_updated": "2026-06-14",
+  "task_id": "0.12.17-design-system-refactor",
+  "status": "completed",
+  "current_phase": "phase-4-build-verify",
+  "last_updated": "2026-06-22",
   "overall_progress_percent": 100,
   "active_plan": [
-    "Continue after 0.13.2-b",
-    "Inspect embedded page class boundaries",
-    "Split files, tasks, and settings pages",
-    "Keep class names and package unchanged",
-    "Run harness validation",
-    "Run Android debug build",
-    "Record handoff"
+    "Phase 1: Update DesignSystem.kt (palette, tokens, helpers)",
+    "Phase 2: Rewrite SshBookmarksPage.kt (design system consume, dialog pattern)",
+    "Phase 3: Update EmbeddedShellPages.kt showSshBookmarks()",
+    "Phase 4: Build, verify, commit"
   ],
   "next_3_steps": [
-    "Review 0.13.2 diff",
-    "Decide whether to commit 0.13.2-b/c",
-    "Build and export APK if requested"
+    "Phase 5: Migrate remaining ShellPages to design system",
+    "Add elevation/shadow system to DesignTokens",
+    "Further UI polish"
   ],
   "changed_files": [
-    "current-task.md",
-    "app/src/main/java/com/aidev/terminal/EmbeddedShellPages.kt",
-    "app/src/main/java/com/aidev/terminal/TerminalShellAssets.kt",
-    "app/src/main/java/com/aidev/terminal/EmbeddedFilesPage.kt",
-    "app/src/main/java/com/aidev/terminal/EmbeddedTasksPage.kt",
-    "app/src/main/java/com/aidev/terminal/EmbeddedSettingsPage.kt",
-    ".harness/session-log.md",
-    ".harness/progress-map.md",
-    ".harness/command-history.md",
-    ".harness/session-state.json"
+    "DesignSystem.kt",
+    "SshBookmarksPage.kt",
+    "EmbeddedShellPages.kt"
   ],
   "validation": {
     "last_commands": [
-      "git status --short",
-      "bash scripts/harness_check.sh",
-      "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 /data/user/work/gradle/gradle-8.14.5/bin/gradle -p \"/workspace/AIDevTerminal\" :app:assembleDebug --no-daemon",
-      "git diff --stat"
+      "wrap-android-native.sh",
+      "./gradlew assembleDebug"
     ],
-    "last_result": "passed",
+    "last_result": "BUILD SUCCESSFUL — only pre-existing deprecation warnings",
     "known_failures": []
   },
   "cognitive_state": {
     "failure_count": 0,
-    "current_mode": "structure-cleanup",
+    "current_mode": "verification",
     "tried_approaches": [],
     "blocked_on": null
   },
   "handoff": {
-    "last_summary": "0.13.2-c completed. File, task, and settings pages moved out of EmbeddedShellPages.kt. Harness check and debug build passed.",
-    "resume_from": "Run /start, review 0.13.2 diff, then decide commit and APK export."
+    "last_summary": "Design system refactoring complete. MD3-inspired palette with Matrix-green accent, roundedBackground/showAsDialog helpers. SSH page rewritten with design system consumption and proper dialog dismiss callback. Builds cleanly.",
+    "resume_from": "Start Phase 5: migrate remaining ShellPages to design system, add elevation tokens."
   }
 }

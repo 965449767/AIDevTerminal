@@ -262,3 +262,33 @@ git unavailable: not a repository
 验证：通过
 下一步：进入 0.13.1 Android 规范文档落地
 ```
+
+## 2026-06-22 - Session Resume
+
+### Summary
+
+Resumed session. Committed Gradle wrapper setup, SDK 34→36 upgrade, proxy cleanup, and AGENTS.md rewrite. Updated session-state to `0.12.16-terminal-completion-lite`.
+
+### Commands Run
+
+```bash
+bash scripts/harness_check.sh
+git add ... && git commit ...
+```
+
+### Git Status
+
+```text
+e4fe4ca chore: upgrade SDK to 36, add Gradle wrapper, update AGENTS.md
+```
+
+### Progress Report
+
+```text
+已完成：基础设施提交
+本次完成：SDK 升级 + Gradle wrapper + AGENTS.md
+总体进度：0%（0.12.16 阶段刚开始）
+剩余：6 步骤
+验证：通过
+下一步：开始实现终端命令补全
+```
