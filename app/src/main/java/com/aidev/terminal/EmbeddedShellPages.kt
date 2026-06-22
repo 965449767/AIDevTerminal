@@ -653,11 +653,7 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun showTerminalTopMore(activity: Activity, host: ShellHost) {
         showGroupedActionMenu(activity, "更多设置", "recent_terminal_more", listOf(
-            "导航 · 退出到终端" to { host.switchTab(ShellActivity.TAB_TERMINAL) },
-            "终端 · 进入 Ubuntu" to { send("ubuntu") },
             "终端 · 诊断 Doctor" to { send("aidev-doctor") },
-            "终端 · 清屏" to { send("clear") },
-            "终端 · 粘贴" to { ClipboardHelper.paste(activity)?.let { session?.write(it) } ?: Toast.makeText(activity, "剪贴板为空", Toast.LENGTH_SHORT).show() },
             "终端 · 搜索输出" to { showTerminalSearch(activity) },
             "终端 · Shell 增强" to { showShellEnhancements(activity) },
             "SSH · 连接管理" to { showSshBookmarks(activity, host) },
@@ -670,15 +666,12 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun showAgentMenu(activity: Activity) {
         showGroupedActionMenu(activity, "AI 代理终端", "recent_agent_more", listOf(
-            "启动 · OpenCode 前台" to { sendAgentCommand("opencode") },
             "启动 · OpenCode 后台任务" to { sendAgentCommand("task-run opencode \"opencode\"") },
             "启动 · OpenCode Serve" to { sendAgentCommand("task-run opencode-serve 'opencode serve'") },
-            "上下文 · 生成代理上下文" to { sendAgentCommand("aidev-agent-context") },
             "上下文 · 导出上下文文件" to { sendAgentCommand("aidev-agent-context-file") },
             "日志 · 代理日志摘要" to { send("aidev-agent-summary") },
             "检查 · OpenCode 启动检查" to { sendAgentCommand("opencode --help") },
             "项目 · 当前项目目录" to { sendAgentCommand("pwd && git status --short --branch 2>/dev/null || true && ls -la") },
-            "日志 · 最近任务日志" to { send("ls -lt \"${'$'}AIDEV_HOME/tasks\"/*.log 2>/dev/null | head -20") },
             "系统 · 监听端口" to { send("list-listen-ports") },
             "显示 · 终端紧凑显示" to { applyFontPreset(activity, 12f) },
             "显示 · 终端大字显示" to { applyFontPreset(activity, 18f) }
