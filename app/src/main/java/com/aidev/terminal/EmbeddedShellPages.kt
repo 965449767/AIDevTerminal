@@ -19,6 +19,7 @@ import android.text.InputType
 import android.text.TextUtils
 import android.util.Log
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -652,9 +653,6 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun showTerminalTopMore(activity: Activity, host: ShellHost) {
         showGroupedActionMenu(activity, "更多设置", "recent_terminal_more", listOf(
-            "会话 · 新建会话" to { newSession(activity) },
-            "会话 · 重命名会话" to { renameCurrentSession(activity) },
-            "会话 · 关闭当前会话" to { closeCurrent(activity) },
             "导航 · 退出到终端" to { host.switchTab(ShellActivity.TAB_TERMINAL) },
             "终端 · 进入 Ubuntu" to { send("ubuntu") },
             "终端 · 诊断 Doctor" to { send("aidev-doctor") },
@@ -1503,33 +1501,6 @@ class EmbeddedTerminalPage : ShellPage {
         refreshTabs(activity)
     }
 
-    private fun closeCurrent(activity: Activity) {
-        val item = current ?: return
-        if (item.aiSession) {
-            AlertDialog.Builder(activity)
-                .setTitle("关闭 AI 会话？")
-                .setMessage("该会话已标记为 AI 代理会话，可能正在执行长时间代码任务。确认关闭会终止当前终端会话。")
-                .setPositiveButton("确认关闭") { _, _ -> closeCurrentForce(activity) }
-                .setNegativeButton("取消", null)
-                .show()
-            return
-        }
-        closeCurrentForce(activity)
-    }
-
-    private fun closeCurrentForce(activity: Activity) {
-        val item = current ?: return
-        item.session.finishIfRunning()
-        sessions.remove(item)
-        current = null
-        session = null
-        if (sessions.isEmpty()) {
-            newSession(activity)
-        } else {
-            switchSession(activity, sessions.last())
-        }
-    }
-
     private fun newAiSession(activity: Activity) {
         homeDir = File(activity.filesDir, "home").apply { mkdirs() }
         val id = (sessions.maxOfOrNull { it.id } ?: 0) + 1
@@ -1581,26 +1552,28 @@ class EmbeddedTerminalPage : ShellPage {
                 setColor(if (active) 0xFF1F2937.toInt() else 0xFF14181E.toInt())
                 cornerRadius = (uiRef?.dp(6) ?: 6).toFloat()
             }
-            setOnLongClickListener {
-                switchSession(activity, item)
-                renameCurrentSession(activity)
-                true
-            }
         }
         attachSwipeDownToClose(
             chip,
             onClick = { switchSession(activity, item) },
-            onClose = { closeSessionItem(activity, item) }
+            onClose = { closeSessionItem(activity, item) },
+            onLongPress = {
+                switchSession(activity, item)
+                renameCurrentSession(activity)
+            }
         )
         return chip
     }
 
-    private fun attachSwipeDownToClose(view: View, onClick: () -> Unit, onClose: () -> Unit) {
+    private fun attachSwipeDownToClose(view: View, onClick: () -> Unit, onClose: () -> Unit, onLongPress: (() -> Unit)? = null) {
         val threshold = (ui?.dp(18) ?: 18).toFloat()
         val touchSlop = android.view.ViewConfiguration.get(view.context).scaledTouchSlop
+        val longPressTimeout = android.view.ViewConfiguration.getLongPressTimeout().toLong()
+        val handler = Handler(Looper.getMainLooper())
         var startY = 0f
         var startX = 0f
         var moved = false
+        var longPressed = false
         view.setOnTouchListener { v, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
@@ -1608,13 +1581,24 @@ class EmbeddedTerminalPage : ShellPage {
                     startY = event.rawY
                     startX = event.rawX
                     moved = false
+                    longPressed = false
                     v.alpha = 1f
                     v.translationY = 0f
+                    if (onLongPress != null) {
+                        handler.postDelayed({
+                            longPressed = true
+                            v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            onLongPress()
+                        }, longPressTimeout)
+                    }
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val dy = event.rawY - startY
                     val dx = kotlin.math.abs(event.rawX - startX)
+                    if (kotlin.math.abs(dy) > touchSlop || dx > touchSlop) {
+                        handler.removeCallbacksAndMessages(null)
+                    }
                     if (dy > touchSlop * 0.5f && dy > dx * 0.4f) {
                         moved = true
                         v.translationY = dy * 0.75f
@@ -1624,17 +1608,19 @@ class EmbeddedTerminalPage : ShellPage {
                 }
                 MotionEvent.ACTION_UP -> {
                     v.parent?.requestDisallowInterceptTouchEvent(false)
+                    handler.removeCallbacksAndMessages(null)
                     val dy = event.rawY - startY
                     if (dy >= threshold) {
                         onClose()
                     } else {
                         v.animate().translationY(0f).alpha(1f).setDuration(120).start()
-                        if (!moved) onClick()
+                        if (!moved && !longPressed) onClick()
                     }
                     true
                 }
                 MotionEvent.ACTION_CANCEL -> {
                     v.parent?.requestDisallowInterceptTouchEvent(false)
+                    handler.removeCallbacksAndMessages(null)
                     v.animate().translationY(0f).alpha(1f).setDuration(120).start()
                     true
                 }
