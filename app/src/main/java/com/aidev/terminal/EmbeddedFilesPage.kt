@@ -23,6 +23,9 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class EmbeddedFilesPage : ShellPage {
     private lateinit var activity: Activity
@@ -973,14 +976,105 @@ class EmbeddedFilesPage : ShellPage {
             toast("当前选择的不是 APK")
             return
         }
-        MaterialAlertDialogBuilder(activity)
-            .setTitle("安装 APK")
-            .setMessage("将通过终端执行：\npm install -r \"${file.absolutePath}\"")
-            .setPositiveButton("执行安装") { _, _ ->
-                host.openTerminal("pm install -r \"${file.absolutePath}\"")
+        val path = file.absolutePath
+        val inProot = path.contains("ubuntu-rootfs")
+        val onSdcard = path.startsWith("/sdcard/") || path.startsWith("/storage/")
+        if (inProot) {
+            toast("APK 在 PRoot 内部，请先复制到 /sdcard/")
+            return
+        }
+        if (!onSdcard) {
+            toast("APK 路径不可访问，请移至 /sdcard/ 目录")
+            return
+        }
+
+        val state = ShizukuLogcat.checkState(activity)
+        when (state) {
+            is ShizukuState.NotInstalled -> {
+                MaterialAlertDialogBuilder(activity)
+                    .setTitle("需要 Shizuku")
+                    .setMessage("静默安装 APK 需要 Shizuku 权限，但未检测到 Shizuku 应用。")
+                    .setPositiveButton("去安装") { _, _ ->
+                        runCatching {
+                            activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=moe.shizuku.privileged.api")))
+                        }.onFailure {
+                            toast("请在应用商店搜索 Shizuku")
+                        }
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+                return
             }
-            .setNegativeButton("取消", null)
-            .show()
+            is ShizukuState.NotRunning -> {
+                MaterialAlertDialogBuilder(activity)
+                    .setTitle("Shizuku 未运行")
+                    .setMessage("请在 Shizuku 应用中启动服务后重试。")
+                    .setPositiveButton("打开 Shizuku") { _, _ ->
+                        activity.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")?.let {
+                            activity.startActivity(it)
+                        }
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+                return
+            }
+            is ShizukuState.NotAuthorized -> {
+                MaterialAlertDialogBuilder(activity)
+                    .setTitle("Shizuku 未授权")
+                    .setMessage("请在 Shizuku 应用中为本应用授予权限后重试。")
+                    .setPositiveButton("打开 Shizuku") { _, _ ->
+                        activity.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")?.let {
+                            activity.startActivity(it)
+                        }
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+                return
+            }
+            is ShizukuState.Ready -> {
+                MaterialAlertDialogBuilder(activity)
+                    .setTitle("安装 APK")
+                    .setMessage("将通过 Shizuku 静默安装：\n${file.name}")
+                    .setPositiveButton("安装") { _, _ -> executeShizukuInstall(file) }
+                    .setNeutralButton("诊断安装") { _, _ -> diagnoseShizukuInstall(file) }
+                    .setNegativeButton("取消", null)
+                    .show()
+            }
+        }
+    }
+
+    private fun executeShizukuInstall(file: java.io.File) {
+        val srcPath = file.absolutePath.replace("'", "'\\''")
+        ShizukuLogcat.executeFireAndForget("cat '$srcPath' | pm install -r -d -S \$(stat -c%s '$srcPath')")
+        toast("正在安装...")
+    }
+
+    private fun diagnoseShizukuInstall(file: java.io.File) {
+        val srcPath = file.absolutePath.replace("'", "'\\''")
+        val cmd = "cat '$srcPath' | pm install -r -d -S \$(stat -c%s '$srcPath')"
+        CoroutineScope(Dispatchers.Main).launch {
+            val result = ShizukuLogcat.executeCommand(cmd)
+            val hint = ShizukuLogcat.pmInstallErrorHint(result)
+            val msg = """
+命令:
+$cmd
+
+退出码: ${result.exitCode}
+
+stdout:
+${result.stdout.take(500).ifBlank { "(空)" }}
+
+stderr:
+${result.stderr.take(500).ifBlank { "(空)" }}
+
+结果解析: $hint
+            """.trimIndent()
+            MaterialAlertDialogBuilder(activity)
+                .setTitle("诊断结果")
+                .setMessage(msg)
+                .setPositiveButton("确定", null)
+                .show()
+        }
     }
 
     private fun rememberRecentDir(dir: File) {

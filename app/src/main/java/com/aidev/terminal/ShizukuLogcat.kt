@@ -1,10 +1,22 @@
 package com.aidev.terminal
 
+import android.content.pm.PackageManager
 import android.util.Log
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.lang.reflect.Method
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import rikka.shizuku.Shizuku
+
+sealed class ShizukuState {
+    object NotInstalled : ShizukuState()
+    object NotRunning : ShizukuState()
+    object NotAuthorized : ShizukuState()
+    object Ready : ShizukuState()
+}
 
 /**
  * 通过 Shizuku 执行 logcat 获取应用日志。
@@ -179,5 +191,81 @@ object ShizukuLogcat {
         }
 
         return sb.toString()
+    }
+
+    fun checkState(context: android.content.Context): ShizukuState {
+        val installed = runCatching {
+            context.packageManager.getPackageInfo("moe.shizuku.privileged.api", 0)
+        }.isSuccess
+        if (!installed) return ShizukuState.NotInstalled
+
+        if (!Shizuku.pingBinder()) return ShizukuState.NotRunning
+
+        if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+            return ShizukuState.NotAuthorized
+        }
+
+        return ShizukuState.Ready
+    }
+
+    suspend fun executeCommand(cmd: String): ShellResult = withContext(Dispatchers.IO) {
+        val method = newProcessMethod
+        if (method == null) {
+            return@withContext ShellResult("", "Shizuku API 不兼容", -1)
+        }
+        try {
+            withTimeout(60_000L) {
+                val process = method.invoke(
+                    null,
+                    arrayOf("sh", "-c", cmd),
+                    null,
+                    null
+                ) as? java.lang.Process
+
+                if (process == null) {
+                    return@withTimeout ShellResult("", "无法创建 Shizuku 进程", -1)
+                }
+
+                val stdout = process.inputStream.bufferedReader().use { it.readText() }
+                val stderr = process.errorStream.bufferedReader().use { it.readText() }
+                val exitCode = process.waitFor()
+                ShellResult(stdout, stderr, exitCode)
+            }
+        } catch (e: TimeoutCancellationException) {
+            Log.e(TAG, "Command timed out after 60s: $cmd")
+            ShellResult("", "命令执行超时（60 秒）", -1)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to execute command", e)
+            ShellResult("", e.message ?: "未知错误", -1)
+        }
+    }
+
+    fun executeFireAndForget(cmd: String) {
+        val method = newProcessMethod ?: return
+        Log.d(TAG, "Fire-and-forget: $cmd")
+        Thread {
+            try {
+                val p = method.invoke(null, arrayOf("sh", "-c", cmd), null, null)
+                Log.d(TAG, "Process spawned: $p")
+            } catch (e: Exception) {
+                Log.e(TAG, "Fire-and-forget failed", e)
+            }
+        }.start()
+    }
+
+    fun pmInstallErrorHint(result: ShellResult): String {
+        val stderr = result.stderr
+        val stdout = result.stdout
+        return when {
+            result.exitCode == 0 -> "安装成功"
+            stderr.contains("INSTALL_FAILED_ALREADY_EXISTS") -> "应用已存在，可尝试卸载后重装"
+            stderr.contains("INSUFFICIENT_STORAGE") -> "存储空间不足"
+            stderr.contains("INVALID_APK") -> "APK 文件无效或损坏"
+            stderr.contains("NO_MATCHING_ABIS") -> "APK 架构与此设备不兼容"
+            stderr.contains("PERMISSION_MODEL_DOWNGRADE") -> "权限限制，请尝试手动安装"
+            stderr.contains("USER_RESTRICTED") -> "用户限制，请检查工作资料或多用户设置"
+            stderr.contains("INSTALL_FAILED_VERSION_DOWNGRADE") -> "已安装版本更高，降级被拒绝"
+            else -> "安装失败 (exit=${result.exitCode})，请尝试手动安装"
+        }
     }
 }

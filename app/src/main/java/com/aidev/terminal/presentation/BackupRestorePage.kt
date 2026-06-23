@@ -14,6 +14,7 @@ import com.aidev.terminal.AIDevUi
 import com.aidev.terminal.DesignTokens
 import com.aidev.terminal.R
 import com.aidev.terminal.ShellHost
+import com.aidev.terminal.PathConfig
 import com.aidev.terminal.ShellPage
 import com.aidev.terminal.data.BackupRepositoryImpl
 import com.aidev.terminal.domain.BackupBusinessLogic
@@ -208,7 +209,7 @@ class BackupRestorePage(
             }
             MaterialAlertDialogBuilder(activity)
                 .setTitle("确认备份")
-                .setMessage("将备份 ${selectedItems.size} 项数据\n\n$estimate\n\n备份路径: /sdcard/AIDev/backups/")
+                .setMessage("将备份 ${selectedItems.size} 项数据\n\n$estimate\n\n备份路径: ${PathConfig.backupDir(activity).absolutePath}")
                 .setPositiveButton("开始备份") { _, _ -> executeBackup() }
                 .setNegativeButton("取消", null)
                 .show()
@@ -218,7 +219,7 @@ class BackupRestorePage(
     private fun showRestoreConfirm() {
         MaterialAlertDialogBuilder(activity)
             .setTitle("确认恢复")
-            .setMessage("将恢复 ${selectedItems.size} 项数据\n\n备份路径: /sdcard/AIDev/backups/")
+            .setMessage("将恢复 ${selectedItems.size} 项数据\n\n备份路径: ${PathConfig.backupDir(activity).absolutePath}")
             .setPositiveButton("开始恢复") { _, _ -> executeRestore() }
             .setNegativeButton("取消", null)
             .show()

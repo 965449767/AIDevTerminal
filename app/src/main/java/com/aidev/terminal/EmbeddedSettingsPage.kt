@@ -11,11 +11,17 @@ import android.os.Environment
 import android.os.PowerManager
 import android.provider.Settings
 import android.view.View
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Toast
+import android.content.ClipData
+import android.content.ClipboardManager
 import java.io.File
 import com.aidev.terminal.presentation.BackupRestorePage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class EmbeddedSettingsPage : ShellPage {
     private lateinit var activity: Activity
@@ -36,6 +42,7 @@ class EmbeddedSettingsPage : ShellPage {
         content.addView(row("权限管理", "存储、通知、安装应用、修改系统设置") { permissionMenu() })
         content.addView(row("系统与后台", "电池优化、后台常驻、Shizuku、应用详情") { systemMenu() })
         content.addView(row("数据备份", "备份和恢复 Ubuntu 环境、任务数据、设置和项目文件") { backupRestoreMenu() })
+        content.addView(row("路径设置", "备份目录、项目目录、外部存储路径") { pathMenu() })
         return ScrollView(activity).apply { addView(content) }
     }
 
@@ -377,6 +384,32 @@ class EmbeddedSettingsPage : ShellPage {
         box.addView(ui.text(statusText, 16f, if (available) ui.palette.success else ui.palette.danger, bold = true).apply {
             setPadding(0, ui.dp(4), 0, ui.dp(12))
         })
+        if (available) {
+            val testResult = ui.text("", 14f, ui.palette.muted).apply {
+                setPadding(0, ui.dp(4), 0, 0)
+            }
+            val testBtn = ui.text("▶ 测试命令执行", 14f, ui.palette.accent, bold = true).apply {
+                setPadding(0, ui.dp(8), 0, 0)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    testResult.text = "执行中..."
+                    testResult.setTextColor(ui.palette.muted)
+                    CoroutineScope(Dispatchers.Main).launch {
+                        val result = ShizukuLogcat.executeCommand("echo SHIZUKU_TEST_OK")
+                        if (result.isSuccess) {
+                            testResult.text = "✅ 成功：${result.stdout.trim()}"
+                            testResult.setTextColor(ui.palette.success)
+                        } else {
+                            testResult.text = "❌ 失败：${result.stderr.take(100)}"
+                            testResult.setTextColor(ui.palette.danger)
+                        }
+                    }
+                }
+            }
+            box.addView(testBtn)
+            box.addView(testResult)
+        }
 
         MaterialAlertDialogBuilder(activity)
             .setTitle("Shizuku 状态")
@@ -426,6 +459,95 @@ class EmbeddedSettingsPage : ShellPage {
 
     private fun openAppSettings() {
         activity.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply { data = Uri.parse("package:${activity.packageName}") })
+    }
+
+    private fun pathMenu() {
+        val sheet = AIDevBottomSheet(activity, ui)
+        val ctx = activity
+        sheet.show("路径设置") { content ->
+            content.addView(editablePathRow("备份目录", "备份文件和恢复数据的存储路径，可修改",
+                PathConfig.backupDir(ctx).absolutePath) {
+                pathEditDialog("备份目录", PathConfig.backupDir(ctx).absolutePath) { prefs.backupDir = it }
+            })
+            content.addView(editablePathRow("项目目录", "Ubuntu 内新建项目的默认位置（相对 rootfs），可修改",
+                PathConfig.projectsDir(ctx).absolutePath) {
+                pathEditDialog("项目目录（相对 rootfs）", prefs.projectsDirRel.ifBlank { "root/projects" }) { prefs.projectsDirRel = it }
+            })
+            content.addView(editablePathRow("外部 AIDev 目录", "Android 侧项目数据存放路径，用于外部备份，可修改",
+                PathConfig.externalAidevDir(ctx).absolutePath) {
+                pathEditDialog("外部 AIDev 目录", PathConfig.externalAidevDir(ctx).absolutePath) { prefs.externalAidevDir = it }
+            })
+            content.addView(readonlyPathRow("AIDev Home", "核心数据目录，含 Ubuntu 环境和全部配置（只读）",
+                PathConfig.aidevHome(ctx).absolutePath))
+            content.addView(readonlyPathRow("Ubuntu Rootfs", "Ubuntu 根文件系统，完整 Linux 环境所在（只读）",
+                PathConfig.rootfs(ctx).absolutePath))
+            content.addView(readonlyPathRow("任务日志目录", "后台任务日志和元数据的存储位置（只读）",
+                PathConfig.tasksDir(ctx).absolutePath))
+        }
+    }
+
+    private fun editablePathRow(title: String, desc: String, path: String, onEdit: () -> Unit): View {
+        return ui.actionRow(title, desc) { onEdit() }.apply {
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, ui.dp(8)) }
+        }
+    }
+
+    private fun readonlyPathRow(title: String, desc: String, path: String): View {
+        return LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(ui.dp(12), ui.dp(8), ui.dp(12), ui.dp(8))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { copyPath(path) }
+            addView(ui.text(title, DesignTokens.TEXT_BODY, ui.palette.muted, bold = true).apply {
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            })
+            addView(ui.text(desc, DesignTokens.TEXT_CAPTION, ui.palette.muted).apply {
+                setPadding(0, ui.dp(2), 0, 0)
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            })
+            addView(ui.text(path, DesignTokens.TEXT_CAPTION, ui.palette.muted).apply {
+                setPadding(0, ui.dp(2), 0, 0)
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+            })
+        }
+    }
+
+    private fun pathEditDialog(title: String, current: String, onSave: (String) -> Unit) {
+        val box = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(ui.dp(20), ui.dp(10), ui.dp(20), 0)
+        }
+        val input = EditText(activity).apply {
+            setText(current)
+            selectAll()
+        }
+        box.addView(input)
+        MaterialAlertDialogBuilder(activity)
+            .setTitle(title)
+            .setView(box)
+            .setPositiveButton("保存") { _, _ ->
+                val v = input.text.toString().trim()
+                if (v.isNotEmpty()) {
+                    onSave(v)
+                    toast("路径已更新")
+                }
+            }
+            .setNeutralButton("重置默认") { _, _ ->
+                onSave("")
+                toast("已恢复默认路径")
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun copyPath(path: String) {
+        val clip = ClipData.newPlainText("path", path)
+        (activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.setPrimaryClip(clip)
+        toast("路径已复制到剪贴板")
     }
 
     private fun toast(text: String) = Toast.makeText(activity, text, Toast.LENGTH_SHORT).show()

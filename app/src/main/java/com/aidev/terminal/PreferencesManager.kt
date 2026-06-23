@@ -62,6 +62,18 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("current_project_path", "") ?: ""
         set(value) = prefs.edit().putString("current_project_path", value).apply()
 
+    var backupDir: String
+        get() = prefs.getString("backup_dir", "/sdcard/AIDev/backups/") ?: "/sdcard/AIDev/backups/"
+        set(value) = prefs.edit().putString("backup_dir", value).apply()
+
+    var projectsDirRel: String
+        get() = prefs.getString("projects_dir_rel", "root/projects") ?: "root/projects"
+        set(value) = prefs.edit().putString("projects_dir_rel", value).apply()
+
+    var externalAidevDir: String
+        get() = prefs.getString("external_aidev_dir", "/sdcard/AIDev") ?: "/sdcard/AIDev"
+        set(value) = prefs.edit().putString("external_aidev_dir", value).apply()
+
     var projectActionHistory: String
         get() = prefs.getString("project_action_history", "") ?: ""
         set(value) = prefs.edit().putString("project_action_history", value).apply()

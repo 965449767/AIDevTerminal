@@ -1,36 +1,38 @@
-# Current Task: UI Refinements & Settings Cleanup — Complete
+# Current Task: Path Config + Shizuku APK Install — Complete
 
 ## Summary
-Refined terminal UI, added alias management, improved bashrc safety, and cleaned up settings.
+Added centralized path management, path settings UI, and Shizuku-based silent APK installation with diagnostic mode.
 
 ## Changes Made
-### Virtual Key Menu Redesign
-- **AIDevBottomSheet.kt** — Removed redundant "虚拟按键布局" entry; retained only "编辑虚拟按键"
-- **DesignSystem.kt** — Added `presetRowBlock()` for preset command rows with HorizontalScrollView
+### Unified Path Management
+- **PathConfig.kt** — Centralized path object with 6 system paths (3 configurable via prefs)
+- **PreferencesManager.kt** — Added 3 path preferences: `backupDir`, `projectsDirRel`, `externalAidevDir`
+- **EmbeddedSettingsPage.kt** — Added "路径设置" row with path menu:
+  - Editable paths (backup dir, projects dir, external AIDev dir) with edit dialog + reset-to-default
+  - Read-only paths (AIDev Home, Ubuntu Rootfs, tasks dir) in gray/muted style with copy-to-clipboard
+  - Each path has a Chinese description of its purpose
 
-### Alias System (ShellEnhancementsPage.kt + UbuntuBootstrapScripts.kt)
-- Added CRUD commands: `list-aliases`, `set-alias`, `delete-alias`
-- Redesigned alias edit dialog with preset rows and swipe-to-delete gesture
-- All presets auto-execute via trailing `\n`
+### Shizuku-based APK Installation
+- **ShellResult.kt** — Data class with stdout/stderr/exitCode for command results
+- **ShizukuLogcat.kt**:
+  - Added `ShizukuState` sealed class (NotInstalled/NotRunning/NotAuthorized/Ready) for tiered availability checks
+  - Added `checkState()` — progressive status check (install → running → authorized)
+  - Added `executeCommand()` — suspend function with 60s timeout, returns ShellResult
+  - Added `executeFireAndForget()` — spawns process without waiting (instant return)
+  - Added `pmInstallErrorHint()` — maps PM install exit codes/errors to Chinese hints
+- **EmbeddedFilesPage.kt**:
+  - Rewrote "系统 · 安装 APK" with 4-stage flow: path validation → Shizuku state check → install dialog → execution
+  - Added "诊断安装" option that shows raw stdout/stderr/exitCode
+  - Uses pipe method (`cat | pm install -S`) to bypass SELinux FUSE read restrictions
+  - Fire-and-forget mode for normal install (matches MT Manager experience)
+- **EmbeddedSettingsPage.kt** — Added "▶ 测试命令执行" button in Shizuku status dialog
 
-### Bashrc Safety
-- Auto-backup `~/.bashrc` before alias writes (timestamped `.bak` files)
-- Restore button in ShellEnhancementsPage
-- `fix-bashrc` command added to check-and-fix script
-
-### Status Bar & Layout
-- **EmbeddedShellPages.kt** — Fixed text alignment (center_vertical + includeFontPadding=false)
-- Simplified status text to show only font size; removed click-to-adjust dialog
-
-### Settings Cleanup
-- **EmbeddedSettingsPage.kt** — Removed "终端设置" row and all sub-methods (terminalMenu, customKeyDialog, manageCustomKeys, terminalFontDialog, detail)
-- Cleaned up unused imports (EditText, SeekBar)
-- Removed dead file: SettingsActivity.kt
-
-### Other Refinements
-- **AppNav.kt** — Navigation adjustments
-- **PreferencesManager.kt** — New file (extracted from EmbeddedSettingsPage)
+### Backup & Repository Path Migration
+- **BackupRestorePage.kt** — Backup path display uses `PathConfig.backupDir()`
+- **BackupRepositoryImpl.kt** — Accepts Context parameter, uses PathConfig for external AIDev dir
 
 ## Verification
-- APK builds successfully (6938KB)
+- APK builds successfully (6950KB)
+- Shizuku test (`echo SHIZUKU_TEST_OK`) verified working
+- Silent APK install verified working with `AIDE_3.2.210316.apk`
 - All imports verified, no compilation errors
