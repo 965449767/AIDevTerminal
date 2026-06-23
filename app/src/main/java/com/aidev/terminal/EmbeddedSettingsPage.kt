@@ -1,7 +1,8 @@
 package com.aidev.terminal
+import android.app.AlertDialog
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -10,14 +11,10 @@ import android.os.Environment
 import android.os.PowerManager
 import android.provider.Settings
 import android.view.View
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.SeekBar
 import android.widget.Toast
-
 import java.io.File
-
 import com.aidev.terminal.presentation.BackupRestorePage
 
 class EmbeddedSettingsPage : ShellPage {
@@ -34,14 +31,11 @@ class EmbeddedSettingsPage : ShellPage {
             setPadding(ui.dp(18), ui.dp(12), ui.dp(18), ui.dp(24))
         }
         content.addView(ui.section("设置", "一级入口保持通用，二级动作以内嵌菜单展开，底部导航不离开 Shell"))
-        content.addView(row("外观与交互", "主题、背景、透明度、模糊说明、触觉反馈") { appearanceMenu() })
-        content.addView(row("终端设置", "字号、快捷键、会话行为和终端说明") { terminalMenu() })
-        content.addView(row("Shell 增强", "命令历史统计、别名管理、收藏夹与模板") { openShellEnhancements() })
-        content.addView(row("开发环境", "全面检测环境状态，一键修复问题") { devMenu() })
-        content.addView(row("AI 与服务器", "安装 OpenCode、后台常驻、端口诊断") { aiServerMenu() })
-        content.addView(row("文件与权限", "存储访问、安装权限、Shizuku、应用详情") { permissionMenu() })
+        content.addView(row("外观与交互", "主题、背景、触觉反馈") { appearanceMenu() })
+        content.addView(row("开发环境", "环境检测、Shell 增强、网络诊断、系统监控、容器管理") { devMenu() })
+        content.addView(row("权限管理", "存储、通知、安装应用、修改系统设置") { permissionMenu() })
+        content.addView(row("系统与后台", "电池优化、后台常驻、Shizuku、应用详情") { systemMenu() })
         content.addView(row("数据备份", "备份和恢复 Ubuntu 环境、任务数据、设置和项目文件") { backupRestoreMenu() })
-        content.addView(ui.section("当前效果说明", ui.effectNotice()))
         return ScrollView(activity).apply { addView(content) }
     }
 
@@ -50,33 +44,28 @@ class EmbeddedSettingsPage : ShellPage {
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, ui.dp(8)) }
         }
 
+    private val prefs by lazy { PreferencesManager(activity) }
+
     private fun appearanceMenu() {
         val items = listOf(
             MenuBottomSheet.MenuItem("主题预设", "切换深色/浅色/跟随系统") { themePresetDialog() },
             MenuBottomSheet.MenuItem("背景模式", "纯色/渐变/自定义图片") { backgroundModeDialog() },
-            MenuBottomSheet.MenuItem("透明度", "调整界面透明度") { sliderDialog("透明度", "ui_alpha", 70, 100, 94, "%") },
-            MenuBottomSheet.MenuItem("模糊感", "调整背景模糊程度") { sliderDialog("模糊感", "ui_blur", 0, 40, 18, "") },
-            MenuBottomSheet.MenuItem("空间密度", "调整界面元素密度") { sliderDialog("空间密度", "ui_density", 86, 116, 100, "%") },
             MenuBottomSheet.MenuItem("触觉反馈", "开启或关闭点击振动反馈") {
-                val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-                val next = !prefs.getBoolean("haptic_tap", true)
-                prefs.edit().putBoolean("haptic_tap", next).apply()
-                toast(if (next) "触觉反馈已开启" else "触觉反馈已关闭")
-            },
-            MenuBottomSheet.MenuItem("查看效果说明", "当前主题、背景、透明度等状态") { detail("效果说明", ui.effectNotice()) }
+                prefs.hapticTap = !prefs.hapticTap
+                toast(if (prefs.hapticTap) "触觉反馈已开启" else "触觉反馈已关闭")
+            }
         )
         MenuBottomSheet(activity, ui).show("外观与交互", items)
     }
 
     private fun themePresetDialog() {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
         val labels = arrayOf("深色", "亮色", "跟随系统")
         val values = arrayOf("dark", "light", "system")
-        val checked = values.indexOf(prefs.getString("theme_preset", "system")).coerceAtLeast(0)
-        AlertDialog.Builder(activity)
+        val checked = values.indexOf(prefs.themePreset).coerceAtLeast(0)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("主题预设")
             .setSingleChoiceItems(labels, checked) { dialog, which ->
-                prefs.edit().putString("theme_preset", values[which]).apply()
+                prefs.themePreset = values[which]
                 host.refreshShellSkin()
                 toast("主题已切换为 ${labels[which]}")
                 dialog.dismiss()
@@ -86,14 +75,13 @@ class EmbeddedSettingsPage : ShellPage {
     }
 
     private fun backgroundModeDialog() {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
         val labels = arrayOf("纯色背景", "主题渐变", "自定义图片")
         val values = arrayOf("solid", "gradient", "image")
-        val checked = values.indexOf(prefs.getString("bg_mode", "solid")).coerceAtLeast(0)
-        AlertDialog.Builder(activity)
+        val checked = values.indexOf(prefs.bgMode).coerceAtLeast(0)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("背景模式")
             .setSingleChoiceItems(labels, checked) { dialog, which ->
-                prefs.edit().putString("bg_mode", values[which]).apply()
+                prefs.bgMode = values[which]
                 host.refreshShellSkin()
                 if (values[which] == "image") {
                     host.pickBackgroundImage()
@@ -106,153 +94,11 @@ class EmbeddedSettingsPage : ShellPage {
             .show()
     }
 
-    private fun sliderDialog(title: String, key: String, min: Int, max: Int, defaultValue: Int, suffix: String) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val current = prefs.getInt(key, defaultValue).coerceIn(min, max)
-        val box = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(ui.dp(20), ui.dp(10), ui.dp(20), 0)
-        }
-        val value = ui.text("$current$suffix", 18f, ui.palette.text, bold = true)
-        val seek = SeekBar(activity).apply {
-            this.max = max - min
-            progress = current - min
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    value.text = "${min + progress}$suffix"
-                }
-                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-            })
-        }
-        box.addView(value)
-        box.addView(seek)
-        AlertDialog.Builder(activity)
-            .setTitle(title)
-            .setView(box)
-            .setPositiveButton("应用") { _, _ ->
-                prefs.edit().putInt(key, min + seek.progress).apply()
-                host.refreshShellSkin()
-                toast("$title 已更新")
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    private fun terminalMenu() {
-        val items = listOf(
-            MenuBottomSheet.MenuItem("终端字号", "调整终端文字大小") { terminalFontDialog() },
-            MenuBottomSheet.MenuItem("新增快捷键", "添加自定义虚拟按键") { customKeyDialog() },
-            MenuBottomSheet.MenuItem("管理快捷键", "查看或删除已有快捷键") { manageCustomKeys() },
-            MenuBottomSheet.MenuItem("清除快捷键", "一键清空所有自定义快捷键") {
-                activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).edit()
-                    .remove("terminal_custom_keys")
-                    .remove("terminal_key_overrides")
-                    .apply()
-                toast("已清除自定义快捷键")
-            },
-            MenuBottomSheet.MenuItem("快捷键说明", "虚拟按键布局与自定义规则") { detail("快捷键说明", "内嵌终端保持两行六列：点击是主功能，上滑是拓展功能，长按可自定义单个键。\n\n例如 C 点击输入 c，上滑 clear；SPC 点击空格，上滑 pwd。\n\n自定义输入支持 \\n、\\t 和 \\e 转义。") },
-            MenuBottomSheet.MenuItem("会话说明", "多标签会话管理与操作说明") { detail("会话说明", "终端 Tab 支持多会话标签、新建会话、关闭当前会话、点击标签切换、长按标签重命名。关闭最后一个会话时会自动创建新会话。") }
-        )
-        MenuBottomSheet(activity, ui).show("终端设置", items)
-    }
-
-    private fun customKeyDialog() {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val box = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(ui.dp(20), ui.dp(10), ui.dp(20), 0)
-        }
-        val label = EditText(activity).apply {
-            hint = "按钮名称，例如 npm"
-        }
-        val input = EditText(activity).apply {
-            hint = "输入内容，例如 npm run dev\\n"
-        }
-        val swipe = EditText(activity).apply {
-            hint = "上滑命令，可选，例如 pwd"
-        }
-        box.addView(label)
-        box.addView(input)
-        box.addView(swipe)
-        AlertDialog.Builder(activity)
-            .setTitle("自定义快捷键")
-            .setView(box)
-            .setPositiveButton("保存") { _, _ ->
-                val name = label.text.toString().trim().take(8)
-                val value = input.text.toString()
-                if (name.isNotEmpty() && value.isNotEmpty()) {
-                    val old = prefs.getString("terminal_custom_keys", "") ?: ""
-                    val lines = old.lines().filter { it.isNotBlank() }.toMutableList()
-                    lines.add("$name\t$value\t${swipe.text}")
-                    prefs.edit().putString("terminal_custom_keys", lines.takeLast(8).joinToString("\n")).apply()
-                    toast("已保存，重新进入终端页后显示")
-                }
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    private fun manageCustomKeys() {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val lines = (prefs.getString("terminal_custom_keys", "") ?: "").lines().filter { it.isNotBlank() }
-        if (lines.isEmpty()) return toast("暂无自定义快捷键")
-        val labels = lines.map { it.substringBefore("\t").ifBlank { "未命名" } }.toTypedArray()
-        AlertDialog.Builder(activity)
-            .setTitle("管理快捷键")
-            .setItems(labels) { _, which ->
-                AlertDialog.Builder(activity)
-                    .setTitle(labels[which])
-                    .setMessage(lines[which].split("\t").let { parts ->
-                        "点击：${parts.getOrNull(1).orEmpty()}\n上滑：${parts.getOrNull(2).orEmpty().ifBlank { "未设置" }}"
-                    })
-                    .setPositiveButton("删除") { _, _ ->
-                        val next = lines.toMutableList().also { it.removeAt(which) }
-                        prefs.edit().putString("terminal_custom_keys", next.joinToString("\n")).apply()
-                        toast("已删除")
-                    }
-                    .setNegativeButton("关闭", null)
-                    .show()
-            }
-            .show()
-    }
-
-    private fun terminalFontDialog() {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val current = prefs.getFloat("font_sp", 15f).toInt().coerceIn(10, 24)
-        val box = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(ui.dp(20), ui.dp(10), ui.dp(20), 0)
-        }
-        val value = ui.text("${current}sp", 18f, ui.palette.text, bold = true)
-        val seek = SeekBar(activity).apply {
-            max = 14
-            progress = current - 10
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    value.text = "${10 + progress}sp"
-                }
-                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-            })
-        }
-        box.addView(value)
-        box.addView(seek)
-        AlertDialog.Builder(activity)
-            .setTitle("终端字号")
-            .setView(box)
-            .setPositiveButton("应用") { _, _ ->
-                prefs.edit().putFloat("font_sp", (10 + seek.progress).toFloat()).apply()
-                toast("终端字号已更新，终端页可用字号按钮立即刷新")
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
 
     private fun openShellEnhancements() {
         val page = ShellEnhancementsPage()
         val view = page.create(activity, ui, host)
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("Shell 增强")
             .setView(view)
             .setNegativeButton("关闭") { _, _ -> page.onSelected(activity, view) }
@@ -262,7 +108,9 @@ class EmbeddedSettingsPage : ShellPage {
     private fun devMenu() {
         val items = listOf(
             MenuBottomSheet.MenuItem("环境检查与修复", "全面检测 Ubuntu 与开发工具状态") { devCheckAndRepair() },
-            MenuBottomSheet.MenuItem("网络诊断", "检测端口监听与网络连通性") { openNetworkDiagnostics() },
+            MenuBottomSheet.MenuItem("Shell 增强", "命令历史统计、别名管理、收藏夹与模板") { openShellEnhancements() },
+            MenuBottomSheet.MenuItem("网络诊断工具", "检测端口监听与网络连通性") { openNetworkDiagnostics() },
+            MenuBottomSheet.MenuItem("监听端口", "查看当前所有监听中的网络端口") { host.openTerminal("list-listen-ports") },
             MenuBottomSheet.MenuItem("系统监控", "实时查看 CPU、内存与进程状态") { openSystemMonitor() },
             MenuBottomSheet.MenuItem("安全审计", "检查权限、密钥与容器安全") { openSecurityAudit() },
             MenuBottomSheet.MenuItem("容器管理", "管理 Docker/Podman 容器生命周期") { openContainerManager() }
@@ -273,7 +121,7 @@ class EmbeddedSettingsPage : ShellPage {
     private fun openNetworkDiagnostics() {
         val page = NetworkDiagnosticsPage()
         val view = page.create(activity, ui, host)
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("网络诊断")
             .setView(view)
             .setNegativeButton("关闭") { _, _ -> page.onSelected(activity, view) }
@@ -283,7 +131,7 @@ class EmbeddedSettingsPage : ShellPage {
     private fun openSystemMonitor() {
         val page = SystemMonitorPage()
         val view = page.create(activity, ui, host)
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("系统监控")
             .setView(view)
             .setNegativeButton("关闭") { _, _ -> page.onDestroy(activity) }
@@ -295,7 +143,7 @@ class EmbeddedSettingsPage : ShellPage {
     private fun openSecurityAudit() {
         val page = SecurityAuditPage()
         val view = page.create(activity, ui, host)
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("安全审计")
             .setView(view)
             .setNegativeButton("关闭") { _, _ -> page.onSelected(activity, view) }
@@ -305,7 +153,7 @@ class EmbeddedSettingsPage : ShellPage {
     private fun openContainerManager() {
         val page = ContainerManagerPage()
         val view = page.create(activity, ui, host)
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("容器管理")
             .setView(view)
             .setNegativeButton("关闭") { _, _ -> page.onSelected(activity, view) }
@@ -401,7 +249,7 @@ class EmbeddedSettingsPage : ShellPage {
         }
 
         if (allOk) {
-            AlertDialog.Builder(activity)
+            MaterialAlertDialogBuilder(activity)
                 .setTitle("开发环境检查")
                 .setMessage(body.toString())
                 .setPositiveButton("关闭", null)
@@ -409,12 +257,12 @@ class EmbeddedSettingsPage : ShellPage {
         } else {
             val fixLabels = failedChecks.filter { it.fixAction != null }.map { it.name }.toTypedArray()
             val fixActions = failedChecks.filter { it.fixAction != null }.mapNotNull { it.fixAction }.toTypedArray()
-            AlertDialog.Builder(activity)
+            MaterialAlertDialogBuilder(activity)
                 .setTitle("开发环境检查")
                 .setMessage(body.toString())
                 .setPositiveButton(if (fixLabels.isNotEmpty()) "一键修复" else "关闭") { _, _ ->
                     if (fixLabels.isEmpty()) return@setPositiveButton
-                    AlertDialog.Builder(activity)
+                    MaterialAlertDialogBuilder(activity)
                         .setTitle("选择要修复的项目")
                         .setMultiChoiceItems(fixLabels, null) { _, _, _ -> }
                         .setPositiveButton("执行修复") { dialog, _ ->
@@ -455,26 +303,99 @@ class EmbeddedSettingsPage : ShellPage {
 
     private data class CheckItem(val name: String, val ok: Boolean, val desc: String, val fixAction: String?)
 
-    private fun aiServerMenu() {
-        val items = listOf(
-            MenuBottomSheet.MenuItem("安装 OpenCode", "在 Ubuntu 环境中安装 AI 编程助手") { host.openTerminal("install-aitool") },
-            MenuBottomSheet.MenuItem("监听端口", "查看当前所有监听中的网络端口") { host.openTerminal("list-listen-ports") },
-            MenuBottomSheet.MenuItem("后台常驻", "启动保活服务防止进程被系统回收") {
-                KeepAliveService.start(activity)
-                activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).edit().putBoolean("keepalive_auto", true).apply()
-                toast("后台常驻已启动")
+    private val permissionItems = listOf(
+        MenuBottomSheet.MenuItem("存储权限", "管理所有文件访问权限") { openStorageSettings() },
+        MenuBottomSheet.MenuItem("通知权限", "管理通知显示权限") {
+            if (Build.VERSION.SDK_INT >= 26) {
+                activity.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, activity.packageName)
+                })
+            } else {
+                toast("当前系统版本无需单独设置通知权限")
             }
-        )
-        MenuBottomSheet(activity, ui).show("AI 与服务器", items)
-    }
+        },
+        MenuBottomSheet.MenuItem("安装未知应用", "允许安装来自未知来源的应用") {
+            if (Build.VERSION.SDK_INT >= 26) {
+                activity.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                    data = Uri.parse("package:${activity.packageName}")
+                })
+            } else {
+                toast("当前系统版本无需单独设置")
+            }
+        },
+        MenuBottomSheet.MenuItem("修改系统设置", "允许应用修改系统设置（如亮度、超时）") {
+            if (Build.VERSION.SDK_INT >= 23) {
+                if (Settings.System.canWrite(activity)) {
+                    toast("已允许修改系统设置")
+                } else {
+                    activity.startActivity(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                        data = Uri.parse("package:${activity.packageName}")
+                    })
+                }
+            }
+        }
+    )
 
     private fun permissionMenu() {
+        MenuBottomSheet(activity, ui).show("权限管理", permissionItems)
+    }
+
+    private fun systemMenu() {
         val items = listOf(
-            MenuBottomSheet.MenuItem("存储权限", "管理所有文件访问权限") { openStorageSettings() },
-            MenuBottomSheet.MenuItem("应用详情", "跳转到系统应用信息页") { openAppSettings() },
-            MenuBottomSheet.MenuItem("Shizuku 状态", "查看 Shizuku 服务运行状态") { detail("Shizuku 状态", "如果 Shizuku 未运行，请先打开 Shizuku 应用并启动服务。应用已声明 Shizuku Provider，用于后续更高权限能力。") }
+            MenuBottomSheet.MenuItem("电池优化", "将应用加入电池优化白名单，防止后台被限制") {
+                if (Build.VERSION.SDK_INT >= 23) {
+                    activity.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                        data = Uri.parse("package:${activity.packageName}")
+                    })
+                }
+            },
+            MenuBottomSheet.MenuItem("后台常驻", "启动保活服务防止进程被系统回收") {
+                KeepAliveService.start(activity)
+                prefs.keepaliveAuto = true
+                toast("后台常驻已启动")
+            },
+            MenuBottomSheet.MenuItem("Shizuku 状态", "实时检测 Shizuku 安装和授权状态") { showShizukuStatus() },
+            MenuBottomSheet.MenuItem("应用详情", "跳转到系统应用信息页") { openAppSettings() }
         )
-        MenuBottomSheet(activity, ui).show("文件与权限", items)
+        MenuBottomSheet(activity, ui).show("系统与后台", items)
+    }
+
+    private fun showShizukuStatus() {
+        val installed = runCatching { activity.packageManager.getPackageInfo("moe.shizuku.privileged.api", 0) }.isSuccess
+        val available = installed && ShizukuLogcat.isAvailable()
+        val statusText = if (installed) ShizukuLogcat.statusText() else "未安装"
+
+        val box = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(ui.dp(20), ui.dp(10), ui.dp(20), 0)
+        }
+        box.addView(ui.text("Shizuku 应用", 14f, ui.palette.muted))
+        box.addView(ui.text(if (installed) "已安装" else "未安装", 16f, if (installed) ui.palette.success else ui.palette.danger, bold = true).apply {
+            setPadding(0, ui.dp(4), 0, ui.dp(12))
+        })
+        box.addView(ui.text("Shizuku 授权", 14f, ui.palette.muted))
+        box.addView(ui.text(statusText, 16f, if (available) ui.palette.success else ui.palette.danger, bold = true).apply {
+            setPadding(0, ui.dp(4), 0, ui.dp(12))
+        })
+
+        MaterialAlertDialogBuilder(activity)
+            .setTitle("Shizuku 状态")
+            .setView(box)
+            .setPositiveButton(if (!installed) "去安装" else if (!available) "打开 Shizuku" else "关闭") { _, _ ->
+                if (!installed) {
+                    try {
+                        activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=moe.shizuku.privileged.api")))
+                    } catch (_: Exception) {
+                        toast("请在应用商店搜索 Shizuku")
+                    }
+                } else if (!available) {
+                    val intent = activity.packageManager.getLaunchIntentForPackage("moe.shizuku.privileged.api")
+                    if (intent != null) activity.startActivity(intent)
+                    else toast("无法打开 Shizuku 应用")
+                }
+            }
+            .setNegativeButton(if (available) "" else "取消", null)
+            .show()
     }
 
     private fun backupRestoreMenu() {
@@ -488,18 +409,11 @@ class EmbeddedSettingsPage : ShellPage {
     private fun openBackupRestorePage(mode: BackupRestorePage.Mode) {
         val page = BackupRestorePage(mode)
         val view = page.create(activity, ui, host)
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle(if (mode == BackupRestorePage.Mode.BACKUP) "数据备份" else "数据恢复")
             .setView(view)
             .setNegativeButton("关闭", null)
             .show()
-    }
-
-    private fun advancedMenu() {
-        val items = listOf(
-            MenuBottomSheet.MenuItem("命令速查", "常用内置命令快速参考") { detail("命令速查", "ubuntu\npmx list packages\namx start ...\ngetpropx ro.product.model\nlogcatx -d\ntask-list\ncheck-dev-env") }
-        )
-        MenuBottomSheet(activity, ui).show("系统与高级", items)
     }
 
     private fun openStorageSettings() {
@@ -514,8 +428,5 @@ class EmbeddedSettingsPage : ShellPage {
         activity.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply { data = Uri.parse("package:${activity.packageName}") })
     }
 
-    private fun detail(title: String, body: String) {
-        AlertDialog.Builder(activity).setTitle(title).setMessage(body).setPositiveButton("关闭", null).show()
-    }
     private fun toast(text: String) = Toast.makeText(activity, text, Toast.LENGTH_SHORT).show()
 }

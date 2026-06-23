@@ -12,22 +12,23 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
+import android.view.Menu
+import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.text.TextUtils
 import android.widget.EditText
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.color.MaterialColors
+import com.google.android.material.appbar.MaterialToolbar
 import kotlin.math.abs
 
-/**
- * 设计令牌：统一的间距、圆角、字体层级
- */
 object DesignTokens {
-    // 间距 8 级（4dp 网格）
     const val SPACE_2 = 2
     const val SPACE_4 = 4
     const val SPACE_8 = 8
@@ -37,79 +38,52 @@ object DesignTokens {
     const val SPACE_24 = 24
     const val SPACE_32 = 32
 
-    // 圆角（基于原值，后续视觉确认后统一升级）
-    const val RADIUS_SM = 6
-    const val RADIUS_MD = 8
-    const val RADIUS_LG = 12
+    const val RADIUS_SM = 8
+    const val RADIUS_MD = 12
+    const val RADIUS_LG = 16
 
-    // 尺寸
     const val TOP_BAR_HEIGHT = 48
     const val BOTTOM_NAV_HEIGHT = 52
     const val LIST_ITEM_HEIGHT = 48
     const val SWIPE_TRIGGER_DP = 72
     const val SWIPE_SLOP_DP = 32
 
-    // 字体层级
     const val TEXT_H1 = 20f
     const val TEXT_H2 = 16f
     const val TEXT_BODY = 14f
     const val TEXT_CAPTION = 12f
     const val TEXT_LABEL = 10f
 
-    // 统一强调色：Matrix 终端绿
-    const val ACCENT = 0xFF00FF41.toInt()
-    const val ACCENT_DARK = 0xFF008F11.toInt()
+    const val ACCENT = 0xFF7C3AED.toInt()
+    const val ACCENT_DARK = 0xFF5B21B6.toInt()
 }
 
-/**
- * 主题管理器：支持系统深色/浅色模式跟随
- */
 object ThemeManager {
     fun isSystemDark(context: Context): Boolean {
         return (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
     }
 
-    fun getPalette(context: Context): WorkbenchPalette {
-        return if (isSystemDark(context)) DarkTheme else LightTheme
-    }
-
-    private val DarkTheme = WorkbenchPalette(
-        bg = 0xFF0B0C0E.toInt(),
-        surface = 0xFF141619.toInt(),
-        surfaceAlt = 0xFF1C1E22.toInt(),
-        surfaceHighlight = 0xFF23252A.toInt(),
-        text = 0xFFF0F0F0.toInt(),
-        muted = 0xFF9CA3AF.toInt(),
-        outline = 0xFF262A30.toInt(),
-        accent = DesignTokens.ACCENT,
+    fun getPalette(context: Context): WorkbenchPalette = WorkbenchPalette(
+        bg = resolveColor(context, android.R.attr.colorBackground, 0xFF0B0C0E.toInt()),
+        surface = resolveColor(context, com.google.android.material.R.attr.colorSurface, 0xFF141619.toInt()),
+        surfaceAlt = resolveColor(context, com.google.android.material.R.attr.colorSurfaceVariant, 0xFF1C1E22.toInt()),
+        text = resolveColor(context, com.google.android.material.R.attr.colorOnSurface, 0xFFF0F0F0.toInt()),
+        muted = resolveColor(context, com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFF9CA3AF.toInt()),
+        outline = resolveColor(context, com.google.android.material.R.attr.colorOutline, 0xFF262A30.toInt()),
+        accent = resolveColor(context, com.google.android.material.R.attr.colorPrimary, 0xFF7C3AED.toInt()),
         success = 0xFF34D399.toInt(),
         warning = 0xFFFBBF24.toInt(),
-        danger = 0xFFF87171.toInt()
+        danger = resolveColor(context, com.google.android.material.R.attr.colorError, 0xFFF87171.toInt())
     )
 
-    private val LightTheme = WorkbenchPalette(
-        bg = 0xFFF5F5F7.toInt(),
-        surface = 0xFFFFFFFF.toInt(),
-        surfaceAlt = 0xFFF0F0F2.toInt(),
-        surfaceHighlight = 0xFFE5E5E8.toInt(),
-        text = 0xFF1A1A1A.toInt(),
-        muted = 0xFF6B6B73.toInt(),
-        outline = 0xFFE0E0E5.toInt(),
-        accent = 0xFF00AA33.toInt(),
-        success = 0xFF059669.toInt(),
-        warning = 0xFFD97706.toInt(),
-        danger = 0xFFDC2626.toInt()
-    )
+    private fun resolveColor(context: Context, attr: Int, fallback: Int): Int =
+        MaterialColors.getColor(context, attr, fallback)
 }
 
-/**
- * 调色板：单强调色，移除 primary/secondary 双强调色
- */
 data class WorkbenchPalette(
     val bg: Int,
     val surface: Int,
     val surfaceAlt: Int,
-    val surfaceHighlight: Int,
     val text: Int,
     val muted: Int,
     val outline: Int,
@@ -119,9 +93,6 @@ data class WorkbenchPalette(
     val danger: Int
 )
 
-/**
- * 分割线组件
- */
 fun View.divider(color: Int, height: Int = 1): View {
     return View(context).apply {
         setBackgroundColor(color)
@@ -129,16 +100,11 @@ fun View.divider(color: Int, height: Int = 1): View {
     }
 }
 
-/**
- * AIDev UI 构建器
- */
 class AIDevUi(private val activity: Activity, private val prefs: SharedPreferences) {
     val palette: WorkbenchPalette = ThemeManager.getPalette(activity)
 
-    fun dp(value: Int): Int {
-        val scale = prefs.getInt("ui_density", 100).coerceIn(86, 116) / 100f
-        return (value * activity.resources.displayMetrics.density * scale).toInt()
-    }
+    fun dp(value: Int): Int =
+        (value * activity.resources.displayMetrics.density).toInt()
 
     fun pageRoot(): LinearLayout =
         LinearLayout(activity).apply {
@@ -146,16 +112,24 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
             applyBackground(this)
         }
 
-    fun topBar(title: String, vararg actions: Pair<String, () -> Unit>): View =
-        LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(DesignTokens.SPACE_12), 0, dp(DesignTokens.SPACE_8), 0)
-            setBackgroundColor(palette.bg)
+    fun topBar(title: String, vararg actions: Pair<String, () -> Unit>): MaterialToolbar =
+        MaterialToolbar(activity).apply {
+            setTitle(title)
+            setTitleTextColor(palette.text)
+            setBackgroundColor(palette.surface)
             layoutParams = LinearLayout.LayoutParams(-1, dp(DesignTokens.TOP_BAR_HEIGHT))
-            addView(text(title, DesignTokens.TEXT_H2, palette.text, bold = true), LinearLayout.LayoutParams(0, -1, 1f))
-            actions.forEach { (label, action) ->
-                addView(navItem(label, action), LinearLayout.LayoutParams(dp(58), -1))
+            if (actions.isNotEmpty()) {
+                actions.forEachIndexed { index, (label, _) ->
+                    menu.add(Menu.NONE, index, Menu.NONE, label).setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                }
+                setOnMenuItemClickListener { item ->
+                    val idx = item.itemId
+                    if (idx in actions.indices) {
+                        pulse()
+                        actions[idx].second()
+                        true
+                    } else false
+                }
             }
         }
 
@@ -177,21 +151,6 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
     fun surfaceBackground(): GradientDrawable =
         GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(palette.surface, palette.surface)).apply {
             cornerRadius = dp(DesignTokens.RADIUS_MD).toFloat()
-        }
-
-    fun accentButtonBackground(): GradientDrawable =
-        GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(DesignTokens.ACCENT, DesignTokens.ACCENT_DARK)).apply {
-            cornerRadius = dp(DesignTokens.RADIUS_MD).toFloat()
-        }
-
-    fun subtleButtonBackground(): GradientDrawable =
-        GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(palette.surfaceAlt, palette.surfaceAlt)).apply {
-            cornerRadius = dp(DesignTokens.RADIUS_MD).toFloat()
-        }
-
-    fun roundedBackground(color: Int, radius: Int = DesignTokens.RADIUS_MD): GradientDrawable =
-        GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(color, color)).apply {
-            cornerRadius = dp(radius).toFloat()
         }
 
     fun divider(): View =
@@ -243,18 +202,6 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
             })
         }
 
-    fun effectNotice(): String {
-        val mode = prefs.getString("bg_mode", "solid")
-        val alpha = prefs.getInt("ui_alpha", 94)
-        val blur = prefs.getInt("ui_blur", 18)
-        val density = prefs.getInt("ui_density", 100)
-        return when (mode) {
-            "image" -> "背景：自定义图片"
-            "gradient" -> "背景：主题渐变"
-            else -> "背景：纯色"
-        } + " | 透明度：${alpha}% | 模糊：${blur} | 密度：${density}%"
-    }
-
     fun bottomNav(items: List<Pair<String, () -> Unit>>): View =
         LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -278,7 +225,6 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
 
     fun muted(value: String): TextView = text(value, DesignTokens.TEXT_CAPTION, palette.muted)
 
-    /** 空状态占位视图：居中显示标题和提示文字 */
     fun emptyState(message: String, hint: String): View =
         LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -290,7 +236,6 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
             })
         }
 
-    /** 状态指示圆点：绿色表示正常，红色表示异常 */
     fun statusDot(ok: Boolean): View =
         View(activity).apply {
             val size = dp(8)
@@ -301,7 +246,6 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
             setBackgroundColor(if (ok) palette.success else palette.danger)
         }
 
-    /** 带主题样式的输入框 */
     fun inputField(hint: String): EditText =
         EditText(activity).apply {
             setHint(hint)
@@ -366,15 +310,33 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
             }
         }
 
-    fun heroSubtitle(value: String): TextView =
-        text(value, 13f, Color.argb(221, 255, 255, 255)).apply {
-            setPadding(0, dp(DesignTokens.SPACE_8), 0, 0)
+    fun smallButton(label: String, click: () -> Unit): MaterialButton =
+        MaterialButton(activity, null, com.google.android.material.R.attr.materialButtonStyle).apply {
+            text = label
+            minimumWidth = 0
+            minimumHeight = 0
+            setOnClickListener {
+                pulse()
+                click()
+            }
         }
 
-    fun heroMeta(value: String): TextView =
-        text(value, 12f, Color.argb(191, 255, 255, 255)).apply {
-            setPadding(0, dp(10), 0, 0)
+    fun showAsDialog(contentView: View, onDismiss: (() -> Unit)? = null): Dialog {
+        val dialog = Dialog(activity)
+        dialog.setContentView(contentView)
+        dialog.window?.let { w ->
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            w.setGravity(Gravity.CENTER)
         }
+        ViewCompat.setOnApplyWindowInsetsListener(contentView) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(bars.left, v.paddingTop, bars.right, v.paddingBottom)
+            insets
+        }
+        dialog.setOnDismissListener { onDismiss?.invoke() }
+        dialog.show()
+        return dialog
+    }
 
     private fun applyBackground(root: LinearLayout) {
         when (prefs.getString("bg_mode", "solid")) {
@@ -404,37 +366,5 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
             }
             else -> root.setBackgroundColor(palette.bg)
         }
-    }
-
-    fun showAsDialog(contentView: View, onDismiss: (() -> Unit)? = null): Dialog {
-        val dialog = Dialog(activity, android.R.style.Theme_Translucent_NoTitleBar)
-        dialog.setContentView(contentView)
-        dialog.window?.let { w ->
-            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            w.setGravity(Gravity.CENTER)
-        }
-        ViewCompat.setOnApplyWindowInsetsListener(contentView) { v, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(bars.left, v.paddingTop, bars.right, v.paddingBottom)
-            insets
-        }
-        dialog.setOnDismissListener { onDismiss?.invoke() }
-        dialog.show()
-        return dialog
-    }
-
-    private fun pillBackground(stroke: Int, fill: Int): GradientDrawable =
-        GradientDrawable().apply {
-            setColor(fill)
-            cornerRadius = dp(DesignTokens.RADIUS_MD).toFloat()
-            setStroke(dp(1), stroke)
-        }
-
-    private fun tint(foreground: Int, background: Int, amount: Float): Int {
-        val a = amount.coerceIn(0f, 1f)
-        val r = (Color.red(foreground) * a + Color.red(background) * (1f - a)).toInt()
-        val g = (Color.green(foreground) * a + Color.green(background) * (1f - a)).toInt()
-        val b = (Color.blue(foreground) * a + Color.blue(background) * (1f - a)).toInt()
-        return Color.rgb(r, g, b)
     }
 }

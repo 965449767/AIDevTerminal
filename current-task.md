@@ -1,43 +1,36 @@
-# Current Task
+# Current Task: UI Refinements & Settings Cleanup — Complete
 
-## Goal
-Phase 4: Codebase cleanup — migrate legacy `Handler.post`/`Thread.runOnUiThread` → coroutines, fix deprecation warnings.
+## Summary
+Refined terminal UI, added alias management, improved bashrc safety, and cleaned up settings.
 
-## Current Status
+## Changes Made
+### Virtual Key Menu Redesign
+- **AIDevBottomSheet.kt** — Removed redundant "虚拟按键布局" entry; retained only "编辑虚拟按键"
+- **DesignSystem.kt** — Added `presetRowBlock()` for preset command rows with HorizontalScrollView
 
-| Phase | Status |
-|-------|--------|
-| Phase 1 (Bug fixes, IME, error handler) | ✅ Complete |
-| Phase 2 (Architecture optimization) | ✅ Complete |
-| Phase 3 (Integration testing & validation) | ✅ Complete |
-| Phase 4 (Cleanup: coroutine migration, deprecation fixes) | 🔜 In Progress |
+### Alias System (ShellEnhancementsPage.kt + UbuntuBootstrapScripts.kt)
+- Added CRUD commands: `list-aliases`, `set-alias`, `delete-alias`
+- Redesigned alias edit dialog with preset rows and swipe-to-delete gesture
+- All presets auto-execute via trailing `\n`
 
-## Phase 4 Progress
+### Bashrc Safety
+- Auto-backup `~/.bashrc` before alias writes (timestamped `.bak` files)
+- Restore button in ShellEnhancementsPage
+- `fix-bashrc` command added to check-and-fix script
 
-### P1: ShellEnhancementsPage — ✅ Complete
-- 5× `Handler.post` → `scope.launch(IO){…withContext(Main){…}}`
+### Status Bar & Layout
+- **EmbeddedShellPages.kt** — Fixed text alignment (center_vertical + includeFontPadding=false)
+- Simplified status text to show only font size; removed click-to-adjust dialog
 
-### P2: Deprecation warnings — ✅ Complete (10 fixes)
-- `EmbeddedShellPages.kt`: 4× `displayMetrics.scaledDensity` → `spToPx()` helper
-- `AppNav.kt` + `ShellActivity.kt`: 5× `overridePendingTransition` → API 34 guard
-- `KeepAliveService.kt`: `WIFI_MODE_FULL_HIGH_PERF` → `FULL_LOW_LATENCY`
+### Settings Cleanup
+- **EmbeddedSettingsPage.kt** — Removed "终端设置" row and all sub-methods (terminalMenu, customKeyDialog, manageCustomKeys, terminalFontDialog, detail)
+- Cleaned up unused imports (EditText, SeekBar)
+- Removed dead file: SettingsActivity.kt
 
-### P3: Migrate remaining pages — ✅ Complete (4 pages)
+### Other Refinements
+- **AppNav.kt** — Navigation adjustments
+- **PreferencesManager.kt** — New file (extracted from EmbeddedSettingsPage)
 
-| Page | Migration | Status |
-|------|-----------|--------|
-| NetworkDiagnosticsPage | 4× `Thread{…runOnUiThread{…}}` → coroutine | ✅ |
-| ContainerManagerPage | 1× `Handler.post` → coroutine | ✅ |
-| SecurityAuditPage | 1× `Handler.post` → coroutine | ✅ |
-| SystemMonitorPage | postDelayed refresh cycle + 1× runOnUiThread → coroutine | ✅ |
-
-### P4 (Optional): Integration tests — ⏳ Pending
-
-## Summary of Changes
-
-All legacy `Thread{… runOnUiThread{…}}` and `Handler.post` patterns in shell pages migrated to:
-- `scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)`
-- `scope.launch(IO){… withContext(Main){…}}`
-- `scope.cancel()` in `onDestroy()`
-
-Build: ✅ `assembleDebug` successful (35 tasks, 4 executed, BUILD SUCCESSFUL)
+## Verification
+- APK builds successfully (6938KB)
+- All imports verified, no compilation errors

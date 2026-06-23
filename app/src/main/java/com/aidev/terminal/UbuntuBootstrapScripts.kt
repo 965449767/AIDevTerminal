@@ -539,10 +539,37 @@ AIDEV_PWD_HOOK_EOF
             $(proot_common_env) /bin/sh -lc "${'$'}*"
         }
 
+        fix_bashrc() {
+          local bashrc="${'$'}AIDEV_ROOTFS/root/.bashrc"
+          if [ -f "${'$'}{bashrc}.bak" ]; then
+            cp "${'$'}{bashrc}.bak" "${'$'}bashrc"
+            echo "[OK] 已从 .bashrc.bak 恢复"
+          elif [ -f "${'$'}bashrc" ]; then
+            echo "[OK] 无备份文件，当前 .bashrc 存在，无需修复"
+          else
+            echo "[INFO] .bashrc 不存在，创建默认 .bashrc"
+            mkdir -p "$(dirname "${'$'}bashrc")"
+            cat > "${'$'}bashrc" << 'AIDEV_PWD_HOOK_EOF'
+# AIDEV_PWD_HOOK_BEGIN
+aidev_write_pwd() {
+  pwd > /host-home/.aidev-current-pwd 2>/dev/null || true
+}
+case "${'$'}{PROMPT_COMMAND:-}" in
+  *aidev_write_pwd*) ;;
+  *) PROMPT_COMMAND="aidev_write_pwd${'$'}{PROMPT_COMMAND:+;${'$'}PROMPT_COMMAND}" ;;
+esac
+aidev_write_pwd
+# AIDEV_PWD_HOOK_END
+AIDEV_PWD_HOOK_EOF
+            echo "[OK] 默认 .bashrc 已创建"
+          fi
+        }
+
         case "${'$'}cmd" in
           ubuntu) enter_ubuntu "${'$'}@" ;;
           install-ubuntu) install_ubuntu "${'$'}@" ;;
           aidev-doctor) aidev_doctor_android ;;
+          fix-bashrc) fix_bashrc ;;
           aidev-auto-bootstrap)
             if has_ubuntu; then
               ubuntu_logo "自动进入环境     │"

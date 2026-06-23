@@ -1,7 +1,7 @@
 package com.aidev.terminal
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.Typeface
@@ -189,8 +189,61 @@ class ShellEnhancementsPage : ShellPage {
         }
 
         // 添加别名按钮
-        section.addView(addButton("添加别名") { showAddAliasDialog(aliases) })
+                section.addView(addButton("添加别名") { showAddAliasDialog(aliases) })
+        section.addView(ui.divider())
+        section.addView(buildBashrcSafetySection())
         return section
+    }
+
+    /** 构建"安全工具"区域 */
+    private fun buildBashrcSafetySection(): View {
+        val section = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        section.addView(ui.text("安全工具", DesignTokens.TEXT_H2, ui.palette.text, bold = true).apply {
+            setPadding(0, ui.dp(DesignTokens.SPACE_8), 0, ui.dp(DesignTokens.SPACE_4))
+        })
+
+        val bakFile = File(bashrcFile.parentFile, ".bashrc.bak")
+        val hasBak = bakFile.isFile
+
+        section.addView(ui.muted("自动备份在每次修改 .bashrc 前生成"))
+        if (hasBak) {
+            section.addView(ui.muted("存在备份：.bashrc.bak（${bakFile.length()} 字节）"))
+        }
+
+        val btnRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        btnRow.addView(addButton("恢复 .bashrc 备份") {
+            if (!hasBak) { toast("没有找到备份文件 .bashrc.bak"); return@addButton }
+            scope.launch(Dispatchers.IO) {
+                runCatching {
+                    bakFile.copyTo(bashrcFile, overwrite = true)
+                    withContext(Dispatchers.Main) { toast("已从 .bashrc.bak 恢复"); reload() }
+                }.onFailure { withContext(Dispatchers.Main) { toast("恢复失败：${it.message}") } }
+            }
+        }.apply {
+            setTextColor(if (hasBak) ui.palette.accent else (ui.palette.accent and 0x00FFFFFF) or 0x60000000)
+            isEnabled = hasBak
+        }, LinearLayout.LayoutParams(0, -2, 1f).apply {
+            setMargins(0, 0, ui.dp(4), 0)
+        })
+        btnRow.addView(addButton("修复终端启动问题") {
+            host.openTerminal("aidev-doctor fix-bashrc")
+        }, LinearLayout.LayoutParams(0, -2, 1f).apply {
+            setMargins(ui.dp(4), 0, 0, 0)
+        })
+        section.addView(btnRow)
+        return section
+    }
+
+    /** 自动备份 .bashrc（仅首次） */
+    private fun autoBackupBashrc() {
+        if (!bashrcFile.isFile) return
+        val bak = File(bashrcFile.parentFile, ".bashrc.bak")
+        if (!bak.exists()) bashrcFile.copyTo(bak, overwrite = true)
     }
 
     /** 从 .bashrc 中解析 alias 定义，返回 (别名名, 命令) 列表 */
@@ -271,7 +324,7 @@ class ShellEnhancementsPage : ShellPage {
         }
         box.addView(nameInput)
         box.addView(cmdInput)
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("添加别名")
             .setView(box)
             .setPositiveButton("保存") { _, _ ->
@@ -289,6 +342,7 @@ class ShellEnhancementsPage : ShellPage {
                 // 追加到 .bashrc
                 scope.launch(Dispatchers.IO) {
                     runCatching {
+                        autoBackupBashrc()
                         bashrcFile.appendText("\nalias $name='$cmd'")
                         withContext(Dispatchers.Main) {
                             toast("别名 $name 已添加，新会话生效")
@@ -305,7 +359,7 @@ class ShellEnhancementsPage : ShellPage {
 
     /** 显示删除别名确认对话框 */
     private fun showDeleteAliasDialog(name: String) {
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("删除别名")
             .setMessage("确定要删除别名 $name 吗？")
             .setPositiveButton("删除") { _, _ ->
@@ -324,6 +378,7 @@ class ShellEnhancementsPage : ShellPage {
         }
         scope.launch(Dispatchers.IO) {
             runCatching {
+                autoBackupBashrc()
                 val lines = file.readLines().filter { line ->
                     val trimmed = line.trimStart()
                     !trimmed.startsWith("alias ") || !trimmed.removePrefix("alias ").trim().startsWith("$name=")
@@ -449,7 +504,7 @@ class ShellEnhancementsPage : ShellPage {
             hint = "输入命令，例如 find . -name '*.log' -delete"
             setSingleLine(false)
         }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("添加 One-liner")
             .setView(input)
             .setPositiveButton("保存") { _, _ ->
@@ -472,7 +527,7 @@ class ShellEnhancementsPage : ShellPage {
     private fun showDeleteOnelinerDialog(index: Int) {
         val list = loadOneliners().toMutableList()
         val cmd = list.getOrElse(index) { return }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("删除收藏")
             .setMessage("确定要删除这条命令吗？\n$cmd")
             .setPositiveButton("删除") { _, _ ->
@@ -546,7 +601,7 @@ class ShellEnhancementsPage : ShellPage {
             setPadding(ui.dp(DesignTokens.SPACE_8), ui.dp(DesignTokens.SPACE_4), ui.dp(DesignTokens.SPACE_8), ui.dp(DesignTokens.SPACE_4))
             isClickable = true
             isFocusable = true
-            background = ui.subtleButtonBackground()
+            background = ui.surfaceBackground()
             setOnClickListener {
                 ui.pulse()
                 host.openTerminal(command)

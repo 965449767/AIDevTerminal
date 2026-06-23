@@ -1,7 +1,7 @@
 package com.aidev.terminal
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -586,7 +586,7 @@ class SystemMonitorPage : ShellPage {
             命令: ${proc.command}
         """.trimIndent()
 
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("进程详情")
             .setMessage(detail)
             .setPositiveButton("复制") { _, _ ->
@@ -602,7 +602,7 @@ class SystemMonitorPage : ShellPage {
 
     /** 确认 kill 进程 */
     private fun confirmKillProcess(proc: ProcessInfo) {
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("终止进程")
             .setMessage("确定要终止进程 ${proc.pid} (${proc.command.take(30)}) 吗？")
             .setPositiveButton("终止") { _, _ ->

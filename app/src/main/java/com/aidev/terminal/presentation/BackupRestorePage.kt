@@ -1,7 +1,7 @@
 package com.aidev.terminal.presentation
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.view.View
 import android.widget.CheckBox
 import android.widget.LinearLayout
@@ -206,7 +206,7 @@ class BackupRestorePage(
             } else {
                 "预计很快完成（通常 10-30 秒）"
             }
-            AlertDialog.Builder(activity)
+            MaterialAlertDialogBuilder(activity)
                 .setTitle("确认备份")
                 .setMessage("将备份 ${selectedItems.size} 项数据\n\n$estimate\n\n备份路径: /sdcard/AIDev/backups/")
                 .setPositiveButton("开始备份") { _, _ -> executeBackup() }
@@ -216,7 +216,7 @@ class BackupRestorePage(
     }
 
     private fun showRestoreConfirm() {
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("确认恢复")
             .setMessage("将恢复 ${selectedItems.size} 项数据\n\n备份路径: /sdcard/AIDev/backups/")
             .setPositiveButton("开始恢复") { _, _ -> executeRestore() }
@@ -256,7 +256,7 @@ class BackupRestorePage(
         dialogView.addView(statusText)
         dialogView.addView(itemStatusLayout)
 
-        val dialog = AlertDialog.Builder(activity)
+        val dialog = MaterialAlertDialogBuilder(activity)
             .setTitle("正在备份")
             .setView(dialogView)
             .setCancelable(false)

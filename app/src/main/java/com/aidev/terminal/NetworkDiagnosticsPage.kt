@@ -1,7 +1,7 @@
 package com.aidev.terminal
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -96,7 +96,7 @@ class NetworkDiagnosticsPage : ShellPage {
 
     private fun showPingDialog() {
         val edit = EditText(activity).apply { hint = "输入主机名或IP，如 google.com"; setText("google.com") }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("Ping 测试")
             .setView(edit)
             .setPositiveButton("执行") { _, _ ->
@@ -119,7 +119,7 @@ class NetworkDiagnosticsPage : ShellPage {
                 "执行失败: ${e.message}"
             }
             withContext(Dispatchers.Main) {
-                AlertDialog.Builder(activity)
+                MaterialAlertDialogBuilder(activity)
                     .setTitle("Ping: $host")
                     .setMessage(result.take(4000))
                     .setPositiveButton("复制") { _, _ -> copyText("Ping 结果", result) }
@@ -140,7 +140,7 @@ class NetworkDiagnosticsPage : ShellPage {
         layout.addView(urlEdit)
         layout.addView(methodEdit)
 
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("HTTP 请求")
             .setView(layout)
             .setPositiveButton("发送") { _, _ ->
@@ -181,7 +181,7 @@ class NetworkDiagnosticsPage : ShellPage {
                 "请求失败: ${e.message}"
             }
             withContext(Dispatchers.Main) {
-                AlertDialog.Builder(activity)
+                MaterialAlertDialogBuilder(activity)
                     .setTitle("HTTP $method")
                     .setMessage(result.take(4000))
                     .setPositiveButton("复制") { _, _ -> copyText("HTTP 响应", result) }
@@ -201,7 +201,7 @@ class NetworkDiagnosticsPage : ShellPage {
         layout.addView(hostEdit)
         layout.addView(portEdit)
 
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("端口检查")
             .setView(layout)
             .setPositiveButton("检查") { _, _ ->
@@ -237,7 +237,7 @@ class NetworkDiagnosticsPage : ShellPage {
 
     private fun showDnsDialog() {
         val edit = EditText(activity).apply { hint = "输入域名，如 google.com"; setText("google.com") }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("DNS 查询")
             .setView(edit)
             .setPositiveButton("查询") { _, _ ->
@@ -259,7 +259,7 @@ class NetworkDiagnosticsPage : ShellPage {
                 "解析失败: ${e.message}"
             }
             withContext(Dispatchers.Main) {
-                AlertDialog.Builder(activity)
+                MaterialAlertDialogBuilder(activity)
                     .setTitle("DNS: $domain")
                     .setMessage(result)
                     .setPositiveButton("复制") { _, _ -> copyText("DNS 结果", result) }
@@ -303,7 +303,7 @@ class NetworkDiagnosticsPage : ShellPage {
             sb.append("获取信息失败: ${e.message}")
         }
 
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("网络信息")
             .setMessage(sb.toString())
             .setPositiveButton("复制") { _, _ -> copyText("网络信息", sb.toString()) }

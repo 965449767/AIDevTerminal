@@ -1,7 +1,7 @@
 package com.aidev.terminal
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.Toast
@@ -77,7 +77,7 @@ object TaskManagerHelper {
         onRefresh: () -> Unit
     ) {
         val log = if (task.logFile.exists()) task.logFile.readLines().takeLast(80).joinToString("\n") else "日志不存在：${task.logPath}"
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle(task.id)
             .setMessage("状态：${if (isRunning(task.pid)) "运行中" else "已结束"}\n名称：${task.name}\nPID：${task.pid}\n命令：${task.cmd}\n日志：${task.logPath}\n\n最近日志：\n$log")
             .setPositiveButton("刷新") { _, _ -> onRefresh() }
@@ -95,7 +95,7 @@ object TaskManagerHelper {
         log: String,
         onRefresh: () -> Unit
     ) {
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("任务操作")
             .setItems(arrayOf("日志查看器", "复制日志", "复制日志路径", "终端追踪日志", "导出日志副本", "复制异常片段", "刷新任务页")) { _, which ->
                 when (which) {
@@ -120,7 +120,7 @@ object TaskManagerHelper {
     /** 显示日志查看器弹窗 */
     fun showLogViewer(activity: Activity, ui: AIDevUi, task: EmbeddedTaskInfo) {
         val latest = if (task.logFile.exists()) task.logFile.readLines().takeLast(180).joinToString("\n") else "日志不存在：${task.logPath}"
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("日志：${task.id}")
             .setMessage(latest)
             .setPositiveButton("刷新") { _, _ -> showLogViewer(activity, ui, task) }

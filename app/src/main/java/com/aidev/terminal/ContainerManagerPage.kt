@@ -1,7 +1,7 @@
 package com.aidev.terminal
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -157,7 +157,7 @@ class ContainerManagerPage : ShellPage {
             host.openTerminal("du -sh /* 2>/dev/null | sort -rh | head -20")
         })
         list.addView(ui.actionRow("重新安装 rootfs", "重新下载并安装 Ubuntu 环境") {
-            AlertDialog.Builder(activity)
+            MaterialAlertDialogBuilder(activity)
                 .setTitle("确认重新安装")
                 .setMessage("这将删除当前的 Ubuntu rootfs 并重新安装，所有已安装的包和配置将丢失。确定继续？")
                 .setPositiveButton("确认重装") { _, _ ->
@@ -244,7 +244,7 @@ class ContainerManagerPage : ShellPage {
      * 显示项目隔离说明
      */
     private fun showProjectIsolationInfo(title: String, content: String) {
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("$title 环境隔离说明")
             .setMessage(content)
             .setPositiveButton("复制说明") { _, _ ->
@@ -270,7 +270,7 @@ class ContainerManagerPage : ShellPage {
 
 注意：恢复过程需要网络连接，且可能需要较长时间。建议先备份重要数据。"""
 
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("从包列表恢复")
             .setMessage(info)
             .setPositiveButton("执行恢复") { _, _ ->

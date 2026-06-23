@@ -1,7 +1,7 @@
 package com.aidev.terminal
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -169,7 +169,7 @@ class KnowledgeBasePage : ShellPage {
         }
 
     private fun showItemMenu(item: KnowledgeItem) {
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle(item.title)
             .setMessage("${item.cmd}\n\n${item.desc}")
             .setPositiveButton("复制命令") { _, _ ->

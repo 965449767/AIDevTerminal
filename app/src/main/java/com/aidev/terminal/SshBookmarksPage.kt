@@ -1,6 +1,7 @@
 package com.aidev.terminal
 
 import android.app.Activity
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import android.content.DialogInterface
 import android.graphics.Typeface
 import android.text.InputType
@@ -164,7 +165,7 @@ class SshBookmarksPage : ShellPage {
 
     private fun showSshInstallPrompt(activity: Activity, host: ShellHost, conn: SshConnection) {
         val palette = ui!!.palette
-        val dialog = android.app.AlertDialog.Builder(activity)
+        val dialog = MaterialAlertDialogBuilder(activity)
             .setTitle("SSH 客户端未安装")
             .setMessage("需要在 Ubuntu 中安装 openssh-client，是否继续？")
             .setPositiveButton("安装并连接") { _, _ ->
@@ -189,7 +190,7 @@ class SshBookmarksPage : ShellPage {
             addView(nameInput); addView(hostInput); addView(portInput); addView(userInput)
         }
 
-        android.app.AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("添加 SSH 连接")
             .setView(form)
             .setPositiveButton("添加") { _, _ ->
@@ -215,7 +216,7 @@ class SshBookmarksPage : ShellPage {
 
     private fun showItemMenu(activity: Activity, ui: AIDevUi, host: ShellHost, conn: SshConnection) {
         val items = arrayOf("编辑", "删除", "取消")
-        android.app.AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle(conn.name)
             .setItems(items) { _, which ->
                 when (which) {
@@ -242,7 +243,7 @@ class SshBookmarksPage : ShellPage {
             addView(nameInput); addView(hostInput); addView(portInput); addView(userInput)
         }
 
-        android.app.AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("编辑 SSH 连接")
             .setView(form)
             .setPositiveButton("保存") { _, _ ->

@@ -1,7 +1,7 @@
 package com.aidev.terminal
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -40,6 +40,8 @@ import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
+import kotlin.math.abs
+import android.animation.Animator
 import java.io.File
 
 private data class EmbeddedTermSession(
@@ -54,6 +56,11 @@ private data class EmbeddedVirtualKey(
     val input: String,
     val swipeCommand: String = "",
     val id: String = label
+)
+
+private data class KeyAlias(
+    val name: String,
+    val value: String
 )
 
 private data class TerminalCompletion(
@@ -113,6 +120,13 @@ class EmbeddedTerminalPage : ShellPage {
     private val sharedHandler = Handler(Looper.getMainLooper())
 
     private var manualTuiOverride = false
+
+    private var isRearranging = false
+    private var keyboardView: LinearLayout? = null
+    private var currentKeyOrder = mutableListOf<String>()
+    private var selectedKeyView: View? = null
+    private var wiggleAnimator: android.animation.ValueAnimator? = null
+    private val SWIPE_THRESHOLD_DP = 72
 
     private fun updateTuiMode() {
         val s = session ?: return
@@ -203,7 +217,8 @@ class EmbeddedTerminalPage : ShellPage {
         root.addView(terminalView, LinearLayout.LayoutParams(-1, 0, 1f))
         root.addView(inputProxy, LinearLayout.LayoutParams(1, 1))
         root.addView(completionBar(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(32)))
-        root.addView(keys(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(70)))
+        keyboardView = keys(activity, ui)
+        root.addView(keyboardView, LinearLayout.LayoutParams(-1, ui.dp(70)))
         ensureSession(activity)
         initPwdObserver(activity)
         startShizukuBridge(activity)
@@ -228,14 +243,9 @@ class EmbeddedTerminalPage : ShellPage {
                 textSize = 11f
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
+                gravity = Gravity.CENTER_VERTICAL
                 setTextColor(0xFF9CA3AF.toInt())
-                setOnClickListener {
-                    AlertDialog.Builder(activity)
-                        .setTitle("终端状态")
-                        .setMessage("Ubuntu：自动进入已开启\n字号：${currentFontSp(activity).toInt()}sp\n运行：PRoot\n手势：双指缩放已开启\n虚拟键：点击为主功能，上滑为拓展功能，长按可自定义")
-                        .setPositiveButton("知道了", null)
-                        .show()
-                }
+                includeFontPadding = false
                 setOnLongClickListener {
                     showFontDialog(activity)
                     true
@@ -249,7 +259,7 @@ class EmbeddedTerminalPage : ShellPage {
         }
 
     private fun terminalStatus(activity: Activity): String =
-        "Ubuntu · ${currentFontSp(activity).toInt()}sp · PRoot · Auto"
+        "${currentFontSp(activity).toInt()}sp"
 
     private fun refreshStatus(activity: Activity) {
         if (::statusText.isInitialized) statusText.text = terminalStatus(activity)
@@ -420,6 +430,7 @@ class EmbeddedTerminalPage : ShellPage {
         TextView(activity).apply {
             gravity = Gravity.CENTER
             textSize = 11f
+            includeFontPadding = false
             val on = SyncCoordinator.isEnabled(activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
             text = if (on) "●" else "○"
             setTextColor(if (on) DesignTokens.ACCENT else 0xFF9CA3AF.toInt())
@@ -461,7 +472,8 @@ class EmbeddedTerminalPage : ShellPage {
     private fun tuiIndicatorView(activity: Activity, ui: AIDevUi): TextView =
         TextView(activity).apply {
             gravity = Gravity.CENTER
-            textSize = 12f
+            textSize = 11f
+            includeFontPadding = false
             text = "T"
             setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(if (tuiActive) DesignTokens.ACCENT else 0xFF9CA3AF.toInt())
@@ -568,7 +580,7 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun searchGroupedActionMenu(activity: Activity, title: String, prefKey: String, actions: List<Pair<String, () -> Unit>>) {
         val edit = EditText(activity).apply { hint = "输入 ai、log、端口、会话、显示" }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("搜索$title")
             .setView(edit)
             .setPositiveButton("搜索") { _, _ ->
@@ -606,7 +618,7 @@ class EmbeddedTerminalPage : ShellPage {
     private fun showShellEnhancements(activity: Activity) {
         val page = ShellEnhancementsPage()
         val view = page.create(activity, ui ?: AIDevUi(activity, activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)), ShellHost(activity, activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE), ui ?: AIDevUi(activity, activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))))
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("Shell 增强")
             .setView(view)
             .setNegativeButton("关闭") { _, _ -> page.onSelected(activity, view) }
@@ -811,7 +823,7 @@ class EmbeddedTerminalPage : ShellPage {
         } else {
             arrayOf("补全", "执行并回车", "复制命令", "固定到常用")
         }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle(item.label)
             .setItems(options) { _, which ->
                 when (options[which]) {
@@ -896,22 +908,234 @@ class EmbeddedTerminalPage : ShellPage {
         refreshStatus(activity)
     }
 
-    private fun keys(activity: Activity, ui: AIDevUi): View =
+    private fun keys(activity: Activity, ui: AIDevUi): LinearLayout =
         LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(0xFF111418.toInt())
             setPadding(ui.dp(4), ui.dp(3), ui.dp(4), ui.dp(3))
-            embeddedKeys(activity).chunked(6).forEach { rowKeys ->
-                addView(LinearLayout(activity).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    rowKeys.forEachIndexed { index, key ->
-                        addView(shortcutKey(activity, ui, key), LinearLayout.LayoutParams(0, ui.dp(30), 1f).apply {
-                            setMargins(if (index == 0) 0 else ui.dp(2), ui.dp(1), ui.dp(2), ui.dp(1))
-                        })
+            keyboardView = this
+            currentKeyOrder = loadKeyOrder(activity)
+            buildKeyboardRows(activity, ui, getOrderedKeys(activity))
+        }
+
+    private fun buildKeyboardRows(activity: Activity, ui: AIDevUi, keys: List<EmbeddedVirtualKey>) {
+        keyboardView?.removeAllViews()
+        keys.chunked(6).forEach { rowKeys ->
+            keyboardView?.addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                rowKeys.forEachIndexed { index, key ->
+                    addView(shortcutKey(activity, ui, key), LinearLayout.LayoutParams(0, ui.dp(30), 1f).apply {
+                        setMargins(if (index == 0) 0 else ui.dp(2), ui.dp(1), ui.dp(2), ui.dp(1))
+                    })
+                }
+            }, LinearLayout.LayoutParams(-1, 0, 1f))
+        }
+    }
+
+    private fun getOrderedKeys(activity: Activity): List<EmbeddedVirtualKey> {
+        val all = embeddedKeys(activity)
+        val keyMap = all.associateBy { it.id }
+        val ordered = currentKeyOrder.mapNotNull { keyMap[it] }
+        val rest = all.filter { it.id !in currentKeyOrder }
+        return ordered + rest
+    }
+
+    private fun loadKeyOrder(activity: Activity): MutableList<String> {
+        val raw = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+            .getString("terminal_key_order", "") ?: ""
+        if (raw.isBlank()) return embeddedKeys(activity).map { it.id }.toMutableList()
+        return raw.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toMutableList()
+    }
+
+    private fun saveKeyOrder(activity: Activity) {
+        val raw = currentKeyOrder.joinToString(",")
+        activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+            .edit().putString("terminal_key_order", raw).apply()
+    }
+
+    private fun enterRearrangeMode(activity: Activity, ui: AIDevUi) {
+        isRearranging = true
+        hapticTap(activity)
+        setButtonsRearrangeStyle(true)
+    }
+
+    private fun exitRearrangeMode(activity: Activity, ui: AIDevUi, save: Boolean) {
+        if (save) saveKeyOrder(activity)
+        isRearranging = false
+        ctrlLatched = false
+        hapticTap(activity)
+        setButtonsRearrangeStyle(false)
+        refreshKeyboard(activity)
+    }
+
+    private fun setButtonsRearrangeStyle(rearranging: Boolean) {
+        keyboardView?.let { kb ->
+            if (rearranging) {
+                kb.setBackgroundColor(0xFF1A2240.toInt())
+            } else {
+                kb.setBackgroundColor(0xFF111418.toInt())
+                selectedKeyView = null
+                stopWiggle()
+            }
+            val strokeWidth = ui?.dp(1) ?: 1
+            val accent = ui?.palette?.accent ?: 0xFF7C3AED.toInt()
+            for (ri in 0 until kb.childCount) {
+                val row = kb.getChildAt(ri) as? ViewGroup ?: continue
+                for (ci in 0 until row.childCount) {
+                    val btn = row.getChildAt(ci)
+                    val gd = btn.background as? android.graphics.drawable.GradientDrawable
+                    if (rearranging) {
+                        gd?.setColor(0xFF2D3748.toInt())
+                        gd?.setStroke(strokeWidth, 0xFF5A6A8A.toInt())
+                    } else {
+                        gd?.setStroke(0, 0)
+                        val id = btn.tag as? String ?: continue
+                        val isC = id == "ctrl"
+                        gd?.setColor(if (isC && ctrlLatched) 0xFF374151.toInt() else 0xFF1F2937.toInt())
                     }
-                }, LinearLayout.LayoutParams(-1, 0, 1f))
+                }
+            }
+            if (rearranging) startWiggle()
+        }
+    }
+
+    private fun startWiggle() {
+        val kb = keyboardView ?: return
+        val buttons = mutableListOf<View>()
+        for (ri in 0 until kb.childCount) {
+            val row = kb.getChildAt(ri) as? ViewGroup ?: continue
+            for (ci in 0 until row.childCount) buttons.add(row.getChildAt(ci))
+        }
+        wiggleAnimator?.cancel()
+        wiggleAnimator = android.animation.ValueAnimator.ofFloat(-2.5f, 2.5f).apply {
+            duration = 300
+            repeatMode = android.animation.ValueAnimator.REVERSE
+            repeatCount = android.animation.ValueAnimator.INFINITE
+            addUpdateListener { anim ->
+                val a = anim.animatedValue as Float
+                buttons.forEach { it.rotation = a }
+            }
+            start()
+        }
+    }
+
+    private fun stopWiggle(animate: Boolean = true) {
+        wiggleAnimator?.cancel()
+        wiggleAnimator = null
+        val kb = keyboardView ?: return
+        val buttons = mutableListOf<View>()
+        for (ri in 0 until kb.childCount) {
+            val row = kb.getChildAt(ri) as? ViewGroup ?: continue
+            for (ci in 0 until row.childCount) buttons.add(row.getChildAt(ci))
+        }
+        if (animate && buttons.isNotEmpty()) {
+            val startRots = buttons.map { it.rotation }
+            android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = 200
+                addUpdateListener { anim ->
+                    val t = anim.animatedFraction
+                    val ease = if (t < 0.5f) 2f * t * t else 1f - (-2f * t * t + 4f * t - 1f) / 2f
+                    buttons.forEachIndexed { i, btn ->
+                        btn.rotation = startRots[i] * (1f - ease)
+                    }
+                }
+                addListener(object : android.animation.AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: android.animation.Animator) { buttons.forEach { it.rotation = 0f } }
+                })
+                start()
+            }
+        } else {
+            buttons.forEach { it.rotation = 0f }
+        }
+    }
+
+    private fun applySelectedVisual(btn: View) {
+        val gd = btn.background as? android.graphics.drawable.GradientDrawable
+        gd?.setStroke(ui?.dp(2) ?: 2, ui?.palette?.accent ?: 0xFF7C3AED.toInt())
+        btn.scaleX = 1.06f
+        btn.scaleY = 1.06f
+        btn.alpha = 0.7f
+    }
+
+    private fun applyDefaultVisual(btn: View) {
+        val gd = btn.background as? android.graphics.drawable.GradientDrawable
+        gd?.setStroke(ui?.dp(1) ?: 1, 0xFF5A6A8A.toInt())
+        btn.scaleX = 1f
+        btn.scaleY = 1f
+        btn.alpha = 1f
+    }
+
+    private fun animateSwap(v1: View, v2: View, ui: AIDevUi) {
+        val loc1 = IntArray(2)
+        val loc2 = IntArray(2)
+        v1.getLocationOnScreen(loc1)
+        v2.getLocationOnScreen(loc2)
+        val dx = loc2[0] - loc1[0]
+        val dy = loc2[1] - loc1[1]
+        android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 160
+            addUpdateListener { anim ->
+                val t = anim.animatedFraction
+                v1.translationX = dx * t
+                v1.translationY = dy * t
+                v2.translationX = -dx * t
+                v2.translationY = -dy * t
+            }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    v1.translationX = 0f; v1.translationY = 0f
+                    v2.translationX = 0f; v2.translationY = 0f
+                    swapButtonViews(v1, v2, ui)
+                }
+            })
+            start()
+        }
+    }
+
+    private fun swapButtonViews(v1: View, v2: View, ui: AIDevUi) {
+        val row1 = v1.parent as ViewGroup
+        val row2 = v2.parent as ViewGroup
+        val idx1 = row1.indexOfChild(v1)
+        val idx2 = row2.indexOfChild(v2)
+        row1.removeView(v1)
+        row2.removeView(v2)
+        row1.addView(v2, idx1)
+        row2.addView(v1, idx2)
+        fun fixMargin(v: View, idx: Int) {
+            val lp = v.layoutParams as? LinearLayout.LayoutParams ?: return
+            lp.setMargins(if (idx == 0) 0 else ui.dp(2), ui.dp(1), ui.dp(2), ui.dp(1))
+            v.layoutParams = lp
+        }
+        fixMargin(v2, idx1)
+        fixMargin(v1, idx2)
+        val id1 = v1.tag as? String
+        val id2 = v2.tag as? String
+        if (id1 != null && id2 != null) {
+            val i1 = currentKeyOrder.indexOf(id1)
+            val i2 = currentKeyOrder.indexOf(id2)
+            if (i1 >= 0 && i2 >= 0) {
+                currentKeyOrder[i1] = id2
+                currentKeyOrder[i2] = id1
             }
         }
+        // 闪烁确认
+        android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 250
+            addUpdateListener { anim ->
+                val t = anim.animatedFraction
+                val blink = if (t < 0.5f) 1f - t * 2f else (t - 0.5f) * 2f
+                v1.alpha = 1f - blink * 0.4f
+                v2.alpha = 1f - blink * 0.4f
+            }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) { v1.alpha = 1f; v2.alpha = 1f; applyDefaultVisual(v1); applyDefaultVisual(v2) }
+            })
+            start()
+        }
+        // 重新开始抖动
+        stopWiggle(false)
+        startWiggle()
+    }
 
     private fun embeddedKeys(activity: Activity): List<EmbeddedVirtualKey> {
         val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
@@ -942,33 +1166,75 @@ class EmbeddedTerminalPage : ShellPage {
             setTextColor(0xFFD1D5DB.toInt())
             gravity = Gravity.CENTER
             includeFontPadding = false
-            if (key.input == "__CTRL__") tag = "ctrl_key"
+            tag = key.id
             background = android.graphics.drawable.GradientDrawable().apply {
                 setColor(if (key.input == "__CTRL__" && ctrlLatched) 0xFF374151.toInt() else 0xFF1F2937.toInt())
                 cornerRadius = ui.dp(8).toFloat()
             }
+            var downX = 0f
             var downY = 0f
             setOnTouchListener { _, event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
+                        downX = event.rawX
                         downY = event.rawY
-                        false
-                    }
-                    MotionEvent.ACTION_UP -> {
-                        val swipeUp = downY - event.rawY > ui.dp(24)
-                        if (swipeUp && key.swipeCommand.isNotBlank()) {
-                            hapticTap(activity)
-                            sendSwipeAction(key.swipeCommand)
+                        if (isRearranging) {
+                            wiggleAnimator?.pause()
+                            applySelectedVisual(this@apply)
                             true
                         } else false
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        if (isRearranging) {
+                            val dx = event.rawX - downX
+                            if (dx > ui.dp(SWIPE_THRESHOLD_DP) && abs(event.rawY - downY) < ui.dp(32)) {
+                                applyDefaultVisual(this@apply)
+                                selectedKeyView = null
+                                wiggleAnimator?.resume()
+                                exitRearrangeMode(activity, ui, true)
+                                true
+                            } else {
+                                val tapped = this@apply
+                                if (tapped == selectedKeyView) {
+                                    applyDefaultVisual(tapped)
+                                    selectedKeyView = null
+                                    wiggleAnimator?.resume()
+                                } else if (selectedKeyView == null) {
+                                    selectedKeyView = tapped
+                                } else {
+                                    val source = selectedKeyView!!
+                                    selectedKeyView = null
+                                    applyDefaultVisual(source)
+                                    applyDefaultVisual(tapped)
+                                    hapticTap(activity)
+                                    animateSwap(source, tapped, ui)
+                                }
+                                true
+                            }
+                        } else {
+                            val dx = event.rawX - downX
+                            val dy = downY - event.rawY
+                            if (dx < -ui.dp(SWIPE_THRESHOLD_DP) && abs(dy) < ui.dp(32)) {
+                                enterRearrangeMode(activity, ui)
+                                true
+                            } else if (dy > ui.dp(24) && key.swipeCommand.isNotBlank()) {
+                                hapticTap(activity)
+                                sendSwipeAction(key.swipeCommand)
+                                true
+                            } else false
+                        }
                     }
                     else -> false
                 }
             }
-            setOnClickListener { handleVirtualKeyTap(activity, key) }
+            setOnClickListener {
+                if (!isRearranging) handleVirtualKeyTap(activity, key)
+            }
             setOnLongClickListener {
-                showVirtualKeyMenu(activity, key)
-                true
+                if (!isRearranging) {
+                    showVirtualKeyMenu(activity, key)
+                    true
+                } else true
             }
         }
 
@@ -1022,14 +1288,12 @@ class EmbeddedTerminalPage : ShellPage {
     }
 
     private fun refreshKeyboard(activity: Activity) {
-        val parent = terminalView?.parent as? LinearLayout ?: return
-        val keyboard = parent.getChildAt(parent.childCount - 1) as? ViewGroup ?: return
-        // 找到 Ctrl 键只更新背景色，避免重建整个键盘
-        for (i in 0 until keyboard.childCount) {
-            val row = keyboard.getChildAt(i) as? ViewGroup ?: continue
+        val kb = keyboardView ?: return
+        for (i in 0 until kb.childCount) {
+            val row = kb.getChildAt(i) as? ViewGroup ?: continue
             for (j in 0 until row.childCount) {
                 val key = row.getChildAt(j)
-                if (key.tag == "ctrl_key") {
+                if (key.tag == "ctrl") {
                     key.background = android.graphics.drawable.GradientDrawable().apply {
                         setColor(if (ctrlLatched) 0xFF374151.toInt() else 0xFF1F2937.toInt())
                         cornerRadius = (ui?.dp(8) ?: 8).toFloat()
@@ -1053,65 +1317,190 @@ class EmbeddedTerminalPage : ShellPage {
             EmbeddedVirtualKey("任务", "task-list\n")
         ).toMutableList()
         keys.addAll(parseCustomKeys(prefs.getString("terminal_custom_keys", "") ?: ""))
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("扩展键盘更多")
             .setItems(keys.map { it.label }.toTypedArray()) { _, which -> session?.write(keys[which].input) }
             .show()
     }
 
     private fun showVirtualKeyMenu(activity: Activity, key: EmbeddedVirtualKey) {
-        val swipe = key.swipeCommand.ifBlank { "未设置" }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("${key.label} 键")
-            .setItems(arrayOf("执行上滑功能：$swipe", "自定义此键", "更多快捷键")) { _, which ->
+            .setItems(arrayOf("编辑此键", "更多快捷键")) { _, which ->
                 when (which) {
-                    0 -> sendSwipeAction(key.swipeCommand)
-                    1 -> editVirtualKey(activity, key)
-                    2 -> showExtraKeysMenu(activity)
+                    0 -> editVirtualKey(activity, key)
+                    1 -> showExtraKeysMenu(activity)
                 }
             }
             .show()
     }
 
     private fun editVirtualKey(activity: Activity, key: EmbeddedVirtualKey) {
-        val box = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(ui?.dp(20) ?: 20, ui?.dp(10) ?: 10, ui?.dp(20) ?: 20, 0)
+        val aliases = parseKeyAliases(
+            activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+                .getString("terminal_key_aliases", "") ?: ""
+        )
+
+        val dp = { v: Int -> dp(activity, v) }
+        val pill = { label: String, onClick: () -> Unit ->
+            fillPill(activity, label, onClick)
         }
-        val label = EditText(activity).apply {
+
+        val content = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(10), dp(20), 0)
+        }
+
+        val nameInput = EditText(activity).apply {
             hint = "按钮名称"
             setText(key.label)
         }
-        val tap = EditText(activity).apply {
-            hint = "点击输入，例如 c、\\t、\\e[A"
+        content.addView(nameInput)
+
+        val divider = { ->
+            View(activity).apply {
+                setBackgroundColor(0xFF374151.toInt())
+                layoutParams = LinearLayout.LayoutParams(-1, 1).apply {
+                    topMargin = dp(12); bottomMargin = dp(8)
+                }
+            }
+        }
+
+        // ── 点击输入 section ──
+        content.addView(divider())
+        content.addView(TextView(activity).apply {
+            text = "点击输入"
+            setTextColor(0xFF9CA3AF.toInt())
+            textSize = 13f
+        })
+        val currentTap = if (key.input.isNotEmpty()) "  当前: ${encodeKeyInput(key.input)}" else "  （未设置）"
+        content.addView(TextView(activity).apply {
+            text = currentTap
+            setTextColor(0xFF6B7280.toInt())
+            textSize = 11f
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(4)
+            }
+        })
+        val tapInput = EditText(activity).apply {
+            hint = tapCmdHint()
             setText(encodeKeyInput(key.input))
         }
-        val swipe = EditText(activity).apply {
-            hint = "上滑命令，例如 clear、pwd、grep "
+        content.addView(tapInput)
+
+        val tapPresets = HorizontalScrollView(activity).apply {
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                for (p in listOf("c", "l", "s", "p", "d")) {
+                    addView(pill(p) { tapInput.setText(p); tapInput.setSelection(p.length) })
+                }
+                for (cmd in listOf("clear", "exit", "ssh", "ls -la")) {
+                    val v = "${cmd}\\n"
+                    addView(pill(cmd) { tapInput.setText(v); tapInput.setSelection(v.length) })
+                }
+                for ((lbl, raw) in listOf("↹" to "\\t", "↑" to "\\e[A", "↓" to "\\e[B", "←" to "\\e[D", "→" to "\\e[C", "Home" to "\\e[H", "End" to "\\e[F")) {
+                    addView(pill(lbl) { tapInput.setText(raw); tapInput.setSelection(raw.length) })
+                }
+            })
+            isHorizontalScrollBarEnabled = false
+        }
+        content.addView(tapPresets)
+
+        var tapAliasRow: View? = null
+        var swipeAliasRow: View? = null
+
+        var refreshAliasesFn: () -> Unit = {}
+
+        tapAliasRow = aliasSection(activity, aliases,
+            onFill = { tapInput.setText(encodeKeyInput(it.value)); tapInput.setSelection(encodeKeyInput(it.value).length) },
+            onDelete = { removeKeyAlias(activity, it.name); refreshAliasesFn() },
+            onNew = { showAliasDialog(activity, null) { a -> saveKeyAlias(activity, a.name, a.value); refreshAliasesFn() } }
+        )
+        tapAliasRow?.let { content.addView(it) }
+
+        // ── 上滑命令 section ──
+        content.addView(divider())
+        content.addView(TextView(activity).apply {
+            text = "上滑命令"
+            setTextColor(0xFF9CA3AF.toInt())
+            textSize = 13f
+        })
+        val currentSwipe = if (key.swipeCommand.isNotEmpty()) "  当前: ${encodeKeyInput(key.swipeCommand)}" else "  （未设置）"
+        content.addView(TextView(activity).apply {
+            text = currentSwipe
+            setTextColor(0xFF6B7280.toInt())
+            textSize = 11f
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(4)
+            }
+        })
+        val swipeInput = EditText(activity).apply {
+            hint = "例如 clear、pwd、grep "
             setText(encodeKeyInput(key.swipeCommand))
         }
-        box.addView(label)
-        box.addView(tap)
-        box.addView(swipe)
-        AlertDialog.Builder(activity)
-            .setTitle("自定义虚拟键")
-            .setView(box)
+        content.addView(swipeInput)
+
+        val swipePresets = HorizontalScrollView(activity).apply {
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                for (p in listOf("clear", "ls", "pwd", "grep ", "history", "cd /", "cd -", "help")) {
+                    addView(pill(p) { swipeInput.setText(p); swipeInput.setSelection(p.length) })
+                }
+            })
+            isHorizontalScrollBarEnabled = false
+        }
+        content.addView(swipePresets)
+
+        swipeAliasRow = aliasSection(activity, aliases,
+            onFill = { swipeInput.setText(encodeKeyInput(it.value)); swipeInput.setSelection(encodeKeyInput(it.value).length) },
+            onDelete = { removeKeyAlias(activity, it.name); refreshAliasesFn() },
+            onNew = { showAliasDialog(activity, null) { a -> saveKeyAlias(activity, a.name, a.value); refreshAliasesFn() } }
+        )
+        swipeAliasRow?.let { content.addView(it) }
+
+        refreshAliasesFn = {
+            val raw = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+                .getString("terminal_key_aliases", "") ?: ""
+            val updated = parseKeyAliases(raw)
+            val tapIdx = tapAliasRow?.let { content.indexOfChild(it) } ?: -1
+            val swipeIdx = swipeAliasRow?.let { content.indexOfChild(it) } ?: -1
+            tapAliasRow?.let { content.removeView(it) }
+            swipeAliasRow?.let { content.removeView(it) }
+            tapAliasRow = aliasSection(activity, updated,
+                onFill = { tapInput.setText(encodeKeyInput(it.value)); tapInput.setSelection(encodeKeyInput(it.value).length) },
+                onDelete = { removeKeyAlias(activity, it.name); refreshAliasesFn() },
+                onNew = { showAliasDialog(activity, null) { a -> saveKeyAlias(activity, a.name, a.value); refreshAliasesFn() } }
+            )
+            swipeAliasRow = aliasSection(activity, updated,
+                onFill = { swipeInput.setText(encodeKeyInput(it.value)); swipeInput.setSelection(encodeKeyInput(it.value).length) },
+                onDelete = { removeKeyAlias(activity, it.name); refreshAliasesFn() },
+                onNew = { showAliasDialog(activity, null) { a -> saveKeyAlias(activity, a.name, a.value); refreshAliasesFn() } }
+            )
+            tapAliasRow?.let { content.addView(it, tapIdx.coerceAtLeast(0).coerceAtMost(content.childCount)) }
+            swipeAliasRow?.let { content.addView(it, swipeIdx.coerceAtLeast(0).coerceAtMost(content.childCount)) }
+        }
+
+        val scroll = ScrollView(activity).apply { addView(content) }
+
+        MaterialAlertDialogBuilder(activity)
+            .setTitle("自定义虚拟键: ${key.label}")
+            .setView(scroll)
             .setPositiveButton("保存") { _, _ ->
                 saveKeyOverride(
                     activity,
                     key.id,
                     EmbeddedVirtualKey(
-                        label.text.toString().trim().ifBlank { key.label }.take(8),
-                        decodeKeyInput(tap.text.toString()),
-                        decodeKeyInput(swipe.text.toString()),
+                        nameInput.text.toString().trim().ifBlank { key.label }.take(8),
+                        decodeKeyInput(tapInput.text.toString()),
+                        decodeKeyInput(swipeInput.text.toString()),
                         key.id
                     )
                 )
-                refreshKeyboard(activity)
+                ui?.let { buildKeyboardRows(activity, it, getOrderedKeys(activity)) }
             }
             .setNeutralButton("恢复默认") { _, _ ->
                 removeKeyOverride(activity, key.id)
-                refreshKeyboard(activity)
+                ui?.let { buildKeyboardRows(activity, it, getOrderedKeys(activity)) }
             }
             .setNegativeButton("取消", null)
             .show()
@@ -1151,11 +1540,122 @@ class EmbeddedTerminalPage : ShellPage {
         prefs.edit().putString("terminal_key_overrides", lines.joinToString("\n")).apply()
     }
 
+    private fun parseKeyAliases(raw: String): List<KeyAlias> =
+        raw.lines().mapNotNull { line ->
+            val parts = line.split("\t")
+            val name = parts.getOrNull(0)?.trim().orEmpty()
+            val value = parts.getOrNull(1).orEmpty()
+            if (name.isEmpty()) null else KeyAlias(name, value)
+        }
+
+    private fun saveKeyAlias(activity: Activity, name: String, value: String) {
+        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+        val old = prefs.getString("terminal_key_aliases", "") ?: ""
+        val lines = old.lines().filter { it.isNotBlank() && it.substringBefore("\t") != name }
+        val line = listOf(name, value).joinToString("\t")
+        prefs.edit().putString("terminal_key_aliases", (lines + line).joinToString("\n")).apply()
+    }
+
+    private fun removeKeyAlias(activity: Activity, name: String) {
+        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+        val old = prefs.getString("terminal_key_aliases", "") ?: ""
+        val lines = old.lines().filter { it.isNotBlank() && it.substringBefore("\t") != name }
+        prefs.edit().putString("terminal_key_aliases", lines.joinToString("\n")).apply()
+    }
+
     private fun decodeKeyInput(input: String): String =
         input.replace("\\n", "\n").replace("\\t", "\t").replace("\\e", "\u001b")
 
     private fun encodeKeyInput(input: String): String =
         input.replace("\u001b", "\\e").replace("\n", "\\n").replace("\t", "\\t")
+
+    private fun fillPill(activity: Activity, label: String, onClick: () -> Unit): TextView =
+        TextView(activity).apply {
+            text = label
+            textSize = 12f
+            setTextColor(0xFFD1D5DB.toInt())
+            gravity = Gravity.CENTER
+            setPadding(dp(activity, 10), dp(activity, 4), dp(activity, 10), dp(activity, 4))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xFF1F2937.toInt())
+                cornerRadius = dp(activity, 8).toFloat()
+            }
+            setOnClickListener { onClick() }
+            layoutParams = LinearLayout.LayoutParams(-2, -2).apply {
+                setMargins(0, dp(activity, 2), dp(activity, 6), 0)
+            }
+        }
+
+    private fun aliasSection(
+        activity: Activity,
+        aliases: List<KeyAlias>,
+        onFill: (KeyAlias) -> Unit,
+        onDelete: (KeyAlias) -> Unit,
+        onNew: () -> Unit
+    ): View {
+        val row = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+        }
+        for (a in aliases) {
+            row.addView(fillPill(activity, a.name) { onFill(a) }.apply {
+                setOnLongClickListener {
+                    MaterialAlertDialogBuilder(activity)
+                        .setTitle("删除别名")
+                        .setMessage("删除「${a.name}」？")
+                        .setPositiveButton("删除") { _, _ -> onDelete(a) }
+                        .setNegativeButton("取消", null)
+                        .show()
+                    true
+                }
+            })
+        }
+        row.addView(fillPill(activity, "+ 新建别名") { onNew() }.apply {
+            setTextColor(0xFF60A5FA.toInt())
+        })
+        return HorizontalScrollView(activity).apply {
+            addView(row)
+            isHorizontalScrollBarEnabled = false
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = dp(activity, 4)
+            }
+        }
+    }
+
+    private fun showAliasDialog(activity: Activity, existing: KeyAlias?, onSave: (KeyAlias) -> Unit) {
+        val box = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(activity, 20), dp(activity, 10), dp(activity, 20), 0)
+        }
+        val nameInput = EditText(activity).apply {
+            hint = "别名名称"
+            setText(existing?.name ?: "")
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        val valueInput = EditText(activity).apply {
+            hint = tapCmdHint()
+            setText(encodeKeyInput(existing?.value ?: ""))
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            setLines(3)
+            isVerticalScrollBarEnabled = true
+        }
+        box.addView(nameInput)
+        box.addView(valueInput)
+        MaterialAlertDialogBuilder(activity)
+            .setTitle(if (existing != null) "编辑别名" else "新建别名")
+            .setView(box)
+            .setPositiveButton("保存") { _, _ ->
+                val name = nameInput.text.toString().trim()
+                val value = decodeKeyInput(valueInput.text.toString())
+                if (name.isNotEmpty()) onSave(KeyAlias(name, value))
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun dp(activity: Activity, v: Int): Int =
+        (activity.resources.displayMetrics.density * v + 0.5f).toInt()
+
+    private fun tapCmdHint() = "例如 c、\\n 自动回车、\\t、\\e[A"
 
     private fun fontPx(activity: Activity): Int =
         activity!!.spToPx(currentFontSp(activity))
@@ -1190,7 +1690,7 @@ class EmbeddedTerminalPage : ShellPage {
         }
         box.addView(value)
         box.addView(seek)
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("终端字号")
             .setView(box)
             .setPositiveButton("应用") { _, _ ->
@@ -1288,7 +1788,7 @@ class EmbeddedTerminalPage : ShellPage {
     private fun newSession(activity: Activity) {
         if (sessions.size >= MAX_SESSIONS) {
             val oldest = sessions.firstOrNull()
-            AlertDialog.Builder(activity)
+            MaterialAlertDialogBuilder(activity)
                 .setTitle("会话上限")
                 .setMessage("已达到最大会话数（$MAX_SESSIONS 个）。关闭最早的「${oldest?.title ?: "会话"}」后创建新会话吗？")
                 .setPositiveButton("确认") { _, _ ->
@@ -1322,7 +1822,7 @@ class EmbeddedTerminalPage : ShellPage {
     private fun newAiSession(activity: Activity) {
         if (sessions.size >= MAX_SESSIONS) {
             val oldest = sessions.firstOrNull()
-            AlertDialog.Builder(activity)
+            MaterialAlertDialogBuilder(activity)
                 .setTitle("会话上限")
                 .setMessage("已达到最大会话数（$MAX_SESSIONS 个）。关闭最早的「${oldest?.title ?: "会话"}」后创建新 AI 会话吗？")
                 .setPositiveButton("确认") { _, _ ->
@@ -1350,7 +1850,7 @@ class EmbeddedTerminalPage : ShellPage {
             setText(item.title)
             selectAll()
         }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("重命名会话")
             .setView(edit)
             .setPositiveButton("确定") { _, _ ->

@@ -8,8 +8,7 @@ class KeepAliveBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
         if (action == Intent.ACTION_BOOT_COMPLETED || action == Intent.ACTION_MY_PACKAGE_REPLACED) {
-            val prefs = context.getSharedPreferences("aidev_ui", Context.MODE_PRIVATE)
-            if (prefs.getBoolean("keepalive_auto", true)) {
+            if (PreferencesManager(context).keepaliveAuto) {
                 KeepAliveService.start(context)
             }
         }

@@ -1,7 +1,7 @@
 package com.aidev.terminal
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -82,7 +82,7 @@ class EmbeddedTasksPage : ShellPage {
             currentProjectTask("aidev-agent-context"),
             "aidev-agent-log"
         )
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("任务模板")
             .setItems(names) { _, which -> executeTaskTemplate(names[which], commands[which]) }
             .show()
@@ -90,7 +90,7 @@ class EmbeddedTasksPage : ShellPage {
 
     private fun executeTaskTemplate(name: String, command: String) {
         if (name.contains("修复")) {
-            AlertDialog.Builder(activity)
+            MaterialAlertDialogBuilder(activity)
                 .setTitle("确认执行修复模板")
                 .setMessage("将执行：\n$command\n\n注意：修复模板可能删除缓存、依赖目录或锁文件。")
                 .setPositiveButton("确认执行") { _, _ -> host.openTerminal(command) }
@@ -112,7 +112,7 @@ class EmbeddedTasksPage : ShellPage {
 
     private fun searchTasks(tasks: List<EmbeddedTaskInfo>) {
         val edit = android.widget.EditText(activity).apply { setHint("输入任务名、命令、PID 或 ID") }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("搜索任务")
             .setView(edit)
             .setPositiveButton("搜索") { _, _ ->
@@ -127,7 +127,7 @@ class EmbeddedTasksPage : ShellPage {
                 if (matches.isEmpty()) {
                     Toast.makeText(activity, "没有匹配任务", Toast.LENGTH_SHORT).show()
                 } else {
-                    AlertDialog.Builder(activity)
+                    MaterialAlertDialogBuilder(activity)
                         .setTitle("搜索结果")
                         .setItems(matches.map { "${it.id}\n${it.cmd.ifBlank { it.name }}" }.toTypedArray()) { _, which ->
                             TaskManagerHelper.showTask(activity, ui, host, matches[which]) { reload() }
@@ -150,7 +150,7 @@ class EmbeddedTasksPage : ShellPage {
             Toast.makeText(activity, "最近日志未发现明显异常", Toast.LENGTH_SHORT).show()
             return
         }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("异常日志")
             .setItems(matches.map { "${it.first.name}\n${it.second.lineSequence().firstOrNull().orEmpty()}" }.toTypedArray()) { _, which ->
                 showErrorLogDetail(matches[which].first, matches[which].second)
@@ -159,7 +159,7 @@ class EmbeddedTasksPage : ShellPage {
     }
 
     private fun showErrorLogDetail(file: File, snippet: String) {
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("异常片段：${file.name}")
             .setMessage(snippet)
             .setPositiveButton("复制片段") { _, _ ->

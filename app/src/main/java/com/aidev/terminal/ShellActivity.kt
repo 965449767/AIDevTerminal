@@ -1,7 +1,7 @@
 package com.aidev.terminal
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -172,7 +172,7 @@ class ShellActivity : Activity() {
             "AI 日志摘要",
             "AI 代理日志"
         )
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("命令面板")
             .setItems(items) { _, which ->
                 handleCommandPalette(which)
@@ -185,14 +185,14 @@ class ShellActivity : Activity() {
     private fun showRecentProjectActions() {
         val rows = prefs.getString("project_action_history", "")?.lines()?.filter { it.isNotBlank() }.orEmpty().takeLast(20).reversed()
         if (rows.isEmpty()) {
-            AlertDialog.Builder(this)
+            MaterialAlertDialogBuilder(this)
                 .setTitle("最近命令")
                 .setMessage("暂无最近项目操作。")
                 .setPositiveButton("关闭", null)
                 .show()
             return
         }
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("最近命令")
             .setItems(rows.map { row ->
                 val parts = row.split("\t", limit = 4)
@@ -209,7 +209,7 @@ class ShellActivity : Activity() {
 
     private fun showCommandPaletteSearch(items: Array<String>) {
         val edit = EditText(this).apply { hint = "输入 git、test、build、fix、log、ubuntu" }
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("搜索命令")
             .setView(edit)
             .setPositiveButton("搜索") { _, _ ->
@@ -218,7 +218,7 @@ class ShellActivity : Activity() {
                     .filter { keyword.isBlank() || commandMatches(it.second, keyword) }
                     .take(30)
                 if (matches.isEmpty()) return@setPositiveButton
-                AlertDialog.Builder(this)
+                MaterialAlertDialogBuilder(this)
                     .setTitle("命令结果")
                     .setItems(matches.map { it.second }.toTypedArray()) { _, which ->
                         handleCommandPalette(matches[which].first)
@@ -295,7 +295,7 @@ class ShellActivity : Activity() {
             return
         }
         val command = ProjectCommands.repairCommand(dir)
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle("确认修复当前项目")
             .setMessage("将进入：${dir.absolutePath}\n\n执行：\n$command\n\n注意：某些修复会删除缓存、依赖目录或锁文件，请确认当前项目不需要保留这些中间文件。")
             .setPositiveButton("确认执行") { _, _ ->
@@ -539,7 +539,7 @@ class ShellActivity : Activity() {
                 // 首次启动时提示用户，但不强制跳转（避免打断用户体验）
                 if (!prefs.getBoolean("write_settings_prompted", false)) {
                     prefs.edit().putBoolean("write_settings_prompted", true).apply()
-                    AlertDialog.Builder(this)
+                    MaterialAlertDialogBuilder(this)
                         .setTitle("需要修改系统设置权限")
                         .setMessage("亮度调节等功能需要\"修改系统设置\"权限。请在接下来的系统设置中开启此权限。")
                         .setPositiveButton("去开启") { _, _ ->

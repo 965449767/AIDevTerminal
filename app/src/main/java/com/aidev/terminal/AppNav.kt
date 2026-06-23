@@ -8,19 +8,17 @@ object AppNav {
     private val fullOrder = listOf(
         ShellActivity::class.java,
         AIAgentActivity::class.java,
-        ServerCenterActivity::class.java,
-        SettingsActivity::class.java
+        ServerCenterActivity::class.java
     )
 
     private val bottomOrder = listOf(
-        ShellActivity::class.java,
-        SettingsActivity::class.java
+        ShellActivity::class.java
     )
 
     fun bottom(activity: Activity): List<Pair<String, () -> Unit>> = listOf(
         "终端" to { openTerminal(activity, "") },
         "文件" to { ShellActivity.open(activity, ShellActivity.TAB_FILES) },
-        "设置" to { open(activity, SettingsActivity::class.java) },
+        "设置" to { ShellActivity.open(activity, ShellActivity.TAB_SETTINGS) },
         "知识库" to { ShellActivity.open(activity, ShellActivity.TAB_KNOWLEDGE) }
     )
 

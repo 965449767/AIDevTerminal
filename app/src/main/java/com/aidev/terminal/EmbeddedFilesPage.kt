@@ -1,7 +1,7 @@
 package com.aidev.terminal
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -104,7 +104,7 @@ class EmbeddedFilesPage : ShellPage {
         )
         val recent = recentFileMenuLabels().filter { label -> actions.any { it.first == label } }
         val display = recent.map { "最近 · ${it.substringAfter(" · ")}" to it } + actions.filterNot { recent.contains(it.first) }.map { it.first to it.first }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("文件更多")
             .setItems(display.map { it.first }.toTypedArray()) { _, which ->
                 val original = display[which].second
@@ -117,14 +117,14 @@ class EmbeddedFilesPage : ShellPage {
 
     private fun searchFileMoreMenu(actions: List<Pair<String, () -> Unit>>) {
         val edit = EditText(activity).apply { hint = "输入 删除、项目、权限、路径" }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("搜索文件更多")
             .setView(edit)
             .setPositiveButton("搜索") { _, _ ->
                 val keyword = edit.text.toString().trim()
                 val matches = actions.filter { keyword.isBlank() || it.first.contains(keyword, true) }.take(30)
                 if (matches.isEmpty()) return@setPositiveButton toast("没有匹配项")
-                AlertDialog.Builder(activity)
+                MaterialAlertDialogBuilder(activity)
                     .setTitle("搜索结果")
                     .setItems(matches.map { it.first }.toTypedArray()) { _, which ->
                         rememberFileMenuLabel(matches[which].first)
@@ -294,7 +294,7 @@ class EmbeddedFilesPage : ShellPage {
 
     private fun deleteSelected() {
         val src = selected() ?: return toast("请先选择文件或目录")
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("删除")
             .setMessage(src.absolutePath)
             .setPositiveButton("删除") { _, _ ->
@@ -319,7 +319,7 @@ class EmbeddedFilesPage : ShellPage {
         if (!isLikelyText(src)) return showBinaryInfo(src)
         if (src.length() > 512 * 1024) return showBinaryInfo(src)
         val text = runCatching { src.readText() }.getOrElse { "无法读取：${it.message}" }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle(src.name)
             .setMessage(text.take(12000))
             .setPositiveButton("复制内容") { _, _ ->
@@ -347,7 +347,7 @@ class EmbeddedFilesPage : ShellPage {
             gravity = Gravity.START or Gravity.TOP
         }
         val scroll = ScrollView(activity).apply { addView(edit) }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("编辑：${src.name}")
             .setView(scroll)
             .setPositiveButton("保存") { _, _ ->
@@ -370,7 +370,7 @@ class EmbeddedFilesPage : ShellPage {
 
     private fun editorMore(src: File, content: String) {
         val backup = File(src.parentFile ?: activeDir(), "${src.name}.bak")
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("编辑操作")
             .setItems(arrayOf("运行当前文件", "查找内容", "另存编辑内容", "恢复备份", "复制编辑内容")) { _, which ->
                 when (which) {
@@ -394,7 +394,7 @@ class EmbeddedFilesPage : ShellPage {
                 if (line.contains(keyword, ignoreCase = true)) "${index + 1}: $line" else null
             }.take(80)
             if (matches.isEmpty()) return@inputAllowAny toast("未找到匹配内容")
-            AlertDialog.Builder(activity)
+            MaterialAlertDialogBuilder(activity)
                 .setTitle("查找结果")
                 .setMessage(matches.joinToString("\n"))
                 .setPositiveButton("复制结果") { _, _ ->
@@ -432,7 +432,7 @@ class EmbeddedFilesPage : ShellPage {
 
     private fun restoreBackup(src: File, backup: File) {
         if (!backup.isFile) return toast("未找到备份文件")
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("恢复备份")
             .setMessage("将用备份覆盖当前文件：\n${backup.absolutePath}")
             .setPositiveButton("恢复") { _, _ ->
@@ -487,7 +487,7 @@ class EmbeddedFilesPage : ShellPage {
             File(dir, "pyproject.toml").exists() -> "cd \"${dir.absolutePath}\" && python3 -m pip install . --break-system-packages"
             else -> "cd \"${dir.absolutePath}\" && ls -la"
         }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("项目识别")
             .setMessage(body)
             .setPositiveButton("运行建议") { _, _ ->
@@ -507,7 +507,7 @@ class EmbeddedFilesPage : ShellPage {
     private fun projectWorkspace() {
         val dir = selected()?.takeIf { it.isDirectory } ?: activeDir()
         val items = arrayOf("标记当前项目", "清除当前项目", "项目概览", "项目健康检查", "运行修复建议", "最近操作", "项目脚本", "复制诊断报告", "复制修复命令", "项目识别", "查看 README", "Git 状态", "Git Diff", "安装依赖", "运行开发服务", "运行测试", "构建项目", "终端进入目录", "复制项目命令", "导出项目摘要")
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("项目工作区")
             .setItems(items) { _, which ->
                 when (which) {
@@ -577,7 +577,7 @@ class EmbeddedFilesPage : ShellPage {
             "构建命令：cd \"${dir.absolutePath}\" && ${ProjectCommands.buildCommand(dir)}",
             "修复命令：cd \"${dir.absolutePath}\" && ${ProjectCommands.repairCommand(dir)}"
         ).joinToString("\n")
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("项目概览")
             .setMessage(body)
             .setPositiveButton("复制") { _, _ ->
@@ -625,7 +625,7 @@ class EmbeddedFilesPage : ShellPage {
 
     private fun confirmProjectRepair(dir: File) {
         val command = "cd \"${dir.absolutePath}\" && ${ProjectCommands.repairCommand(dir)}"
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("确认修复项目")
             .setMessage("项目：${dir.name}\n路径：${dir.absolutePath}\n\n执行：\n$command\n\n注意：某些修复会删除缓存、依赖目录或锁文件。")
             .setPositiveButton("确认执行") { _, _ ->
@@ -640,7 +640,7 @@ class EmbeddedFilesPage : ShellPage {
         val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
         val rows = prefs.getString("project_action_history", "")?.lines()?.filter { it.isNotBlank() }.orEmpty().takeLast(20).reversed()
         if (rows.isEmpty()) return toast("暂无项目操作历史")
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("最近项目操作")
             .setItems(rows.map { row ->
                 val parts = row.split("\t", limit = 4)
@@ -673,7 +673,7 @@ class EmbeddedFilesPage : ShellPage {
             .take(30)
             .toList()
         if (scripts.isEmpty()) return toast("未识别到 npm scripts")
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("项目脚本")
             .setItems(scripts.map { "${it.first}\n${it.second}" }.toTypedArray()) { _, which ->
                 runInTerminal("cd \"${dir.absolutePath}\" && npm run ${scripts[which].first}")
@@ -716,7 +716,7 @@ class EmbeddedFilesPage : ShellPage {
             else -> emptyList()
         }
         if (scripts.isEmpty()) return toast("未识别到可用项目脚本")
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("项目脚本")
             .setItems(scripts.map { "${it.first}\n${it.second}" }.toTypedArray()) { _, which ->
                 runInTerminal("cd \"${dir.absolutePath}\" && ${scripts[which].second}")
@@ -757,7 +757,7 @@ class EmbeddedFilesPage : ShellPage {
             return
         }
         val text = runCatching { readme.readText().take(16000) }.getOrElse { "读取失败：${it.message}" }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle(readme.name)
             .setMessage(text)
             .setPositiveButton("编辑") { _, _ ->
@@ -809,7 +809,7 @@ class EmbeddedFilesPage : ShellPage {
             val versionCode = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode.toString() else info.versionCode.toString()
             "包名：${info.packageName}\n版本名：$versionName\n版本号：$versionCode\n大小：${formatSize(file.length())}\n路径：${file.absolutePath}"
         }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("APK 信息")
             .setMessage(body)
             .setPositiveButton("复制路径") { _, _ -> copySelectedPath() }
@@ -820,7 +820,7 @@ class EmbeddedFilesPage : ShellPage {
     private fun showImageInfo(file: File) {
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, options)
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("图片信息")
             .setMessage("文件：${file.name}\n尺寸：${options.outWidth} × ${options.outHeight}\n类型：${options.outMimeType ?: file.extension}\n大小：${formatSize(file.length())}\n路径：${file.absolutePath}")
             .setPositiveButton("复制路径") { _, _ -> copySelectedPath() }
@@ -829,7 +829,7 @@ class EmbeddedFilesPage : ShellPage {
     }
 
     private fun showBinaryInfo(file: File) {
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("文件信息")
             .setMessage("文件：${file.name}\n类型：${file.extension.ifBlank { "未知/二进制" }}\n大小：${formatSize(file.length())}\n路径：${file.absolutePath}\n\n该文件不适合直接作为文本预览。")
             .setPositiveButton("复制路径") { _, _ -> copySelectedPath() }
@@ -874,7 +874,7 @@ class EmbeddedFilesPage : ShellPage {
                 toast("没有找到匹配文件")
                 return@inputAllowAny
             }
-            AlertDialog.Builder(activity)
+            MaterialAlertDialogBuilder(activity)
                 .setTitle("搜索结果")
                 .setItems(matches.map { it.absolutePath.removePrefix(base.absolutePath).ifBlank { it.absolutePath } }.toTypedArray()) { _, which ->
                     val file = matches[which]
@@ -904,7 +904,7 @@ class EmbeddedFilesPage : ShellPage {
             toast("暂无收藏路径")
             return
         }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("路径收藏")
             .setItems(favorites.toTypedArray()) { _, which ->
                 val dir = File(favorites[which])
@@ -932,7 +932,7 @@ class EmbeddedFilesPage : ShellPage {
             "任务日志" to File(activity.filesDir, "home/tasks")
         ).filter { it.second.exists() }
         if (dirs.isEmpty()) return toast("暂无可用常用目录")
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("常用目录")
             .setItems(dirs.map { "${it.first}\n${it.second.absolutePath}" }.toTypedArray()) { _, which ->
                 val dir = dirs[which].second
@@ -956,7 +956,7 @@ class EmbeddedFilesPage : ShellPage {
         }.forEach { recent.add(it.absolutePath) }
         val dirs = recent.map { File(it) }.filter { it.isDirectory }.sortedBy { it.name.lowercase() }.take(60)
         if (dirs.isEmpty()) return toast("暂无最近项目")
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("最近项目")
             .setItems(dirs.map { "${it.name}\n${it.absolutePath}" }.toTypedArray()) { _, which ->
                 val dir = dirs[which]
@@ -973,7 +973,7 @@ class EmbeddedFilesPage : ShellPage {
             toast("当前选择的不是 APK")
             return
         }
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle("安装 APK")
             .setMessage("将通过终端执行：\npm install -r \"${file.absolutePath}\"")
             .setPositiveButton("执行安装") { _, _ ->
@@ -992,7 +992,7 @@ class EmbeddedFilesPage : ShellPage {
     }
 
     private fun fileActions(file: File) {
-        AlertDialog.Builder(activity)
+        MaterialAlertDialogBuilder(activity)
             .setTitle(file.name)
             .setItems(arrayOf("预览", "编辑", "另存为", "标记当前项目", "跳到当前项目", "项目识别", "项目工作区", "复制路径", "复制到对侧", "移动到对侧", "重命名", "删除")) { _, which ->
                 when (which) {
@@ -1027,7 +1027,7 @@ class EmbeddedFilesPage : ShellPage {
             setText(hint)
             selectAll()
         }
-        AlertDialog.Builder(activity).setTitle(title).setView(edit).setPositiveButton("确定") { _, _ ->
+        MaterialAlertDialogBuilder(activity).setTitle(title).setView(edit).setPositiveButton("确定") { _, _ ->
             val text = edit.text.toString().trim()
             if (text.isNotEmpty() && !text.contains("/")) cb(text)
         }.setNegativeButton("取消", null).show()
@@ -1037,25 +1037,15 @@ class EmbeddedFilesPage : ShellPage {
         val edit = EditText(activity).apply {
             setHint(hint)
         }
-        AlertDialog.Builder(activity).setTitle(title).setView(edit).setPositiveButton("确定") { _, _ ->
+        MaterialAlertDialogBuilder(activity).setTitle(title).setView(edit).setPositiveButton("确定") { _, _ ->
             val text = edit.text.toString().trim()
             if (text.isNotEmpty()) cb(text)
         }.setNegativeButton("取消", null).show()
     }
 
-    private fun action(label: String, click: () -> Unit): TextView =
-        ui.text(label, 12f, ui.palette.text).apply {
-            gravity = Gravity.CENTER
-            background = ui.subtleButtonBackground()
-            setOnClickListener {
-                ui.pulse()
-                click()
-            }
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-            includeFontPadding = false
+    private fun action(label: String, click: () -> Unit): View =
+        ui.smallButton(label, click).apply {
             layoutParams = LinearLayout.LayoutParams(ui.dp(64), ui.dp(34)).apply { setMargins(ui.dp(2), ui.dp(2), ui.dp(2), ui.dp(4)) }
-            setPadding(ui.dp(4), 0, ui.dp(4), 0)
         }
 
     private fun paneHeaderBg(): android.graphics.drawable.GradientDrawable =
