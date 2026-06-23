@@ -516,7 +516,12 @@ class ShellActivity : Activity() {
                 .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
             activity.startActivity(intent)
-            activity.overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)
+            if (Build.VERSION.SDK_INT >= 34) {
+                activity.overrideActivityTransition(Activity.OVERRIDE_TRANSITION_OPEN, R.anim.slide_in_left, R.anim.slide_out_right)
+            } else {
+                @Suppress("DEPRECATION")
+                activity.overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)
+            }
         }
     }
 
@@ -580,7 +585,12 @@ class ShellHost(
 ) {
     fun open(cls: Class<out Activity>) {
         activity.startActivity(Intent(activity, cls))
-        activity.overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
+        if (Build.VERSION.SDK_INT >= 34) {
+            activity.overrideActivityTransition(Activity.OVERRIDE_TRANSITION_OPEN, R.anim.slide_in_right, R.anim.slide_out_left)
+        } else {
+            @Suppress("DEPRECATION")
+            activity.overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
+        }
     }
 
     fun openTerminal(command: String) {

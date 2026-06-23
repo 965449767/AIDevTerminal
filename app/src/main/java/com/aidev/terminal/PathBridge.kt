@@ -31,11 +31,11 @@ object PathBridge {
         val homeAbs = home.absolutePath.trimEnd('/')
         val rootfs = "$homeAbs/ubuntu-rootfs"
         return when {
+            abs == "$rootfs/root" -> "/root"
+            abs.startsWith("$rootfs/root/") -> "/root/${abs.removePrefix("$rootfs/root/")}"
+            abs.startsWith("$rootfs/") -> abs.removePrefix(rootfs)
             abs == homeAbs -> "/host-home"
             abs.startsWith("$homeAbs/") -> "/host-home/${abs.removePrefix("$homeAbs/")}"
-            abs.startsWith("$rootfs/root/") -> "/root/${abs.removePrefix("$rootfs/root/")}"
-            abs == "$rootfs/root" -> "/root"
-            abs.startsWith("$rootfs/") -> abs.removePrefix(rootfs)
             else -> null
         }
     }

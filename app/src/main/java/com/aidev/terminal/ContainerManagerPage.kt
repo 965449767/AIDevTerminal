@@ -2,12 +2,16 @@ package com.aidev.terminal
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.os.Handler
-import android.os.Looper
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Toast
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -18,7 +22,7 @@ class ContainerManagerPage : ShellPage {
     private lateinit var ui: AIDevUi
     private lateinit var host: ShellHost
     private lateinit var list: LinearLayout
-    private val handler = Handler(Looper.getMainLooper())
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     /** 开发工具信息 */
     private data class DevTool(val name: String, val command: String, val installed: Boolean)
@@ -43,6 +47,10 @@ class ContainerManagerPage : ShellPage {
         }
     }
 
+    override fun onDestroy(activity: Activity) {
+        scope.cancel()
+    }
+
     private fun showLoading() {
         list.removeAllViews()
         list.addView(ui.section("容器管理", "rootfs 管理、环境隔离、快照备份"))
@@ -53,29 +61,25 @@ class ContainerManagerPage : ShellPage {
      * 在子线程中加载容器信息，完成后回到主线程更新 UI
      */
     private fun loadContainerInfo() {
-        Thread {
+        scope.launch(Dispatchers.IO) {
             val rootfs = File(activity.filesDir, "home/ubuntu-rootfs")
             val homeDir = File(activity.filesDir, "home")
 
-            // 计算 rootfs 大小
             val rootfsSize = calculateDirectorySize(rootfs)
             val rootfsSizeText = formatFileSize(rootfsSize)
 
-            // 检查 PRoot 状态
             val prootLib = File(homeDir, "proot-lib/libtalloc.so.2")
             val prootOk = prootLib.exists()
 
-            // 检测已安装的开发工具
             val devTools = detectDevTools(rootfs)
 
-            // 获取当前项目路径
             val projectPath = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
                 .getString("current_project_path", "/root")
 
-            handler.post {
+            withContext(Dispatchers.Main) {
                 renderContainerInfo(rootfs, rootfsSizeText, prootOk, devTools, projectPath)
             }
-        }.start()
+        }
     }
 
     /**

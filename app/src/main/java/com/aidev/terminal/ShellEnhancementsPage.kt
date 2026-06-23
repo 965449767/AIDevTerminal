@@ -6,9 +6,13 @@ import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
-import android.os.Handler
-import android.os.Looper
 import android.text.TextUtils
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import android.view.Gravity
 import android.view.View
 import android.widget.EditText
@@ -27,6 +31,7 @@ class ShellEnhancementsPage : ShellPage {
     private lateinit var ui: AIDevUi
     private lateinit var host: ShellHost
     private lateinit var content: LinearLayout
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     /** bash_history 文件路径 */
     private val bashHistoryFile: File
@@ -56,16 +61,20 @@ class ShellEnhancementsPage : ShellPage {
         if (::content.isInitialized) reload()
     }
 
+    override fun onDestroy(activity: Activity) {
+        scope.cancel()
+    }
+
     /** 重新加载页面内容 */
     private fun reload() {
         content.removeAllViews()
         content.addView(ui.section("Shell 增强", "命令历史统计、别名管理、收藏夹与快速模板"))
         content.addView(ui.muted("正在加载..."))
-        Thread {
+        scope.launch(Dispatchers.IO) {
             val stats = parseBashHistory()
             val aliases = parseAliases()
             val oneliners = loadOneliners()
-            Handler(Looper.getMainLooper()).post {
+            withContext(Dispatchers.Main) {
                 content.removeAllViews()
                 content.addView(ui.section("Shell 增强", "命令历史统计、别名管理、收藏夹与快速模板"))
                 content.addView(buildCommandHistorySection(stats))
@@ -76,7 +85,7 @@ class ShellEnhancementsPage : ShellPage {
                 content.addView(ui.divider())
                 content.addView(buildTemplatesSection())
             }
-        }.apply { isDaemon = true; start() }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -278,18 +287,17 @@ class ShellEnhancementsPage : ShellPage {
                     return@setPositiveButton
                 }
                 // 追加到 .bashrc
-                val line = "\nalias $name='$cmd'"
-                Thread {
+                scope.launch(Dispatchers.IO) {
                     runCatching {
-                        bashrcFile.appendText(line)
-                        Handler(Looper.getMainLooper()).post {
+                        bashrcFile.appendText("\nalias $name='$cmd'")
+                        withContext(Dispatchers.Main) {
                             toast("别名 $name 已添加，新会话生效")
                             reload()
                         }
                     }.onFailure {
-                        Handler(Looper.getMainLooper()).post { toast("写入失败：${it.message}") }
+                        withContext(Dispatchers.Main) { toast("写入失败：${it.message}") }
                     }
-                }.apply { isDaemon = true; start() }
+                }
             }
             .setNegativeButton("取消", null)
             .show()
@@ -314,21 +322,21 @@ class ShellEnhancementsPage : ShellPage {
             toast(".bashrc 文件不存在")
             return
         }
-        Thread {
+        scope.launch(Dispatchers.IO) {
             runCatching {
                 val lines = file.readLines().filter { line ->
                     val trimmed = line.trimStart()
                     !trimmed.startsWith("alias ") || !trimmed.removePrefix("alias ").trim().startsWith("$name=")
                 }
                 file.writeText(lines.joinToString("\n"))
-                Handler(Looper.getMainLooper()).post {
+                withContext(Dispatchers.Main) {
                     toast("别名 $name 已删除")
                     reload()
                 }
             }.onFailure {
-                Handler(Looper.getMainLooper()).post { toast("删除失败：${it.message}") }
+                withContext(Dispatchers.Main) { toast("删除失败：${it.message}") }
             }
-        }.apply { isDaemon = true; start() }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────

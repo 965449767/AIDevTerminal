@@ -1,41 +1,43 @@
 # Current Task
 
 ## Goal
-
-Round 2 terminal bug fixes: thread safety cleanup, TUI mode regression fix, IME keyboard overlap fix.
+Phase 4: Codebase cleanup — migrate legacy `Handler.post`/`Thread.runOnUiThread` → coroutines, fix deprecation warnings.
 
 ## Current Status
 
-All Round 2 bug fixes done. IME keyboard overlap resolved (Plan C: `ADJUST_NOTHING` + `contentHost` inset deduction).
+| Phase | Status |
+|-------|--------|
+| Phase 1 (Bug fixes, IME, error handler) | ✅ Complete |
+| Phase 2 (Architecture optimization) | ✅ Complete |
+| Phase 3 (Integration testing & validation) | ✅ Complete |
+| Phase 4 (Cleanup: coroutine migration, deprecation fixes) | 🔜 In Progress |
 
-## Scope (Round 2 + IME fix)
+## Phase 4 Progress
 
-| # | File | Fix |
-|---|------|-----|
-| 2 | `EmbeddedShellPages.kt` | `sessionClient()` UI callbacks wrapped in `Handler(Looper.getMainLooper()).post` |
-| 3 | `EmbeddedShellPages.kt` | Removed useless `terminalView?.removeCallbacks(null)` from `onDestroy` |
-| 5 | `DesignSystem.kt` | `pulse()` — null-safe `activity.window?.decorView?` |
-| 1B | `ShellActivity.kt` | Added `onDestroy()` that iterates pages and calls each `ShellPage.onDestroy()` |
-| 8R | `EmbeddedShellPages.kt` | `clearProxyText()` reverted: `setText("")` → `text?.clear()` (Binder deadlock fix) |
-| — | `EmbeddedShellPages.kt` | `completionBarView = this` in `completionBar()` |
-| IME | `ShellActivity.kt` | `buildShell()`: IME padding on `contentHost` via `navHost` insets listener, formula `max(0, imeHeight - sysBarsBottom - bottomNavHeight)` |
+### P1: ShellEnhancementsPage — ✅ Complete
+- 5× `Handler.post` → `scope.launch(IO){…withContext(Main){…}}`
 
-### Key Fix Chain
+### P2: Deprecation warnings — ✅ Complete (10 fixes)
+- `EmbeddedShellPages.kt`: 4× `displayMetrics.scaledDensity` → `spToPx()` helper
+- `AppNav.kt` + `ShellActivity.kt`: 5× `overridePendingTransition` → API 34 guard
+- `KeepAliveService.kt`: `WIFI_MODE_FULL_HIGH_PERF` → `FULL_LOW_LATENCY`
 
-| Step | Approach | Result |
-|------|----------|--------|
-| A | `ADJUST_RESIZE`, no manual padding | IME 遮挡拓展键盘 |
-| B | `ADJUST_NOTHING` + `pageRoot` IME padding | 空隙（未扣 bottomNavView + navBar） |
-| C | `ADJUST_NOTHING` + `contentHost` IME padding 扣减法 | **成功** |
+### P3: Migrate remaining pages — ✅ Complete (4 pages)
 
-## Deferred
+| Page | Migration | Status |
+|------|-----------|--------|
+| NetworkDiagnosticsPage | 4× `Thread{…runOnUiThread{…}}` → coroutine | ✅ |
+| ContainerManagerPage | 1× `Handler.post` → coroutine | ✅ |
+| SecurityAuditPage | 1× `Handler.post` → coroutine | ✅ |
+| SystemMonitorPage | postDelayed refresh cycle + 1× runOnUiThread → coroutine | ✅ |
 
-- DesignTokens elevation/shadow system (optional)
-- `GradientDrawable` → `roundedBackground()` migration in ShellEnhancementsPage / SystemMonitorPage (low priority)
+### P4 (Optional): Integration tests — ⏳ Pending
 
-## Changed Files (this round)
+## Summary of Changes
 
-- `DesignSystem.kt` — pulse() null guard
-- `ShellActivity.kt` — onDestroy, IME padding on contentHost
-- `EmbeddedShellPages.kt` — SessionClient handler, clearProxyText revert, completionBarView, onDestroy cleanup
-- `AGENTS.md` — Hard Lesson #4 (setText Binder deadlock) + #5 (IME padding deduction)
+All legacy `Thread{… runOnUiThread{…}}` and `Handler.post` patterns in shell pages migrated to:
+- `scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)`
+- `scope.launch(IO){… withContext(Main){…}}`
+- `scope.cancel()` in `onDestroy()`
+
+Build: ✅ `assembleDebug` successful (35 tasks, 4 executed, BUILD SUCCESSFUL)

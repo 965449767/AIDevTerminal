@@ -2,12 +2,16 @@ package com.aidev.terminal
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.os.Handler
-import android.os.Looper
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Toast
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -20,7 +24,7 @@ class SecurityAuditPage : ShellPage {
     private lateinit var ui: AIDevUi
     private lateinit var host: ShellHost
     private lateinit var list: LinearLayout
-    private val handler = Handler(Looper.getMainLooper())
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     /** 审计结果数据类 */
     private data class AuditItem(
@@ -51,6 +55,10 @@ class SecurityAuditPage : ShellPage {
         }
     }
 
+    override fun onDestroy(activity: Activity) {
+        scope.cancel()
+    }
+
     private fun showLoading() {
         list.removeAllViews()
         list.addView(ui.section("安全审计", "扫描文件权限、SSH 配置、敏感文件"))
@@ -61,22 +69,17 @@ class SecurityAuditPage : ShellPage {
      * 在子线程中执行所有审计检查，完成后回到主线程更新 UI
      */
     private fun runAudit() {
-        Thread {
+        scope.launch(Dispatchers.IO) {
             val rootfs = File(activity.filesDir, "home/ubuntu-rootfs")
             val homeDir = File(rootfs, "root")
             val results = mutableListOf<AuditItem>()
 
-            // 1. 文件权限审计
             results.addAll(auditFilePermissions(rootfs))
-
-            // 2. SSH 安全检查
             results.addAll(auditSshSecurity(homeDir))
-
-            // 3. 敏感文件检查
             results.addAll(auditSensitiveFiles(homeDir))
 
-            handler.post { renderResults(results) }
-        }.start()
+            withContext(Dispatchers.Main) { renderResults(results) }
+        }
     }
 
     /**

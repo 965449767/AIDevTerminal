@@ -18,6 +18,8 @@ import android.widget.Toast
 
 import java.io.File
 
+import com.aidev.terminal.presentation.BackupRestorePage
+
 class EmbeddedSettingsPage : ShellPage {
     private lateinit var activity: Activity
     private lateinit var ui: AIDevUi

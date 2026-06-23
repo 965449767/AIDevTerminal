@@ -2,6 +2,7 @@ package com.aidev.terminal
 
 import android.app.Activity
 import android.content.Intent
+import android.os.Build
 
 object AppNav {
     private val fullOrder = listOf(
@@ -51,15 +52,25 @@ object AppNav {
 
     fun finish(activity: Activity) {
         activity.finish()
-        activity.overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)
+        activity.overrideTransition(R.anim.slide_in_left, R.anim.slide_out_right, isFinish = true)
     }
 
     private fun applyTransition(activity: Activity, target: Class<out Activity>, forceForward: Boolean?) {
         val forward = forceForward ?: isForward(activity::class.java, target)
         if (forward) {
-            activity.overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
+            activity.overrideTransition(R.anim.slide_in_right, R.anim.slide_out_left)
         } else {
-            activity.overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)
+            activity.overrideTransition(R.anim.slide_in_left, R.anim.slide_out_right)
+        }
+    }
+
+    private fun Activity.overrideTransition(enterAnim: Int, exitAnim: Int, isFinish: Boolean = false) {
+        if (Build.VERSION.SDK_INT >= 34) {
+            val type = if (isFinish) Activity.OVERRIDE_TRANSITION_CLOSE else Activity.OVERRIDE_TRANSITION_OPEN
+            overrideActivityTransition(type, enterAnim, exitAnim)
+        } else {
+            @Suppress("DEPRECATION")
+            overridePendingTransition(enterAnim, exitAnim)
         }
     }
 

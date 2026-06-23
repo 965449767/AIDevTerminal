@@ -9,14 +9,21 @@ import android.content.IntentFilter
 import android.graphics.drawable.GradientDrawable
 import android.os.BatteryManager
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -34,8 +41,8 @@ class SystemMonitorPage : ShellPage {
     private lateinit var list: LinearLayout
     private lateinit var scrollView: ScrollView
 
-    private val handler = Handler(Looper.getMainLooper())
-    private var refreshRunnable: Runnable? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var refreshJob: Job? = null
     private var isVisible = false
 
     // CPU 采样：保存上一次 /proc/stat 的数据用于计算差值
@@ -99,6 +106,7 @@ class SystemMonitorPage : ShellPage {
     override fun onDestroy(activity: Activity) {
         isVisible = false
         stopRefreshing()
+        scope.cancel()
         unregisterBatteryReceiver()
     }
 
@@ -106,20 +114,17 @@ class SystemMonitorPage : ShellPage {
 
     private fun startRefreshing() {
         stopRefreshing()
-        refreshRunnable = object : Runnable {
-            override fun run() {
-                if (isVisible) {
-                    refreshData()
-                    handler.postDelayed(this, REFRESH_INTERVAL_MS)
-                }
+        refreshJob = scope.launch {
+            while (isActive && isVisible) {
+                refreshData()
+                delay(REFRESH_INTERVAL_MS)
             }
         }
-        handler.post(refreshRunnable!!)
     }
 
     private fun stopRefreshing() {
-        refreshRunnable?.let { handler.removeCallbacks(it) }
-        refreshRunnable = null
+        refreshJob?.cancel()
+        refreshJob = null
     }
 
     // ==================== 数据采集 ====================
@@ -609,7 +614,7 @@ class SystemMonitorPage : ShellPage {
 
     /** 执行 kill 命令 */
     private fun killProcess(pid: String) {
-        Thread {
+        scope.launch(Dispatchers.IO) {
             val result = try {
                 val process = Runtime.getRuntime().exec(arrayOf("kill", pid))
                 val exitCode = process.waitFor()
@@ -617,12 +622,11 @@ class SystemMonitorPage : ShellPage {
             } catch (e: Exception) {
                 "终止失败: ${e.message}"
             }
-            activity.runOnUiThread {
+            withContext(Dispatchers.Main) {
                 Toast.makeText(activity, result, Toast.LENGTH_SHORT).show()
-                // 刷新数据
                 refreshData()
             }
-        }.start()
+        }
     }
 
     // ==================== 工具方法 ====================

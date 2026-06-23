@@ -62,136 +62,6 @@ private data class TerminalCompletion(
     val kind: String = "CMD"
 )
 
-private class TerminalImeProxyEditText(context: Context) : EditText(context) {
-    var onComposingChanged: (String) -> Unit = {}
-    var onCommittedText: (String) -> Unit = {}
-    var onBackspace: () -> Unit = {}
-    var onEnter: () -> Unit = {}
-    var tuiMode = false
-    var tuiKeyHandler: ((KeyEvent) -> Boolean)? = null
-    private var clearing = false
-    private var currentComposing = ""
-    // TUI 模式：缓存 composing 文字，等 commitText 或 finishComposingText 时发送
-    private var tuiComposing = ""
-    private var tuiComposingSent = false
-
-    init {
-        setSingleLine(true)
-        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-        imeOptions = EditorInfo.IME_ACTION_NONE or EditorInfo.IME_FLAG_NO_EXTRACT_UI
-        setTextColor(Color.TRANSPARENT)
-        setBackgroundColor(Color.TRANSPARENT)
-        isCursorVisible = false
-        alpha = 0.01f
-    }
-
-    override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
-        val base = super.onCreateInputConnection(outAttrs)
-        return object : InputConnectionWrapper(base, true) {
-            override fun setComposingText(text: CharSequence?, newCursorPosition: Int): Boolean {
-                if (tuiMode) {
-                    // TUI 模式：只缓存，不发送（避免重复）
-                    tuiComposing = text?.toString().orEmpty()
-                    tuiComposingSent = false
-                    clearProxyText()
-                    return super.setComposingText("", 1)
-                }
-                // 普通模式：更新 composing 状态
-                currentComposing = text?.toString().orEmpty()
-                onComposingChanged(currentComposing)
-                return super.setComposingText(text, newCursorPosition)
-            }
-
-            override fun commitText(text: CharSequence?, newCursorPosition: Int): Boolean {
-                if (tuiMode) {
-                    // TUI 模式：发送最终文字
-                    val str = text?.toString().orEmpty()
-                    if (str.isNotEmpty()) onCommittedText(str)
-                    tuiComposing = ""
-                    tuiComposingSent = true
-                    clearProxyText()
-                    return super.commitText("", 1)
-                }
-                // 普通模式：发送文字
-                val committed = text?.toString().orEmpty()
-                if (committed.isNotEmpty()) onCommittedText(committed)
-                currentComposing = ""
-                onComposingChanged("")
-                val result = super.commitText(text, newCursorPosition)
-                clearProxyText()
-                return result
-            }
-
-            override fun finishComposingText(): Boolean {
-                if (tuiMode) {
-                    // 语音输入可能只走 setComposingText + finishComposingText
-                    // 如果 composing 文字未发送，在这里补发
-                    if (!tuiComposingSent && tuiComposing.isNotEmpty()) {
-                        onCommittedText(tuiComposing)
-                    }
-                    tuiComposing = ""
-                    tuiComposingSent = false
-                    clearProxyText()
-                    return super.finishComposingText()
-                }
-                // 普通模式：清空 composing 状态
-                currentComposing = ""
-                onComposingChanged("")
-                return super.finishComposingText()
-            }
-
-            override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
-                if (tuiMode) {
-                    // TUI 模式：IME 在预输入缓冲区中删除，不发给终端
-                    return super.deleteSurroundingText(beforeLength, afterLength)
-                }
-                // 普通模式
-                if (currentComposing.isNotEmpty()) {
-                    currentComposing = currentComposing.dropLast(beforeLength.coerceAtLeast(1))
-                    onComposingChanged(currentComposing)
-                } else {
-                    repeat(beforeLength.coerceAtLeast(1)) { onBackspace() }
-                }
-                return super.deleteSurroundingText(beforeLength, afterLength)
-            }
-
-            override fun sendKeyEvent(event: KeyEvent): Boolean {
-                if (tuiMode) {
-                    // TUI 模式：把按键转发给 TerminalView 处理
-                    val handler = tuiKeyHandler
-                    if (handler != null) {
-                        return handler(event)
-                    }
-                    return super.sendKeyEvent(event)
-                }
-                // 普通模式
-                if (event.action == KeyEvent.ACTION_DOWN) {
-                    when (event.keyCode) {
-                        KeyEvent.KEYCODE_DEL -> {
-                            onBackspace()
-                            return true
-                        }
-                        KeyEvent.KEYCODE_ENTER -> {
-                            onEnter()
-                            return true
-                        }
-                    }
-                }
-                return super.sendKeyEvent(event)
-            }
-        }
-    }
-
-    fun clearProxyText() {
-        if (clearing) return
-        clearing = true
-        post {
-            text?.clear()
-            clearing = false
-        }
-    }
-}
-
 /**
  * 内嵌终端页面：终端会话管理、虚拟键盘、自动补全、TUI 模式。
  *
@@ -213,7 +83,7 @@ class EmbeddedTerminalPage : ShellPage {
     private var activity: Activity? = null
     private var ui: AIDevUi? = null
     private var terminalView: TerminalView? = null
-    private var inputProxy: TerminalImeProxyEditText? = null
+    private var inputProxy: com.aidev.terminal.TerminalImeProxyEditText? = null
     private lateinit var tabBar: LinearLayout
     private lateinit var statusText: TextView
     private lateinit var completionRow: LinearLayout
@@ -222,6 +92,11 @@ class EmbeddedTerminalPage : ShellPage {
     private var current: EmbeddedTermSession? = null
     private var homeDir: File? = null
     private val sessions = mutableListOf<EmbeddedTermSession>()
+
+    private fun Activity.spToPx(sp: Float): Int {
+        val config = resources.configuration
+        return (sp * config.fontScale * config.densityDpi / 160f).toInt()
+    }
     private var ctrlLatched = false
     private var autoBootstrapDispatched = false
     private var pendingFontSp = DEFAULT_FONT_SP
@@ -285,7 +160,7 @@ class EmbeddedTerminalPage : ShellPage {
             setTextSize(fontPx(activity))
             setTerminalViewClient(viewClient(activity))
         }
-        inputProxy = TerminalImeProxyEditText(activity).apply {
+        inputProxy = com.aidev.terminal.TerminalImeProxyEditText(activity).apply {
             onComposingChanged = { text ->
                 composingBuffer = text
                 refreshCompletions(activity)
@@ -1016,7 +891,7 @@ class EmbeddedTerminalPage : ShellPage {
         val value = sp.coerceIn(MIN_FONT_SP, MAX_FONT_SP)
         activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).edit().putFloat("font_sp", value).apply()
         pendingFontSp = value
-        terminalView?.setTextSize((value * activity.resources.displayMetrics.scaledDensity).toInt())
+        terminalView?.setTextSize(activity!!.spToPx(value))
         terminalView?.onScreenUpdated()
         refreshStatus(activity)
     }
@@ -1283,7 +1158,7 @@ class EmbeddedTerminalPage : ShellPage {
         input.replace("\u001b", "\\e").replace("\n", "\\n").replace("\t", "\\t")
 
     private fun fontPx(activity: Activity): Int =
-        (currentFontSp(activity) * activity.resources.displayMetrics.scaledDensity).toInt()
+        activity!!.spToPx(currentFontSp(activity))
 
     private fun currentFontSp(activity: Activity): Float =
         activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
@@ -1322,7 +1197,7 @@ class EmbeddedTerminalPage : ShellPage {
                 val sp = (MIN_FONT_SP.toInt() + seek.progress).toFloat()
                 prefs.edit().putFloat("font_sp", sp).apply()
                 pendingFontSp = sp
-                terminalView?.setTextSize((sp * activity.resources.displayMetrics.scaledDensity).toInt())
+                terminalView?.setTextSize(activity!!.spToPx(sp))
                 terminalView?.onScreenUpdated()
                 refreshStatus(activity)
             }
@@ -1692,7 +1567,7 @@ class EmbeddedTerminalPage : ShellPage {
                         val current = currentFontSp(activity)
                         if (kotlin.math.abs(next - current) >= 0.2f) {
                             activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).edit().putFloat("font_sp", next).apply()
-                            terminalView?.setTextSize((next * activity.resources.displayMetrics.scaledDensity).toInt())
+                            terminalView?.setTextSize(activity!!.spToPx(next))
                             terminalView?.onScreenUpdated()
                             refreshStatus(activity)
                         }

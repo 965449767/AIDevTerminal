@@ -11,6 +11,12 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Toast
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.InetAddress
@@ -27,6 +33,7 @@ class NetworkDiagnosticsPage : ShellPage {
     private lateinit var ui: AIDevUi
     private lateinit var host: ShellHost
     private lateinit var list: LinearLayout
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
@@ -42,6 +49,10 @@ class NetworkDiagnosticsPage : ShellPage {
 
     override fun onSelected(activity: Activity, view: View) {
         if (::list.isInitialized) reload()
+    }
+
+    override fun onDestroy(activity: Activity) {
+        scope.cancel()
     }
 
     private fun reload() {
@@ -97,7 +108,7 @@ class NetworkDiagnosticsPage : ShellPage {
     }
 
     private fun executePing(host: String) {
-        Thread {
+        scope.launch(Dispatchers.IO) {
             val result = try {
                 val process = Runtime.getRuntime().exec(arrayOf("ping", "-c", "4", "-W", "3", host))
                 val output = process.inputStream.bufferedReader().readText()
@@ -107,7 +118,7 @@ class NetworkDiagnosticsPage : ShellPage {
             } catch (e: Exception) {
                 "执行失败: ${e.message}"
             }
-            activity.runOnUiThread {
+            withContext(Dispatchers.Main) {
                 AlertDialog.Builder(activity)
                     .setTitle("Ping: $host")
                     .setMessage(result.take(4000))
@@ -116,7 +127,7 @@ class NetworkDiagnosticsPage : ShellPage {
                     .setNegativeButton("关闭", null)
                     .show()
             }
-        }.start()
+        }
     }
 
     private fun showHttpDialog() {
@@ -142,7 +153,7 @@ class NetworkDiagnosticsPage : ShellPage {
     }
 
     private fun executeHttp(urlStr: String, method: String) {
-        Thread {
+        scope.launch(Dispatchers.IO) {
             val result = try {
                 val url = URL(urlStr)
                 val conn = url.openConnection() as HttpsURLConnection
@@ -169,7 +180,7 @@ class NetworkDiagnosticsPage : ShellPage {
             } catch (e: Exception) {
                 "请求失败: ${e.message}"
             }
-            activity.runOnUiThread {
+            withContext(Dispatchers.Main) {
                 AlertDialog.Builder(activity)
                     .setTitle("HTTP $method")
                     .setMessage(result.take(4000))
@@ -177,7 +188,7 @@ class NetworkDiagnosticsPage : ShellPage {
                     .setNegativeButton("关闭", null)
                     .show()
             }
-        }.start()
+        }
     }
 
     private fun showPortCheckDialog() {
@@ -203,7 +214,7 @@ class NetworkDiagnosticsPage : ShellPage {
     }
 
     private fun checkPort(host: String, port: Int) {
-        Thread {
+        scope.launch(Dispatchers.IO) {
             val (isOpen, timeMs) = try {
                 val start = System.currentTimeMillis()
                 Socket().use { socket ->
@@ -218,10 +229,10 @@ class NetworkDiagnosticsPage : ShellPage {
             } else {
                 "端口 $port 在 $host 上关闭或不可达"
             }
-            activity.runOnUiThread {
+            withContext(Dispatchers.Main) {
                 Toast.makeText(activity, result, Toast.LENGTH_LONG).show()
             }
-        }.start()
+        }
     }
 
     private fun showDnsDialog() {
@@ -238,7 +249,7 @@ class NetworkDiagnosticsPage : ShellPage {
     }
 
     private fun executeDns(domain: String) {
-        Thread {
+        scope.launch(Dispatchers.IO) {
             val result = try {
                 val addresses = InetAddress.getAllByName(domain)
                 addresses.joinToString("\n") { addr ->
@@ -247,7 +258,7 @@ class NetworkDiagnosticsPage : ShellPage {
             } catch (e: Exception) {
                 "解析失败: ${e.message}"
             }
-            activity.runOnUiThread {
+            withContext(Dispatchers.Main) {
                 AlertDialog.Builder(activity)
                     .setTitle("DNS: $domain")
                     .setMessage(result)
@@ -255,7 +266,7 @@ class NetworkDiagnosticsPage : ShellPage {
                     .setNegativeButton("关闭", null)
                     .show()
             }
-        }.start()
+        }
     }
 
     private fun showNetworkInfo() {

@@ -1,115 +1,525 @@
-# Agent Operating Guide
+# Phase 2: Architecture Optimization Task List
 
-## Required Reading Order (every session)
+## Overview
 
-1. `/root/.android-env/env-summary.json` — 环境快照
-2. `current-task.md`
-3. `.harness/session-state.json`
-4. `.harness/session-log.md`
-5. `docs/verification.md` → `docs/decisions.md` → `docs/error-journal.md`
+Phase 2 focuses on optimizing the codebase architecture by separating concerns, implementing proper thread management, and establishing robust data access patterns. This phase will transform the monolithic BackupRestorePage into a well-structured application with clear separation of layers.
 
-Then output a short Session Briefing.
+## Task List
 
-## Repo Facts
+### T2.1: Refactor BackupRestorePage to Separate Business Logic
 
-- **Android app**, Kotlin-first, native Android Views. No Compose, no Hilt, no Retrofit, no multi-module.
-- **AGP 8.7.3 / Kotlin 2.0.21 / Gradle 8.14.5** (wrapper present). compileSdk=36, minSdk=26, targetSdk=36, arm64-v8a only.
-- **Aliyun Maven mirrors** in `settings.gradle.kts`. 代理配置在全局 `~/.gradle/gradle.properties`（已注释，环境无代理）。
-- **Package:** `com.aidev.terminal`, debug `applicationIdSuffix=".dev"`, debug keystore at `app/keystore/debug.keystore`.
+**Task ID:** T2-1
+**Priority:** High
+**Estimated Effort:** 8 hours
+**Owner:** Development Team A
+**Status:** Pending
 
-## Architecture Constraints
+**Task Description:**
+Refactor BackupRestorePage to separate UI logic from business logic. Extract business logic into a dedicated BackupBusinessLogic class and implement proper separation of concerns.
 
-- **ShellActivity** is the launcher and only active terminal entry. `MainActivity` is legacy (unregistered in manifest).
-- Terminal navigation: `AppNav.openTerminal` or `ShellHost.openTerminal`.
-- Shell functions (`ubuntu`, `install-ubuntu`, `aidev-auto-bootstrap`) are defined in `.aidevrc`, loaded via `ENV` env var at shell startup. Do NOT source before `exec sh -i`.
-- App-private scripts must run through `/system/bin/sh <script>` — Android forbids direct execution in app private dirs.
-- Ubuntu readiness: check `home/ubuntu-rootfs/.aidev-rootfs-ready`. Do NOT rely on `etc/os-release` alone.
-- PRoot uses `--link2symlink`. Android `tar` may fail on hardlinks; preserve symlink fallback logic.
-- Shell input tracking: `EmbeddedShellPages.kt` contains `TerminalCompletion` data class and suggestion bar logic.
+**Deliverables:**
+- Refactored BackupRestorePage.kt with separated UI and business logic
+- BackupBusinessLogic.kt with business logic implementation
+- Updated imports and dependencies
 
-## Build & Validation
+**Implementation Details:**
+1. Create BackupBusinessLogic class with methods:
+   - `executeBackup(items: List<String>): Flow<BackupResult>`
+   - `getBackupItems(): Flow<List<BackupItem>>`
+   - `validateBackupItems(items: List<String>)`
 
-Primary validation order: **harness check → lint/typecheck → debug build**.
+2. Refactor BackupRestorePage:
+   - Remove business logic from onCreate() and executeBackup()
+   - Delegate to BackupBusinessLogic instance
+   - Implement proper lifecycle management
 
-```bash
-bash scripts/harness_check.sh                                      # harness file integrity
-/usr/local/bin/wrap-android-native.sh                              # required before Gradle
-./gradlew assembleDebug                                            # debug APK
+3. Update data classes to be in separate files:
+   - BackupItem.kt
+   - BackupResult.kt
+   - BackupHistory.kt
+
+**Testing Requirements:**
+- Unit tests for BackupBusinessLogic
+- Integration tests for BackupRestorePage
+- Mock dependencies for testing
+
+**Dependencies:**
+- None (can be implemented independently)
+
+**Blocked On:**
+- Completion of T2-2 (Coroutine Management)
+
+### T2-2: Implement Coroutine-Based Thread Management
+
+**Task ID:** T2-2
+**Priority:** High
+**Estimated Effort:** 6 hours
+**Owner:** Development Team B
+**Status:** Pending
+
+**Task Description:**
+Implement coroutine-based thread management to replace traditional Thread and Handler.post usage. Create a CoroutineManager class that handles all background operations and UI updates.
+
+**Deliverables:**
+- CoroutineManager.kt with coroutine management utilities
+- Updated BackupBusinessLogic to use coroutines
+- Proper error handling and cancellation support
+
+**Implementation Details:**
+1. Create CoroutineManager class with:
+   - `executeIoTask(block: suspend () -> T): Flow<T>`
+   - `executeMainTask(block: suspend () -> T): Flow<T>`
+   - `launchCoroutine(context: CoroutineContext, block: suspend () -> Unit): Job`
+   - `cancelAll(): Unit`
+
+2. Update BackupBusinessLogic to use coroutines:
+   - Replace Thread.sleep() with delay()
+   - Use flow() for result streaming
+   - Implement proper cancellation handling
+
+3. Update BackupRestorePage to use coroutine lifecycle:
+   - Replace handler.post() with coroutine launches
+   - Implement proper lifecycle management
+
+**Testing Requirements:**
+- Unit tests for CoroutineManager
+- Integration tests for coroutine-based operations
+- Performance testing for coroutine efficiency
+
+**Dependencies:**
+- Kotlin Coroutines (already available)
+
+**Blocked On:**
+- None
+
+### T2-3: Implement Repository Pattern
+
+**Task ID:** T2-3
+**Priority:** Medium
+**Estimated Effort:** 4 hours
+**Owner:** Development Team A
+**Status:** Pending
+
+**Task Description:**
+Implement Repository pattern to abstract data access layer. Create BackupRepository interface and its implementation to provide a clean API for data operations.
+
+**Deliverables:**
+- BackupRepository.kt (interface)
+- BackupRepositoryImpl.kt (implementation)
+- Abstract data access methods
+
+**Implementation Details:**
+1. Create BackupRepository interface with:
+   - `getBackupItems(): Flow<List<BackupItem>>`
+   - `executeBackup(items: List<String>): Flow<BackupResult>`
+   - `getBackupHistory(): Flow<List<BackupHistory>>`
+
+2. Create BackupRepositoryImpl implementing the interface:
+   - Implement data access methods
+   - Add proper error handling
+   - Implement caching where appropriate
+
+3. Update BackupBusinessLogic to use repository:
+   - Inject repository dependency
+   - Delegate data operations to repository
+   - Maintain business logic in service layer
+
+**Testing Requirements:**
+- Unit tests for BackupRepository
+- Integration tests for repository implementation
+- Mock data sources for testing
+
+**Dependencies:**
+- T2-2 (Coroutine Management) for async operations
+
+**Blocked On:**
+- Completion of T2-2 (Coroutine Management)
+
+### T2-4: Implement Data Layer and Business Layer Separation
+
+**Task ID:** T2-4
+**Priority:** Medium
+**Estimated Effort:** 6 hours
+**Owner:** Development Team C
+**Status:** Pending
+
+**Task Description:**
+Implement clear separation between data layer and business layer. Create dedicated packages for data access, business logic, and presentation layers.
+
+**Deliverables:**
+- data/ directory with data access classes
+- domain/ directory with business logic classes
+- presentation/ directory with UI classes
+- Updated project structure with clear layer boundaries
+
+**Implementation Details:**
+1. Create package structure:
+   - `com.aidev.terminal.data/` for data access
+   - `com.aidev.terminal.domain/` for business logic
+   - `com.aidev.terminal.presentation/` for UI
+
+2. Move appropriate classes to new packages:
+   - BackupRepository and implementations to data package
+   - BackupBusinessLogic to domain package
+   - BackupRestorePage to presentation package
+
+3. Update dependencies to follow clean architecture principles
+
+**Testing Requirements:**
+- Unit tests for all layers
+- Integration tests across layers
+- Clear separation of concerns in tests
+
+**Dependencies:**
+- T2-2, T2-3 (Coroutine Management and Repository Pattern)
+
+**Blocked On:**
+- Completion of T2-2 and T2-3
+
+### T2-5: Implement Complete Unit Test Suite
+
+**Task ID:** T2-5
+**Priority:** High
+**Estimated Effort:** 10 hours
+**Owner:** Development Team D
+**Status:** Pending
+
+**Task Description:**
+Implement comprehensive unit test suite covering all business logic and data access layers. Ensure high test coverage and proper mocking.
+
+**Deliverables:**
+- BackupRepositoryTest.kt
+- BackupBusinessLogicTest.kt
+- CoroutineManagerTest.kt
+- Integration tests for all components
+- Test coverage report
+
+**Implementation Details:**
+1. Create unit tests for BackupRepository:
+   - Test getBackupItems()
+   - Test executeBackup()
+   - Test getBackupHistory()
+
+2. Create unit tests for BackupBusinessLogic:
+   - Test executeBackup() with various scenarios
+   - Test validateBackupItems()
+   - Test error handling
+
+3. Create unit tests for CoroutineManager:
+   - Test executeIoTask()
+   - Test executeMainTask()
+   - Test cancellation
+
+4. Create integration tests:
+   - Test complete backup flow
+   - Test error scenarios
+   - Test edge cases
+
+**Testing Requirements:**
+- Achieve >90% code coverage
+- Mock external dependencies
+- Test both success and failure scenarios
+- Implement proper test fixtures
+
+**Dependencies:**
+- T2-2, T2-3 (Coroutine Management and Repository Pattern)
+
+**Blocked On:**
+- Completion of T2-2 and T2-3
+
+### T2-6: Code Review and Quality Check
+
+**Task ID:** T2-6
+**Priority:** High
+**Estimated Effort:** 3 hours
+**Owner:** Development Team E
+**Status:** Pending
+
+**Task Description:**
+Perform comprehensive code review and quality check to ensure code meets project standards and best practices.
+
+**Deliverables:**
+- Code review report
+- Quality check report
+- Refactoring recommendations
+- Updated coding standards documentation
+
+**Implementation Details:**
+1. Perform code review:
+   - Review all new code for quality
+   - Check for code smells and anti-patterns
+   - Ensure adherence to coding standards
+
+2. Perform quality checks:
+   - Code complexity analysis
+   - Performance profiling
+   - Security review
+   - Architecture review
+
+3. Generate reports:
+   - Code review findings
+   - Quality improvement recommendations
+   - Refactoring priority list
+
+**Testing Requirements:**
+- Peer review of all code changes
+- Quality metrics analysis
+- Performance benchmarking
+
+**Dependencies:**
+- Completion of all previous tasks
+
+**Blocked On:**
+- Completion of all previous tasks
+
+## Task Dependencies Summary
+
+```
+T2-2 (Coroutine Management) ───┐
+                              ├──┄ T2-5 (Unit Tests)
+T2-3 (Repository Pattern) ──────┤
+                              └──┄ T2-6 (Code Review)
+T2-4 (Layer Separation) ────────┘
 ```
 
-- Debug APK output: `app/build/outputs/apk/debug/app-debug.apk`
-- Use `wrap-android-native.sh` before every Gradle invocation (QEMU user-mode ARM64 environment).
-- If AAPT2 daemon fails, re-run the wrapper script again. 全局 `~/.gradle/gradle.properties` 已配置 `aapt2DaemonMode=false` + `aapt2FromMavenOverride`。
-- 替代命令（自动处理包装、代理检测、APK导出）：`bash /root/.android-env/scripts/build-android.sh`
+## Implementation Timeline
 
-## Project Structure
+| Phase | Start Date | End Date | Duration |
+|-------|------------|----------|----------|
+| T2-1: BackupRestorePage Refactoring | 2026-06-26 | 2026-06-27 | 2 days |
+| T2-2: Coroutine Management | 2026-06-28 | 2026-06-29 | 2 days |
+| T2-3: Repository Pattern | 2026-06-30 | 2026-07-01 | 2 days |
+| T2-4: Layer Separation | 2026-07-02 | 2026-07-03 | 2 days |
+| T2-5: Unit Test Suite | 2026-07-04 | 2026-07-06 | 3 days |
+| T2-6: Code Review | 2026-07-07 | 2026-07-07 | 1 day |
+| **Total** | - | - | **12 days** |
 
-| Path | Purpose |
-|---|---|
-| `app/src/main/java/com/aidev/terminal/` | All app Kotlin sources |
-| `app/src/main/java/com/aidev/terminal/opencode/` | OpenCode HTTP/SSE client |
-| `app/src/main/assets/proot-libs/` | PRoot support libs (copied at runtime) |
-| `app/src/main/jniLibs/arm64-v8a/` | Bundled native PRoot binaries |
-| `.harness/` | Agent session state, log, progress |
-| `docs/` | Architecture, decisions, errors, git workflow, coding/verification guides |
-| `skills/` | Agent skill definitions (start, plan, review, commit, handoff) |
+## Risk Assessment
 
-## Key Files
+| Risk | Probability | Impact | Mitigation Strategy |
+|------|-------------|--------|-------------------|
+| Architecture Complexity | Medium | High | Incremental implementation with testing |
+| Team Coordination | Low | Medium | Regular standups and code reviews |
+| Performance Issues | Low | Medium | Performance testing and optimization |
+| Testing Coverage | Medium | High | Comprehensive test suite with automation |
 
-- `EmbeddedShellPages.kt` — main terminal page (~1800 lines), terminal sessions, virtual keys, completion bar.
-- `TerminalShellAssets.kt` — shell asset installation, RC file writing, PRoot lib deployment.
-- `EmbeddedSettingsPage.kt` — settings page menus, uses `MenuBottomSheet` (custom Dialog-based bottom sheet).
-- `AIDevBottomSheet.kt` — base class for custom bottom sheets.
-- `MenuBottomSheet.kt` — menu data class and bottom sheet on top of `AIDevBottomSheet`.
+## Success Criteria
 
-## Git Policy
+1. **Code Quality:** All code follows project standards and best practices
+2. **Test Coverage:** >90% code coverage for all new code
+3. **Architecture:** Clear separation of concerns between layers
+4. **Performance:** No performance regression compared to baseline
+5. **Maintainability:** Code is easy to understand, modify, and extend
+6. **Reliability:** All tests pass and error handling is robust
 
-- Automatic commits allowed after validated phases.
-- `git tag`, `git reset --hard`, `git clean -fd`, `git push` require explicit user approval.
-- Commit style: `type(scope): subject`.
+## Handoff Criteria
 
-## Progress Reporting
+- [ ] All tasks completed according to specifications
+- [ ] Comprehensive test suite implemented and passing
+- [ ] Code review completed with no critical issues
+- [ ] Performance benchmarks meet requirements
+- [ ] Documentation updated and complete
+- [ ] Team trained on new architecture patterns
 
-After each phase, report:
+## Phase 3: Integration Testing and Validation
 
-```text
-已完成：<阶段或版本>
-本次完成：<一句话>
-总体进度：<百分比>
-剩余：<阶段数或版本数>
-验证：<通过/未跑/失败>
-下一步：<一句话>
+**Phase 3 focuses on testing the optimized architecture and validating that it meets all requirements.**
+
+### Task List
+
+**T3-1: Run Complete Test Suite**
+- **Task ID:** T3-1
+- **Priority:** High
+- **Estimated Effort:** 3 hours
+- **Owner:** Development Team D
+- **Status:** Pending
+
+**Task Description:**
+Run the complete test suite to ensure all components work correctly together and validate that the architecture optimization meets all requirements.
+
+**Deliverables:**
+- Test execution report
+- Test coverage report
+- Any test failures or issues identified
+
+**Implementation Details:**
+1. Run all unit tests
+2. Run integration tests
+3. Generate test coverage report
+4. Document any test failures
+5. Fix any identified issues
+
+**Testing Requirements:**
+- All unit tests pass
+- All integration tests pass
+- Test coverage maintained at >90%
+- No regressions introduced
+
+**Dependencies:**
+- Completion of Phase 2
+
+**Blocked On:**
+- None
+
+**T3-2: Validate Architecture Optimization**
+- **Task ID:** T3-2
+- **Priority:** High
+- **Estimated Effort:** 4 hours
+- **Owner:** Development Team E
+- **Status:** Pending
+
+**Task Description:**
+Validate that the architecture optimization meets all requirements and provides the expected benefits.
+
+**Deliverables:**
+- Architecture validation report
+- Performance benchmarks
+- Code quality assessment
+- Documentation of improvements
+
+**Implementation Details:**
+1. Validate separation of concerns
+2. Validate performance improvements
+3. Validate code quality improvements
+4. Document architectural decisions
+5. Update documentation
+
+**Validation Requirements:**
+- Clear separation of concerns between layers
+- Performance improvements achieved
+- Code quality meets project standards
+- Documentation is complete and accurate
+
+**Dependencies:**
+- Completion of T3-1
+
+**Blocked On:**
+- Completion of T3-1
+
+**T3-3: Ensure System Stability**
+- **Task ID:** T3-3
+- **Priority:** Medium
+- **Estimated Effort:** 3 hours
+- **Owner:** Development Team C
+- **Status:** Pending
+
+**Task Description:**
+Ensure system stability and reliability after architecture optimization.
+
+**Deliverables:**
+- Stability validation report
+- Performance benchmarks
+- Risk assessment
+- Mitigation strategies
+
+**Implementation Details:**
+1. Test system stability under load
+2. Validate error handling
+3. Test edge cases
+4. Document stability improvements
+5. Create mitigation strategies for potential issues
+
+**Stability Requirements:**
+- System stable under normal load
+- Error handling robust
+- Edge cases handled properly
+- No performance regressions
+
+**Dependencies:**
+- Completion of T3-1 and T3-2
+
+**Blocked On:**
+- Completion of T3-1 and T3-2
+
+**T3-4: Final Code Review and Documentation**
+- **Task ID:** T3-4
+- **Priority:** High
+- **Estimated Effort:** 3 hours
+- **Owner:** Development Team B
+- **Status:** Pending
+
+**Task Description:**
+Perform final code review and ensure all documentation is complete.
+
+**Deliverables:**
+- Final code review report
+- Updated project documentation
+- Team training materials
+- Handoff documentation
+
+**Implementation Details:**
+1. Perform final code review
+2. Update all project documentation
+3. Create team training materials
+4. Prepare handoff documentation
+5. Document lessons learned
+
+**Review Requirements:**
+- All code reviewed
+- Documentation complete
+- Team trained on new patterns
+- Handoff ready
+
+**Dependencies:**
+- Completion of T3-1, T3-2, and T3-3
+
+**Blocked On:**
+- Completion of T3-1, T3-2, and T3-3
+
+## Task Dependencies Summary
+
+```
+T3-1 (Test Suite) ───┐
+                      ├──┄ T3-4 (Final Review)
+T3-2 (Validation) ────┤
+                      └──┄ T3-3 (Stability)
 ```
 
-## Handoff
+## Implementation Timeline
 
-Before ending session, update:
-1. `current-task.md`
-2. `.harness/session-state.json`
-3. `.harness/session-log.md`
+| Phase | Start Date | End Date | Duration |
+|-------|------------|----------|----------|
+| T3-1: Run Test Suite | 2026-07-08 | 2026-07-08 | 1 day |
+| T3-2: Validate Architecture | 2026-07-09 | 2026-07-09 | 1 day |
+| T3-3: Ensure Stability | 2026-07-10 | 2026-07-10 | 1 day |
+| T3-4: Final Review | 2026-07-11 | 2026-07-11 | 1 day |
+| **Total** | - | - | **4 days** |
 
-## Hard Lessons (2026-06-22)
+## Risk Assessment
 
-### 1. 全局 token 改动必须先 grep 审计所有引用点
-改 `RADIUS_MD` (8→12) / `RADIUS_LG` (12→16) 之前没有 grep 外部文件 → `ShellEnhancementsPage`、`SystemMonitorPage` 受影响。
-**规则**: 动任何全局 token，必须先 `grep -r TOKEN src/` 列全所有引用，逐一评估 Visual diff。
+| Risk | Probability | Impact | Mitigation Strategy |
+|------|-------------|--------|----------|
+| Test Failures | Low | High | Comprehensive test coverage |
+| Performance Issues | Low | Medium | Performance testing |
+| Documentation Gaps | Medium | Medium | Complete documentation |
+| Team Training Needs | Low | Medium | Comprehensive training |
 
-### 2. UI 改写必须逐行对比新旧视觉效果
-SSH 页面重写时直接把硬编码字号映射到 token，没逐行对照：连接名 15→14、端口 13→12、时间戳 12→10，全面变小。
-**规则**: 替换硬编码值前先建对照表 `oldValue → newToken`；如果旧值 > token 值，保留旧值或用更大的 token，不准默默缩小。
+## Success Criteria
 
-### 3. Dialog 模式切换必须审查完整窗口生命周期
-`AlertDialog` → `Theme_Translucent_NoTitleBar` + `MATCH_PARENT` 没考虑 system bars insets 和 max size。
-**规则**: 换 dialog 底座时检查：(1) 是否处理 system window insets？(2) 是否限制最大高度？(3) dismiss 通路是否正常？(4) 极端内容（太长、横屏、分屏）是否溢出？
+1. **Test Coverage:** All tests pass with >90% coverage
+2. **Architecture Validation:** Architecture meets all requirements
+3. **System Stability:** System stable and reliable
+4. **Documentation:** Complete and accurate documentation
+5. **Team Training:** Team trained on new patterns
+6. **Handoff Ready:** Ready for production deployment
 
-### 4. IME 代理 EditText 中 `setText("")` 与 Binder 并发死锁
-在 `InputConnectionWrapper` 回调路径内，`clearProxyText()` 的 `post {}` 中用 `setText("")` 替代 `text?.clear()` 导致 TUI 模式卡死。`setText("")` 走 `TextView.setText()` 完整管道 → `checkForRelayout()` + `Editor.afterTextChanged()` → `IMM.updateSelection()` → Binder 回调 IME。若 `post {}` 的执行与 `sendKeyEvent(KEYCODE_ENTER)` 的 Binder 同步调用并发，三者（主线程等 IMM、IME Binder 线程等 sendKeyEvent 返回、线程池等待）形成死锁。`text?.clear()` 原地改 `SpannableStringBuilder`，不走 `TextView.setText()`，不触发布局/`restartInput` /额外 Binder 调用。
-**规则**: 在 IME 代理 EditText（`InputConnection` 回调路径以及任何 `post {}` Runnable）中清缓冲区，只用 `text?.clear()`（`Editable` 原地改），永不调用 `setText("")`。所有在 `post {}` 中操作 EditText 且可能与 Binder 线程并发的改动，优先用 `getText().clear()` / `getText().delete()` / `getText().replace()` 等原地修改方式。
+## Handoff Criteria
 
-### 5. IME 手动 padding 必须扣除 `contentHost` 到窗口底的全部间隔
-用 `ADJUST_NOTHING` + 手动 IME padding 防键盘遮挡时，padding 不能直接用 `Type.ime().bottom`。布局层次中，`contentHost`（页面容器）下方可能还有底部导航栏 + 系统导航栏，它们已经占了空间。直接对 `contentHost` 设 `imeHeight` padding 会多出一段空隙 = `bottomNavView.height + systemBars.bottom`。
-**规则**: 手动 IME padding 的计算公式：
-```
-extra = max(0, imeHeight - sysBarsBottom - bottomNavHeight)
-```
-其中 `sysBarsBottom` = `Type.systemBars().bottom`（系统导航栏），`bottomNavHeight` = 应用底部导航栏高度。对 `contentHost`（或 root 容器）设这个 padding，而非对页面根布局设。IME 关闭时 `imeHeight=0` → `extra=0`，padding 自动归零。
+- [ ] All tests pass
+- [ ] Architecture validated
+- [ ] System stable
+- [ ] Documentation complete
+- [ ] Team trained
+- [ ] Ready for production
+
+## Next Steps
+
+After completing Phase 3, the team should:
+1. Deploy to production
+2. Monitor system performance
+3. Collect user feedback
+4. Plan for future enhancements
+5. Document lessons learned
+
+**Current Phase:** Phase 2 - Architecture Optimization (Completed)
+**Next Phase:** Phase 3 - Integration Testing and Validation

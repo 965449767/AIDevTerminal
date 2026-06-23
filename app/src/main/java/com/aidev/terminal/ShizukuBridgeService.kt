@@ -2,6 +2,7 @@ package com.aidev.terminal
 
 import android.os.FileObserver
 import android.util.Log
+import com.aidev.terminal.ErrorHandler
 import java.io.File
 import java.lang.ref.WeakReference
 
@@ -26,7 +27,7 @@ object ShizukuBridgeService {
     private const val RESULT_DIR = "result"
 
     private var observer: FileObserver? = null
-    private var isRunning = false
+    @PublishedApi internal var isRunning = false
 
     /** 启动桥服务 */
     fun start(homeDir: File) {
@@ -55,10 +56,13 @@ object ShizukuBridgeService {
 
     /** 停止桥服务 */
     fun stop() {
-        observer?.stopWatching()
-        observer = null
-        isRunning = false
-        AIDevLogger.d(TAG, "Bridge service stopped")
+        try {
+            observer?.stopWatching()
+        } finally {
+            observer = null
+            isRunning = false
+            AIDevLogger.d(TAG, "Bridge service stopped")
+        }
     }
 
     private fun handleRequest(requestDir: File, bridgeDir: File, fileName: String) {
@@ -70,7 +74,7 @@ object ShizukuBridgeService {
         if (resFile.exists()) return
 
         Thread {
-            try {
+            ErrorHandler.execute {
                 Thread.sleep(100) // 等待写入完成
 
                 val content = reqFile.readText()
@@ -124,7 +128,7 @@ object ShizukuBridgeService {
                     // 清理请求文件
                     reqFile.delete()
                 }
-            } catch (e: Exception) {
+            }.getOrElse { e ->
                 AIDevLogger.e(TAG, "Failed to handle request: $fileName", e)
                 atomicWriteText(resFile, "ERROR: ${e.message}\n")
                 reqFile.delete()
