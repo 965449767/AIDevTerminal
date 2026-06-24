@@ -28,6 +28,8 @@ internal interface CompletionHost {
 
 internal class CompletionEngine(private val host: CompletionHost) {
 
+    private fun pm(activity: Activity) = PreferencesManager(activity)
+
     fun buildBar(activity: Activity, ui: AIDevUi): HorizontalScrollView =
         HorizontalScrollView(activity).apply {
             isHorizontalScrollBarEnabled = false
@@ -116,17 +118,17 @@ internal class CompletionEngine(private val host: CompletionHost) {
     }
 
     fun pinCompletion(activity: Activity, item: TerminalCompletion) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val old = prefs.getString("terminal_pinned_completions", "")?.lines()?.filter { it.isNotBlank() && it != item.insertText }.orEmpty()
-        prefs.edit().putString("terminal_pinned_completions", (listOf(item.insertText) + old).take(12).joinToString("\n")).apply()
+        val p = pm(activity)
+        val old = p.terminalPinnedCompletions.lines().filter { it.isNotBlank() && it != item.insertText }
+        p.terminalPinnedCompletions = (listOf(item.insertText) + old).take(12).joinToString("\n")
         host.completionRefresh()
         Toast.makeText(activity, "已固定到常用", Toast.LENGTH_SHORT).show()
     }
 
     fun unpinCompletion(activity: Activity, item: TerminalCompletion) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val old = prefs.getString("terminal_pinned_completions", "")?.lines().orEmpty()
-        prefs.edit().putString("terminal_pinned_completions", old.filter { it.isNotBlank() && it != item.insertText }.joinToString("\n")).apply()
+        val p = pm(activity)
+        val old = p.terminalPinnedCompletions.lines().filter { it.isNotBlank() && it != item.insertText }
+        p.terminalPinnedCompletions = old.joinToString("\n")
         host.completionRefresh()
         Toast.makeText(activity, "已取消固定", Toast.LENGTH_SHORT).show()
     }
@@ -134,12 +136,10 @@ internal class CompletionEngine(private val host: CompletionHost) {
     private fun input(): String = host.completionInputBuffer + host.completionComposingBuffer
 
     private fun pinnedCompletions(activity: Activity): List<TerminalCompletion> =
-        activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-            .getString("terminal_pinned_completions", "")
-            ?.lines()
-            ?.filter { it.isNotBlank() }
-            ?.map { TerminalCompletion(it, it, "PIN") }
-            .orEmpty()
+        pm(activity).terminalPinnedCompletions
+            .lines()
+            .filter { it.isNotBlank() }
+            .map { TerminalCompletion(it, it, "PIN") }
 
     private fun pathCompletions(input: String): List<TerminalCompletion> {
         val home = host.completionHomeDir ?: return emptyList()

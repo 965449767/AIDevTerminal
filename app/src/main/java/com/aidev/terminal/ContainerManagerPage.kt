@@ -22,6 +22,7 @@ class ContainerManagerPage : ShellPage {
     private lateinit var ui: AIDevUi
     private lateinit var host: ShellHost
     private lateinit var list: LinearLayout
+    private val pm by lazy { PreferencesManager(activity) }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     /** 开发工具信息 */
@@ -73,8 +74,7 @@ class ContainerManagerPage : ShellPage {
 
             val devTools = detectDevTools(rootfs)
 
-            val projectPath = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-                .getString("current_project_path", "/root")
+            val projectPath = pm.currentProjectPath
 
             withContext(Dispatchers.Main) {
                 renderContainerInfo(rootfs, rootfsSizeText, prootOk, devTools, projectPath)

@@ -2,7 +2,6 @@ package com.aidev.terminal
 
 import android.app.Activity
 import android.content.Context
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
@@ -12,10 +11,11 @@ import java.io.File
 
 class ServerCenterActivity : Activity() {
     private lateinit var ui: AIDevUi
+    private val pm by lazy { PreferencesManager(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ui = AIDevUi(this, getSharedPreferences("aidev_ui", MODE_PRIVATE))
+        ui = AIDevUi(this, pm.sharedPreferences)
         buildUi()
     }
 
@@ -68,12 +68,12 @@ class ServerCenterActivity : Activity() {
         }
 
     private fun keepAliveEnabled(): Boolean =
-        getSharedPreferences("aidev_ui", MODE_PRIVATE).getBoolean("keepalive_auto", true)
+        pm.keepaliveAuto
 
     private fun batteryIgnored(): Boolean {
         if (Build.VERSION.SDK_INT < 23) return true
-        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-        return pm.isIgnoringBatteryOptimizations(packageName)
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        return powerManager.isIgnoringBatteryOptimizations(packageName)
     }
 
     private fun ubuntuInstalled(): Boolean = File(filesDir, "home/ubuntu-rootfs/.aidev-rootfs-ready").exists()

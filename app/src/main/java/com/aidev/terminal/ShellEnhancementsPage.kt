@@ -3,7 +3,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import android.app.Activity
 import android.content.SharedPreferences
-import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
@@ -43,7 +42,7 @@ class ShellEnhancementsPage : ShellPage {
 
     /** One-liners 存储的 SharedPreferences */
     private val shellPrefs: SharedPreferences
-        get() = activity.getSharedPreferences("aidev_shell", Activity.MODE_PRIVATE)
+        get() = activity.getSharedPreferences(Constants.PREFS_SHELL, Activity.MODE_PRIVATE)
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
@@ -449,13 +448,13 @@ class ShellEnhancementsPage : ShellPage {
 
     /** 从 SharedPreferences 加载 One-liners */
     private fun loadOneliners(): List<String> {
-        val raw = shellPrefs.getString("oneliners", "") ?: ""
+        val raw = shellPrefs.getString(Constants.PrefKeys.ONELINERS, "") ?: ""
         return raw.lines().filter { it.isNotBlank() }
     }
 
     /** 保存 One-liners 到 SharedPreferences */
     private fun saveOneliners(list: List<String>) {
-        shellPrefs.edit().putString("oneliners", list.joinToString("\n")).apply()
+        shellPrefs.edit().putString(Constants.PrefKeys.ONELINERS, list.joinToString("\n")).apply()
     }
 
     /** 单条 One-liner 行：点击执行，长按删除 */

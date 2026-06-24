@@ -15,11 +15,10 @@ internal class VirtualKeyEditor(
     private val onKeysChanged: () -> Unit
 ) {
 
+    private fun pm(activity: Activity) = PreferencesManager(activity)
+
     fun show(activity: Activity, key: EmbeddedVirtualKey) {
-        val aliases = parseKeyAliases(
-            activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-                .getString("terminal_key_aliases", "") ?: ""
-        )
+        val aliases = parseKeyAliases(pm(activity).terminalKeyAliases)
 
         val dp = { v: Int -> terminalDp(activity, v) }
         val pill = { label: String, onClick: () -> Unit ->
@@ -139,8 +138,7 @@ internal class VirtualKeyEditor(
         swipeAliasRow?.let { content.addView(it) }
 
         refreshAliasesFn = {
-            val raw = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-                .getString("terminal_key_aliases", "") ?: ""
+            val raw = pm(activity).terminalKeyAliases
             val updated = parseKeyAliases(raw)
             val tapIdx = tapAliasRow?.let { content.indexOfChild(it) } ?: -1
             val swipeIdx = swipeAliasRow?.let { content.indexOfChild(it) } ?: -1
@@ -187,33 +185,33 @@ internal class VirtualKeyEditor(
     }
 
     private fun saveKeyOverride(activity: Activity, id: String, key: EmbeddedVirtualKey) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val old = prefs.getString("terminal_key_overrides", "") ?: ""
+        val p = pm(activity)
+        val old = p.terminalKeyOverrides
         val lines = old.lines().filter { it.isNotBlank() && it.substringBefore("\t") != id }
         val line = listOf(id, key.label, encodeKeyInput(key.input), encodeKeyInput(key.swipeCommand)).joinToString("\t")
-        prefs.edit().putString("terminal_key_overrides", (lines + line).joinToString("\n")).apply()
+        p.terminalKeyOverrides = (lines + line).joinToString("\n")
     }
 
     private fun removeKeyOverride(activity: Activity, id: String) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val old = prefs.getString("terminal_key_overrides", "") ?: ""
+        val p = pm(activity)
+        val old = p.terminalKeyOverrides
         val lines = old.lines().filter { it.isNotBlank() && it.substringBefore("\t") != id }
-        prefs.edit().putString("terminal_key_overrides", lines.joinToString("\n")).apply()
+        p.terminalKeyOverrides = lines.joinToString("\n")
     }
 
     private fun saveKeyAlias(activity: Activity, name: String, value: String) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val old = prefs.getString("terminal_key_aliases", "") ?: ""
+        val p = pm(activity)
+        val old = p.terminalKeyAliases
         val lines = old.lines().filter { it.isNotBlank() && it.substringBefore("\t") != name }
         val line = listOf(name, value).joinToString("\t")
-        prefs.edit().putString("terminal_key_aliases", (lines + line).joinToString("\n")).apply()
+        p.terminalKeyAliases = (lines + line).joinToString("\n")
     }
 
     private fun removeKeyAlias(activity: Activity, name: String) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val old = prefs.getString("terminal_key_aliases", "") ?: ""
+        val p = pm(activity)
+        val old = p.terminalKeyAliases
         val lines = old.lines().filter { it.isNotBlank() && it.substringBefore("\t") != name }
-        prefs.edit().putString("terminal_key_aliases", lines.joinToString("\n")).apply()
+        p.terminalKeyAliases = lines.joinToString("\n")
     }
 
     private fun fillPill(activity: Activity, label: String, onClick: () -> Unit): TextView =

@@ -2,16 +2,12 @@ package com.aidev.terminal
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import android.app.Activity
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
-import android.os.PowerManager
 import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
@@ -44,6 +40,7 @@ class EmbeddedFilesPage : ShellPage {
     private var syncEnabled = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var syncDot: TextView? = null
+    private val pm by lazy { PreferencesManager(activity) }
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
@@ -65,7 +62,7 @@ class EmbeddedFilesPage : ShellPage {
 
     override fun onSelected(activity: Activity, view: View) {
         if (::leftList.isInitialized) reloadAll()
-        syncEnabled = SyncCoordinator.isEnabled(activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
+        syncEnabled = SyncCoordinator.isEnabled(pm.sharedPreferences)
         syncDot?.let { tv ->
             tv.text = if (syncEnabled) "●" else "○"
             tv.setTextColor(if (syncEnabled) 0xFF22D3A7.toInt() else 0xFF4B5563.toInt())
@@ -147,10 +144,10 @@ class EmbeddedFilesPage : ShellPage {
     }
 
     private fun recentFileMenuLabels(): List<String> =
-        activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).getString("recent_file_more", "")?.lines()?.filter { it.isNotBlank() }.orEmpty().takeLast(3).reversed()
+        pm.recentFileMore.lines().filter { it.isNotBlank() }.takeLast(3).reversed()
 
     private fun rememberFileMenuLabel(label: String) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+        val prefs = pm.sharedPreferences
         val old = prefs.getString("recent_file_more", "")?.lines()?.filter { it.isNotBlank() && it != label }.orEmpty()
         prefs.edit().putString("recent_file_more", (old + label).takeLast(6).joinToString("\n")).apply()
     }
@@ -247,7 +244,7 @@ class EmbeddedFilesPage : ShellPage {
     private fun notifyTerminalCd(dir: File) {
         val act = activity
         val home = File(act.filesDir, "home")
-        val prefs = act.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+        val prefs = pm.sharedPreferences
         SyncCoordinator.onBrowserDirChanged(dir, home, prefs) { ubuntuPath ->
             if (act is ShellActivity) act.syncTerminalCd(ubuntuPath)
         }
@@ -257,11 +254,11 @@ class EmbeddedFilesPage : ShellPage {
         TextView(activity).apply {
             gravity = Gravity.CENTER
             textSize = 11f
-            val on = SyncCoordinator.isEnabled(activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
+            val on = SyncCoordinator.isEnabled(pm.sharedPreferences)
             text = if (on) "●" else "○"
             setTextColor(if (on) 0xFF22D3A7.toInt() else 0xFF4B5563.toInt())
             setOnClickListener {
-                val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+                val prefs = pm.sharedPreferences
                 val current = SyncCoordinator.isEnabled(prefs)
                 SyncCoordinator.setEnabled(prefs, !current)
                 val nowOn = !current
@@ -547,16 +544,13 @@ class EmbeddedFilesPage : ShellPage {
     }
 
     private fun markCurrentProject(dir: File = selected()?.takeIf { it.isDirectory } ?: activeDir()) {
-        activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-            .edit()
-            .putString("current_project_path", dir.absolutePath)
-            .apply()
+        pm.currentProjectPath = dir.absolutePath
         rememberRecentDir(dir)
         toast("已标记当前项目")
     }
 
     private fun jumpCurrentProject() {
-        val path = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).getString("current_project_path", "").orEmpty()
+        val path = pm.currentProjectPath
         val dir = File(path)
         if (path.isBlank() || !dir.isDirectory) {
             toast("未标记当前项目")
@@ -568,12 +562,12 @@ class EmbeddedFilesPage : ShellPage {
     }
 
     private fun clearCurrentProject() {
-        activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).edit().remove("current_project_path").apply()
+        pm.currentProjectPath = ""
         toast("已清除当前项目")
     }
 
     private fun projectOverview(dir: File) {
-        val current = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).getString("current_project_path", "") == dir.absolutePath
+        val current = pm.currentProjectPath == dir.absolutePath
         val body = listOf(
             "名称：${dir.name}",
             "路径：${dir.absolutePath}",
@@ -647,7 +641,7 @@ class EmbeddedFilesPage : ShellPage {
     }
 
     private fun showProjectHistory() {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+        val prefs = pm.sharedPreferences
         val rows = prefs.getString("project_action_history", "")?.lines()?.filter { it.isNotBlank() }.orEmpty().takeLast(20).reversed()
         if (rows.isEmpty()) return toast("暂无项目操作历史")
         MaterialAlertDialogBuilder(activity)
@@ -803,7 +797,7 @@ class EmbeddedFilesPage : ShellPage {
     }
 
     private fun rememberProjectAction(label: String, dir: File, command: String) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+        val prefs = pm.sharedPreferences
         val line = "${System.currentTimeMillis()}\t$label\t${dir.absolutePath}\t$command"
         val old = prefs.getString("project_action_history", "") ?: ""
         val next = (old.lines().filter { it.isNotBlank() } + line).takeLast(20).joinToString("\n")
@@ -900,16 +894,14 @@ class EmbeddedFilesPage : ShellPage {
     }
 
     private fun addFavorite() {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val set = prefs.getStringSet("file_favorites", emptySet())?.toMutableSet() ?: mutableSetOf()
+        val set = pm.fileFavorites.toMutableSet()
         set.add(activeDir().absolutePath)
-        prefs.edit().putStringSet("file_favorites", set).apply()
+        pm.fileFavorites = set
         toast("已收藏当前路径")
     }
 
     private fun showFavorites() {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val favorites = prefs.getStringSet("file_favorites", emptySet())?.toList()?.sorted().orEmpty()
+        val favorites = pm.fileFavorites.toList().sorted()
         if (favorites.isEmpty()) {
             toast("暂无收藏路径")
             return
@@ -926,7 +918,7 @@ class EmbeddedFilesPage : ShellPage {
                 loadPane(activeLeft)
             }
             .setNegativeButton("清空收藏") { _, _ ->
-                prefs.edit().remove("file_favorites").apply()
+                pm.fileFavorites = emptySet()
                 toast("已清空收藏")
             }
             .show()
@@ -954,8 +946,7 @@ class EmbeddedFilesPage : ShellPage {
     }
 
     private fun showRecentProjects() {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val recent = prefs.getStringSet("file_recent_dirs", emptySet())?.toMutableSet() ?: mutableSetOf()
+        val recent = pm.fileRecentDirs.toMutableSet()
         val roots = listOf(
             File(activity.filesDir, "home/ubuntu-rootfs/root/projects"),
             File(activity.filesDir, "home/projects"),
@@ -1085,11 +1076,10 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
     }
 
     private fun rememberRecentDir(dir: File) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val set = prefs.getStringSet("file_recent_dirs", emptySet())?.toMutableSet() ?: mutableSetOf()
+        val set = pm.fileRecentDirs.toMutableSet()
         set.add(dir.absolutePath)
         while (set.size > 80) set.remove(set.first())
-        prefs.edit().putStringSet("file_recent_dirs", set).apply()
+        pm.fileRecentDirs = set
     }
 
     private fun fileActions(file: File) {

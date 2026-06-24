@@ -34,10 +34,40 @@ object Constants {
     // 脚本版本标记
     const val ASSET_VERSION = "0.12.35-dual-agent-scripts"
 
-    // SharedPreferences
+    // SharedPreferences 文件名
     const val PREFS_NAME = "aidev_ui"
-    const val PREFS_KEEPALIVE_AUTO = "keepalive_auto"
-    const val PREFS_WRITE_SETTINGS_PROMPTED = "write_settings_prompted"
+    const val PREFS_SHELL = "aidev_shell"
+    const val PREFS_SSH = "aidev_ssh"
+
+    // SharedPreferences Key 常量
+    object PrefKeys {
+        const val THEME_PRESET = "theme_preset"
+        const val BG_MODE = "bg_mode"
+        const val BG_IMAGE_URI = "bg_image_uri"
+        const val HAPTIC_TAP = "haptic_tap"
+        const val FONT_SP = "font_sp"
+        const val KEEPALIVE_AUTO = "keepalive_auto"
+        const val WRITE_SETTINGS_PROMPTED = "write_settings_prompted"
+        const val SYNC_TERMINAL_FILES = "sync_terminal_files"
+        const val CURRENT_PROJECT_PATH = "current_project_path"
+        const val BACKUP_DIR = "backup_dir"
+        const val PROJECTS_DIR_REL = "projects_dir_rel"
+        const val EXTERNAL_AIDEV_DIR = "external_aidev_dir"
+        const val PROJECT_ACTION_HISTORY = "project_action_history"
+        const val RECENT_FILE_MORE = "recent_file_more"
+        const val RECENT_TERMINAL_MORE = "recent_terminal_more"
+        const val RECENT_AGENT_MORE = "recent_agent_more"
+        const val TERMINAL_CUSTOM_KEYS = "terminal_custom_keys"
+        const val TERMINAL_KEY_OVERRIDES = "terminal_key_overrides"
+        const val TERMINAL_KEY_ALIASES = "terminal_key_aliases"
+        const val TERMINAL_KEY_ORDER = "terminal_key_order"
+        const val TERMINAL_PINNED_COMPLETIONS = "terminal_pinned_completions"
+        const val AUTO_SHOW_KEYBOARD = "auto_show_keyboard"
+        const val FILE_FAVORITES = "file_favorites"
+        const val FILE_RECENT_DIRS = "file_recent_dirs"
+        const val ONELINERS = "oneliners"
+        const val SSH_CONNECTIONS = "connections"
+    }
 
     // 终端环境变量
     const val ENV_TERM = "xterm-256color"

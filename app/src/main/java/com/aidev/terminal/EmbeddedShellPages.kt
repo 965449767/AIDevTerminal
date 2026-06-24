@@ -5,17 +5,9 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
-import android.graphics.BitmapFactory
 import android.graphics.Color
-import android.net.Uri
-import android.os.Build
-import android.os.Environment
 import android.os.Handler
 import android.os.Looper
-import android.os.PowerManager
-import android.provider.Settings
-import android.text.InputType
 import android.text.TextUtils
 import android.util.Log
 import android.view.Gravity
@@ -24,16 +16,12 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputConnection
-import android.view.inputmethod.InputConnectionWrapper
 import android.view.inputmethod.InputMethodManager
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import android.widget.EditText
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
@@ -43,7 +31,6 @@ import com.termux.terminal.TerminalSessionClient
 import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
 import kotlin.math.abs
-import android.animation.Animator
 import java.io.File
 
 /**
@@ -105,6 +92,8 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
     private lateinit var completionEngine: CompletionEngine
 
     private var manualTuiOverride = false
+
+    private val pm by lazy { PreferencesManager(checkNotNull(activity) { "activity must be set before pm access" }) }
 
     private var isRearranging = false
     private var keyboardView: LinearLayout? = null
@@ -218,8 +207,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
         // 键盘可见性监听器：自动同步 ⌨ 指示器状态（WindowInsetsCompat 不受 softInputMode 影响）
         ViewCompat.setOnApplyWindowInsetsListener(rootView) { _, insets ->
             val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
-            val autoShow = activity.getSharedPreferences("aidev_ui", android.content.Context.MODE_PRIVATE)
-                .getBoolean("auto_show_keyboard", true)
+            val autoShow = pm.autoShowKeyboard
             val active = imeVisible || autoShow
             keyboardIndicator?.setTextColor(if (active) DesignTokens.ACCENT else 0xFF9CA3AF.toInt())
             insets
@@ -312,7 +300,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
         focusTerminalInput(activity)
         consumePendingCommand()
         syncIndicator?.let { tv ->
-            val on = SyncCoordinator.isEnabled(activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
+            val on = SyncCoordinator.isEnabled(pm.sharedPreferences)
             tv.text = if (on) "●" else "○"
             tv.setTextColor(if (on) DesignTokens.ACCENT else 0xFF9CA3AF.toInt())
         }
@@ -365,7 +353,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
             lastSyncedPwd = ubuntuPwd
             cachedCompletionPwd = ubuntuPwd
             val act = this.activity ?: return@PwdFileObserver
-            val prefs = act.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+            val prefs = pm.sharedPreferences
             SyncCoordinator.onTerminalPwdChanged(ubuntuPwd, home, prefs) { targetDir ->
                 android.util.Log.d("AIDEV_SYNC", "L1 sync: $ubuntuPwd -> ${targetDir.absolutePath}, isDir=${targetDir.isDirectory}")
                 try {
@@ -383,11 +371,11 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
             gravity = Gravity.CENTER
             textSize = 11f
             includeFontPadding = false
-            val on = SyncCoordinator.isEnabled(activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
+            val on = SyncCoordinator.isEnabled(pm.sharedPreferences)
             text = if (on) "●" else "○"
             setTextColor(if (on) DesignTokens.ACCENT else 0xFF9CA3AF.toInt())
             setOnClickListener {
-                val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
+                val prefs = pm.sharedPreferences
                 val current = SyncCoordinator.isEnabled(prefs)
                 SyncCoordinator.setEnabled(prefs, !current)
                 val nowOn = !current
@@ -396,7 +384,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
                 Toast.makeText(activity, if (nowOn) "联动已开启" else "联动已关闭", Toast.LENGTH_SHORT).show()
             }
             setOnLongClickListener {
-                val on = SyncCoordinator.isEnabled(activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
+            val on = SyncCoordinator.isEnabled(pm.sharedPreferences)
                 Toast.makeText(activity, if (on) "终端-文件联动中" else "已关闭，点击开启", Toast.LENGTH_SHORT).show()
                 true
             }
@@ -437,8 +425,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
         }
 
     private fun keyboardIndicatorView(activity: Activity, ui: AIDevUi): TextView {
-        val prefs = activity.getSharedPreferences("aidev_ui", android.content.Context.MODE_PRIVATE)
-        val enabled = prefs.getBoolean("auto_show_keyboard", true)
+        val enabled = pm.autoShowKeyboard
         return TextView(activity).apply {
             gravity = Gravity.CENTER
             textSize = 11f
@@ -451,8 +438,8 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
                 intArrayOf(0x000D1117.toInt(), 0xFF0D1117.toInt())
             )
             setOnClickListener {
-                val newValue = !prefs.getBoolean("auto_show_keyboard", true)
-                prefs.edit().putBoolean("auto_show_keyboard", newValue).apply()
+                val newValue = !pm.autoShowKeyboard
+                pm.autoShowKeyboard = newValue
                 setTextColor(if (newValue) DesignTokens.ACCENT else 0xFF9CA3AF.toInt())
                 val imm = activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
                 val target = inputProxy ?: terminalView
@@ -464,7 +451,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
                 }
             }
             setOnLongClickListener {
-                Toast.makeText(activity, if (prefs.getBoolean("auto_show_keyboard", true)) "键盘已开启" else "键盘已关闭", Toast.LENGTH_SHORT).show()
+                Toast.makeText(activity, if (pm.autoShowKeyboard) "键盘已开启" else "键盘已关闭", Toast.LENGTH_SHORT).show()
                 true
             }
         }
@@ -552,7 +539,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
     private fun showGroupedActionMenu(activity: Activity, title: String, prefKey: String, actions: List<Pair<String, () -> Unit>>) {
         val recent = recentMenuLabels(activity, prefKey).filter { label -> actions.any { it.first == label } }
         val display = (recent.map { "最近 · ${it.substringAfter(" · ")}" to it } + actions.filterNot { recent.contains(it.first) }.map { it.first to it.first })
-        val ui = AIDevUi(activity, activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
+        val ui = AIDevUi(activity, pm.sharedPreferences)
         val items = display.map { (showLabel, original) ->
             MenuBottomSheet.MenuItem(showLabel, "") {
                 rememberMenuLabel(activity, prefKey, original)
@@ -573,7 +560,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
                 val keyword = edit.text.toString().trim()
                 val matches = actions.filter { keyword.isBlank() || it.first.contains(keyword, true) }.take(30)
                 if (matches.isEmpty()) return@setPositiveButton Toast.makeText(activity, "没有匹配项", Toast.LENGTH_SHORT).show()
-                val ui = AIDevUi(activity, activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
+        val ui = AIDevUi(activity, pm.sharedPreferences)
                 val items = matches.map { (label, action) ->
                     MenuBottomSheet.MenuItem(label, "") {
                         rememberMenuLabel(activity, prefKey, label)
@@ -587,12 +574,11 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
     }
 
     private fun recentMenuLabels(activity: Activity, key: String): List<String> =
-        activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).getString(key, "")?.lines()?.filter { it.isNotBlank() }.orEmpty().takeLast(3).reversed()
+        pm.sharedPreferences.getString(key, "")?.lines()?.filter { it.isNotBlank() }.orEmpty().takeLast(3).reversed()
 
     private fun rememberMenuLabel(activity: Activity, key: String, label: String) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val old = prefs.getString(key, "")?.lines()?.filter { it.isNotBlank() && it != label }.orEmpty()
-        prefs.edit().putString(key, (old + label).takeLast(6).joinToString("\n")).apply()
+        val old = pm.sharedPreferences.getString(key, "")?.lines()?.filter { it.isNotBlank() && it != label }.orEmpty()
+        pm.sharedPreferences.edit().putString(key, (old + label).takeLast(6).joinToString("\n")).apply()
     }
 
     private fun sendAgentCommand(command: String) {
@@ -603,7 +589,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
     /** 打开 Shell 增强页面（命令历史统计、别名管理等） */
     private fun showShellEnhancements(activity: Activity) {
         val page = ShellEnhancementsPage()
-        val view = page.create(activity, ui ?: AIDevUi(activity, activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)), ShellHost(activity, activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE), ui ?: AIDevUi(activity, activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))))
+        val view = page.create(activity, ui ?: AIDevUi(activity, pm.sharedPreferences), ShellHost(activity, pm.sharedPreferences, ui ?: AIDevUi(activity, pm.sharedPreferences)))
         MaterialAlertDialogBuilder(activity)
             .setTitle("Shell 增强")
             .setView(view)
@@ -612,7 +598,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
     }
 
     private fun showSshBookmarks(activity: Activity, host: ShellHost) {
-        val ui = ui ?: AIDevUi(activity, activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE))
+        val ui = ui ?: AIDevUi(activity, pm.sharedPreferences)
         val page = SshBookmarksPage()
         val view = page.create(activity, ui, host)
         val dialog = ui.showAsDialog(view)
@@ -652,15 +638,14 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
     }
 
     private fun currentProjectDir(): File? =
-        activity?.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-            ?.getString("current_project_path", "")
+        activity?.let { pm.sharedPreferences.getString("current_project_path", "") }
             ?.takeIf { it.isNotBlank() }
             ?.let { File(it) }
             ?.takeIf { it.isDirectory }
 
     private fun applyFontPreset(activity: Activity, sp: Float) {
         val value = sp.coerceIn(MIN_FONT_SP, MAX_FONT_SP)
-        activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).edit().putFloat("font_sp", value).apply()
+        pm.fontSp = value
         pendingFontSp = value
         terminalView?.setTextSize(activity!!.spToPx(value))
         terminalView?.onScreenUpdated()
@@ -700,16 +685,14 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
     }
 
     private fun loadKeyOrder(activity: Activity): MutableList<String> {
-        val raw = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-            .getString("terminal_key_order", "") ?: ""
+        val raw = pm.terminalKeyOrder
         if (raw.isBlank()) return embeddedKeys(activity).map { it.id }.toMutableList()
         return raw.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toMutableList()
     }
 
     private fun saveKeyOrder(activity: Activity) {
         val raw = currentKeyOrder.joinToString(",")
-        activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-            .edit().putString("terminal_key_order", raw).apply()
+        pm.terminalKeyOrder = raw
     }
 
     private fun enterRearrangeMode(activity: Activity, ui: AIDevUi) {
@@ -897,7 +880,6 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
     }
 
     private fun embeddedKeys(activity: Activity): List<EmbeddedVirtualKey> {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
         val defaults = listOf(
             EmbeddedVirtualKey("ESC", "\u001B", "clear", "esc"),
             EmbeddedVirtualKey("CTRL", "__CTRL__", "", "ctrl"),
@@ -912,9 +894,9 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
             EmbeddedVirtualKey("|", "|", "grep ", "pipe"),
             EmbeddedVirtualKey("SPC", " ", "pwd", "space")
         )
-        val overrides = parseKeyOverrides(prefs.getString("terminal_key_overrides", "") ?: "")
+        val overrides = parseKeyOverrides(pm.terminalKeyOverrides)
         val customizedDefaults = defaults.map { key -> overrides[key.id] ?: key }
-        val custom = parseCustomKeys(prefs.getString("terminal_custom_keys", "") ?: "")
+        val custom = parseCustomKeys(pm.terminalCustomKeys)
         return (customizedDefaults + custom).take(12)
     }
 
@@ -1031,8 +1013,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
     }
 
     private fun hapticTap(activity: Activity) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        if (!prefs.getBoolean("haptic_tap", true)) return
+        if (!pm.hapticTap) return
         val view = terminalView ?: return
         view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP, android.view.HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
     }
@@ -1064,7 +1045,6 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
     }
 
     private fun showExtraKeysMenu(activity: Activity) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
         val keys = listOf(
             EmbeddedVirtualKey("HOME", "\u001b[H"),
             EmbeddedVirtualKey("END", "\u001b[F"),
@@ -1075,7 +1055,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
             EmbeddedVirtualKey("Ubuntu", "ubuntu\n"),
             EmbeddedVirtualKey("任务", "task-list\n")
         ).toMutableList()
-        keys.addAll(parseCustomKeys(prefs.getString("terminal_custom_keys", "") ?: ""))
+        keys.addAll(parseCustomKeys(pm.terminalCustomKeys))
         MaterialAlertDialogBuilder(activity)
             .setTitle("扩展键盘更多")
             .setItems(keys.map { it.label }.toTypedArray()) { _, which -> session?.write(keys[which].input) }
@@ -1098,12 +1078,9 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
         activity!!.spToPx(currentFontSp(activity))
 
     private fun currentFontSp(activity: Activity): Float =
-        activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-            .getFloat("font_sp", DEFAULT_FONT_SP)
-            .coerceIn(MIN_FONT_SP, MAX_FONT_SP)
+        pm.fontSp.coerceIn(MIN_FONT_SP, MAX_FONT_SP)
 
     private fun showFontDialog(activity: Activity) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
         val current = currentFontSp(activity)
         val box = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -1132,7 +1109,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
             .setView(box)
             .setPositiveButton("应用") { _, _ ->
                 val sp = (MIN_FONT_SP.toInt() + seek.progress).toFloat()
-                prefs.edit().putFloat("font_sp", sp).apply()
+                pm.fontSp = sp
                 pendingFontSp = sp
                 terminalView?.setTextSize(activity!!.spToPx(sp))
                 terminalView?.onScreenUpdated()
@@ -1506,7 +1483,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
                         val next = pendingFontSp.coerceIn(MIN_FONT_SP, MAX_FONT_SP)
                         val current = currentFontSp(activity)
                         if (kotlin.math.abs(next - current) >= 0.2f) {
-                            activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).edit().putFloat("font_sp", next).apply()
+                            pm.fontSp = next
                             terminalView?.setTextSize(activity!!.spToPx(next))
                             terminalView?.onScreenUpdated()
                             refreshStatus(activity)

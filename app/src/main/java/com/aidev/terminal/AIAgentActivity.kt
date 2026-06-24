@@ -1,7 +1,6 @@
 package com.aidev.terminal
 
 import android.app.Activity
-import android.content.Intent
 import android.os.Bundle
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -12,7 +11,7 @@ class AIAgentActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ui = AIDevUi(this, getSharedPreferences("aidev_ui", MODE_PRIVATE))
+        ui = AIDevUi(this, getSharedPreferences(Constants.PREFS_NAME, MODE_PRIVATE))
         buildUi()
     }
 

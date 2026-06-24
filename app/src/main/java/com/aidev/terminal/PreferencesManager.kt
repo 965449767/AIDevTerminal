@@ -4,7 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 
 class PreferencesManager(context: Context) {
-    private val prefs: SharedPreferences = context.getSharedPreferences("aidev_ui", Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences = context.getSharedPreferences(Constants.PREFS_NAME, Context.MODE_PRIVATE)
+    val sharedPreferences: SharedPreferences get() = prefs
 
     var themePreset: String
         get() = prefs.getString("theme_preset", "system") ?: "system"
@@ -93,4 +94,12 @@ class PreferencesManager(context: Context) {
     var autoShowKeyboard: Boolean
         get() = prefs.getBoolean("auto_show_keyboard", true)
         set(value) = prefs.edit().putBoolean("auto_show_keyboard", value).apply()
+
+    var fileFavorites: Set<String>
+        get() = prefs.getStringSet("file_favorites", emptySet()) ?: emptySet()
+        set(value) = prefs.edit().putStringSet("file_favorites", value).apply()
+
+    var fileRecentDirs: Set<String>
+        get() = prefs.getStringSet("file_recent_dirs", emptySet()) ?: emptySet()
+        set(value) = prefs.edit().putStringSet("file_recent_dirs", value).apply()
 }

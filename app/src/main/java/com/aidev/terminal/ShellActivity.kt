@@ -36,7 +36,7 @@ import kotlin.math.abs
  * 3. 左右滑动手势由 Shell 集中处理，所有顶级页面共用同一动画方向。
  */
 class ShellActivity : Activity() {
-    private lateinit var prefs: SharedPreferences
+    private lateinit var prefs: PreferencesManager
     private lateinit var ui: AIDevUi
     private lateinit var contentHost: FrameLayout
     private lateinit var bottomNavView: View
@@ -56,11 +56,11 @@ class ShellActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
-        prefs = getSharedPreferences("aidev_ui", MODE_PRIVATE)
-        ui = AIDevUi(this, prefs)
+        prefs = PreferencesManager(this)
+        ui = AIDevUi(this, prefs.sharedPreferences)
         requestEssentialPermissions()
         ensureNotificationChannel()
-        if (prefs.getBoolean("keepalive_auto", true)) runCatching { KeepAliveService.start(this) }
+        if (prefs.keepaliveAuto) runCatching { KeepAliveService.start(this) }
             .onFailure { Log.e("ShellActivity", "KeepAliveService start failed", it) }
         buildShell()
         val requestedTab = intent?.getIntExtra("shell_tab", -1) ?: -1
@@ -110,24 +110,22 @@ class ShellActivity : Activity() {
         runCatching {
             contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        prefs.edit()
-            .putString("bg_mode", "image")
-            .putString("bg_image_uri", uri.toString())
-            .apply()
+        prefs.bgMode = "image"
+        prefs.bgImageUri = uri.toString()
         refreshShellSkin()
     }
 
     override fun onResume() {
         super.onResume()
         // 主题或密度变更后重建当前页内容，但不会重建底部导航和背景。
-        ui = AIDevUi(this, prefs)
+        ui = AIDevUi(this, prefs.sharedPreferences)
         applyShellSkin()
         rebuildBottomNav()
         renderCurrent(currentIndex, animateForward = null)
     }
 
     fun refreshShellSkin() {
-        ui = AIDevUi(this, prefs)
+        ui = AIDevUi(this, prefs.sharedPreferences)
         applyShellSkin()
         rebuildBottomNav()
     }
@@ -186,7 +184,7 @@ class ShellActivity : Activity() {
     }
 
     private fun showRecentProjectActions() {
-        val rows = prefs.getString("project_action_history", "")?.lines()?.filter { it.isNotBlank() }.orEmpty().takeLast(20).reversed()
+        val rows = prefs.projectActionHistory.lines().filter { it.isNotBlank() }.takeLast(20).reversed()
         if (rows.isEmpty()) {
             MaterialAlertDialogBuilder(this)
                 .setTitle("最近命令")
@@ -206,7 +204,7 @@ class ShellActivity : Activity() {
                 val command = parts.getOrNull(3).orEmpty()
                 if (path.isNotBlank() && command.isNotBlank()) openTerminalCommand("cd \"$path\" && $command")
             }
-            .setNegativeButton("清空") { _, _ -> prefs.edit().remove("project_action_history").apply() }
+            .setNegativeButton("清空") { _, _ -> prefs.projectActionHistory = "" }
             .show()
     }
 
@@ -272,7 +270,7 @@ class ShellActivity : Activity() {
             20 -> openCurrentProject(ProjectCommands.testCommand(currentProjectDir()))
             21 -> openCurrentProject(ProjectCommands.buildCommand(currentProjectDir()))
             22 -> {
-                prefs.edit().remove("current_project_path").apply()
+                prefs.currentProjectPath = ""
                 switchTo(TAB_FILES)
             }
             23 -> openTerminalCommand("ls -lah \"${filesDir.absolutePath}/home/tasks\"")
@@ -310,7 +308,7 @@ class ShellActivity : Activity() {
     }
 
     private fun currentProjectDir(): File? =
-        prefs.getString("current_project_path", "")?.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.isDirectory }
+        prefs.currentProjectPath.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.isDirectory }
 
     private fun openCurrentProject(command: String?) {
         val dir = currentProjectDir()
@@ -324,9 +322,9 @@ class ShellActivity : Activity() {
 
     private fun rememberProjectAction(label: String, dir: File, command: String) {
         val line = "${System.currentTimeMillis()}\t$label\t${dir.absolutePath}\t$command"
-        val old = prefs.getString("project_action_history", "") ?: ""
+        val old = prefs.projectActionHistory
         val next = (old.lines().filter { it.isNotBlank() } + line).takeLast(20).joinToString("\n")
-        prefs.edit().putString("project_action_history", next).apply()
+        prefs.projectActionHistory = next
     }
 
     private fun buildShell() {
@@ -433,7 +431,7 @@ class ShellActivity : Activity() {
 
     private fun renderCurrent(previousIndex: Int = currentIndex, animateForward: Boolean?) {
         val next = pageViews.getOrPut(currentIndex) {
-            pages[currentIndex].create(this, ui, ShellHost(this, prefs, ui)).also {
+            pages[currentIndex].create(this, ui, ShellHost(this, prefs.sharedPreferences, ui)).also {
                 it.visibility = View.GONE
                 contentHost.addView(it, FrameLayout.LayoutParams(-1, -1))
             }
@@ -464,7 +462,7 @@ class ShellActivity : Activity() {
         // 键盘管理：切换到终端时根据开关决定是否隐藏，离开终端时关闭键盘
         val imm = getSystemService(InputMethodManager::class.java)
         if (currentIndex == TAB_TERMINAL) {
-            val autoShow = prefs.getBoolean("auto_show_keyboard", true)
+            val autoShow = prefs.autoShowKeyboard
             if (!autoShow) {
                 // onSelected 中 focusTerminalInput 触发了 requestFocus 自动弹键盘，立即隐藏
                 imm?.hideSoftInputFromWindow(next.windowToken, 0)
@@ -540,8 +538,8 @@ class ShellActivity : Activity() {
         if (Build.VERSION.SDK_INT >= 23) {
             if (!android.provider.Settings.System.canWrite(this)) {
                 // 首次启动时提示用户，但不强制跳转（避免打断用户体验）
-                if (!prefs.getBoolean("write_settings_prompted", false)) {
-                    prefs.edit().putBoolean("write_settings_prompted", true).apply()
+                if (!prefs.writeSettingsPrompted) {
+                    prefs.writeSettingsPrompted = true
                     MaterialAlertDialogBuilder(this)
                         .setTitle("需要修改系统设置权限")
                         .setMessage("亮度调节等功能需要\"修改系统设置\"权限。请在接下来的系统设置中开启此权限。")

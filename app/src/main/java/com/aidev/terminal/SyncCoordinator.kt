@@ -5,12 +5,10 @@ import java.io.File
 
 object SyncCoordinator {
 
-    private const val PREF_KEY = "sync_terminal_files"
-
-    fun isEnabled(prefs: SharedPreferences): Boolean = prefs.getBoolean(PREF_KEY, false)
+    fun isEnabled(prefs: SharedPreferences): Boolean = prefs.getBoolean(Constants.PrefKeys.SYNC_TERMINAL_FILES, false)
 
     fun setEnabled(prefs: SharedPreferences, enabled: Boolean) {
-        prefs.edit().putBoolean(PREF_KEY, enabled).apply()
+        prefs.edit().putBoolean(Constants.PrefKeys.SYNC_TERMINAL_FILES, enabled).apply()
     }
 
     fun onTerminalPwdChanged(

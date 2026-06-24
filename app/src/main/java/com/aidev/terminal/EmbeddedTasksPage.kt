@@ -17,6 +17,7 @@ class EmbeddedTasksPage : ShellPage {
     private lateinit var ui: AIDevUi
     private lateinit var list: LinearLayout
     private lateinit var host: ShellHost
+    private val pm by lazy { PreferencesManager(activity) }
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
@@ -106,7 +107,7 @@ class EmbeddedTasksPage : ShellPage {
     }
 
     private fun currentProjectTask(command: String): String {
-        val path = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE).getString("current_project_path", "").orEmpty()
+        val path = pm.currentProjectPath
         return if (path.isBlank()) "pwd && $command" else "cd \"$path\" && $command"
     }
 
