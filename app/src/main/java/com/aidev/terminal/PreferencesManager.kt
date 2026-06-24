@@ -89,4 +89,8 @@ class PreferencesManager(context: Context) {
     var recentAgentMore: String
         get() = prefs.getString("recent_agent_more", "") ?: ""
         set(value) = prefs.edit().putString("recent_agent_more", value).apply()
+
+    var autoShowKeyboard: Boolean
+        get() = prefs.getBoolean("auto_show_keyboard", true)
+        set(value) = prefs.edit().putBoolean("auto_show_keyboard", value).apply()
 }

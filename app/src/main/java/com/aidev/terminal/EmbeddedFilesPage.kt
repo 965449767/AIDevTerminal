@@ -25,6 +25,8 @@ import android.widget.Toast
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 class EmbeddedFilesPage : ShellPage {
@@ -40,6 +42,7 @@ class EmbeddedFilesPage : ShellPage {
     private var leftSelected: File? = null
     private var rightSelected: File? = null
     private var syncEnabled = false
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var syncDot: TextView? = null
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
@@ -67,6 +70,10 @@ class EmbeddedFilesPage : ShellPage {
             tv.text = if (syncEnabled) "●" else "○"
             tv.setTextColor(if (syncEnabled) 0xFF22D3A7.toInt() else 0xFF4B5563.toInt())
         }
+    }
+
+    override fun onDestroy(activity: Activity) {
+        scope.cancel()
     }
 
     private fun toolbar(host: ShellHost): View =
@@ -1052,7 +1059,7 @@ class EmbeddedFilesPage : ShellPage {
     private fun diagnoseShizukuInstall(file: java.io.File) {
         val srcPath = file.absolutePath.replace("'", "'\\''")
         val cmd = "cat '$srcPath' | pm install -r -d -S \$(stat -c%s '$srcPath')"
-        CoroutineScope(Dispatchers.Main).launch {
+        scope.launch {
             val result = ShizukuLogcat.executeCommand(cmd)
             val hint = ShizukuLogcat.pmInstallErrorHint(result)
             val msg = """

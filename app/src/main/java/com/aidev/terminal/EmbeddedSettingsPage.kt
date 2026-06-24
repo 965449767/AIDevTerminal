@@ -21,12 +21,15 @@ import java.io.File
 import com.aidev.terminal.presentation.BackupRestorePage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 class EmbeddedSettingsPage : ShellPage {
     private lateinit var activity: Activity
     private lateinit var ui: AIDevUi
     private lateinit var host: ShellHost
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
@@ -39,11 +42,15 @@ class EmbeddedSettingsPage : ShellPage {
         content.addView(ui.section("设置", "一级入口保持通用，二级动作以内嵌菜单展开，底部导航不离开 Shell"))
         content.addView(row("外观与交互", "主题、背景、触觉反馈") { appearanceMenu() })
         content.addView(row("开发环境", "环境检测、Shell 增强、网络诊断、系统监控、容器管理") { devMenu() })
-        content.addView(row("权限管理", "存储、通知、安装应用、修改系统设置") { permissionMenu() })
-        content.addView(row("系统与后台", "电池优化、后台常驻、Shizuku、应用详情") { systemMenu() })
+content.addView(row("权限管理", "存储、通知、安装应用、修改系统设置、Shizuku") { permissionMenu() })
+content.addView(row("系统与后台", "电池优化、后台常驻、应用详情") { systemMenu() })
         content.addView(row("数据备份", "备份和恢复 Ubuntu 环境、任务数据、设置和项目文件") { backupRestoreMenu() })
         content.addView(row("路径设置", "备份目录、项目目录、外部存储路径") { pathMenu() })
         return ScrollView(activity).apply { addView(content) }
+    }
+
+    override fun onDestroy(activity: Activity) {
+        scope.cancel()
     }
 
     private fun row(title: String, desc: String, click: () -> Unit): View =
@@ -340,7 +347,8 @@ class EmbeddedSettingsPage : ShellPage {
                     })
                 }
             }
-        }
+        },
+        MenuBottomSheet.MenuItem("Shizuku 状态", "实时检测 Shizuku 安装和授权状态") { showShizukuStatus() }
     )
 
     private fun permissionMenu() {
@@ -361,7 +369,6 @@ class EmbeddedSettingsPage : ShellPage {
                 prefs.keepaliveAuto = true
                 toast("后台常驻已启动")
             },
-            MenuBottomSheet.MenuItem("Shizuku 状态", "实时检测 Shizuku 安装和授权状态") { showShizukuStatus() },
             MenuBottomSheet.MenuItem("应用详情", "跳转到系统应用信息页") { openAppSettings() }
         )
         MenuBottomSheet(activity, ui).show("系统与后台", items)
@@ -395,7 +402,7 @@ class EmbeddedSettingsPage : ShellPage {
                 setOnClickListener {
                     testResult.text = "执行中..."
                     testResult.setTextColor(ui.palette.muted)
-                    CoroutineScope(Dispatchers.Main).launch {
+                    scope.launch {
                         val result = ShizukuLogcat.executeCommand("echo SHIZUKU_TEST_OK")
                         if (result.isSuccess) {
                             testResult.text = "✅ 成功：${result.stdout.trim()}"

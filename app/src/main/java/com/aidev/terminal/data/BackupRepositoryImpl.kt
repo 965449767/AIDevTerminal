@@ -6,6 +6,7 @@ import com.aidev.terminal.domain.BackupHistory
 import com.aidev.terminal.domain.BackupItem
 import com.aidev.terminal.domain.BackupRepository
 import com.aidev.terminal.domain.BackupResult
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import java.io.File
@@ -44,7 +45,7 @@ class BackupRepositoryImpl(private val context: Context? = null) : BackupReposit
         items.forEachIndexed { index, itemId ->
             emit(BackupResult(BackupResult.ResultType.PROGRESS, "正在打包... (${(index + 1) * 100 / items.size}%)", (index + 1) * 100 / items.size))
 
-            kotlinx.coroutines.delay(500)
+            delay(500)
 
             emit(BackupResult(BackupResult.ResultType.SUCCESS, "备份完成"))
         }

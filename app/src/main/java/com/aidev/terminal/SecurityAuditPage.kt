@@ -12,9 +12,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.BufferedReader
 import java.io.File
-import java.io.InputStreamReader
 
 /**
  * 安全审计页面：文件权限审计、SSH 安全检查、敏感文件检查、安全报告
@@ -314,15 +312,19 @@ class SecurityAuditPage : ShellPage {
      * 这里直接读取文件系统属性
      */
     private fun executeInRootfs(rootfs: File, command: String): String {
+        val shellOperators = Regex("[;|&`\$()]")
+        if (command.contains(shellOperators)) return ""
+        val cmdName = command.trim().split(Regex("\\s+")).firstOrNull() ?: return ""
+        val whitelist = setOf("find", "stat", "ls", "cat", "id", "whoami", "uname", "df", "du", "chmod", "chown", "grep", "wc", "head", "tail")
+        if (cmdName !in whitelist) return ""
         return try {
-            // 直接在 rootfs 路径下执行命令（需要 proot 环境）
-            // 这里使用 Runtime.exec 执行，命令路径需要映射到 rootfs
             val mappedCommand = command
                 .replace("/root", rootfs.resolve("root").absolutePath)
                 .replace("/tmp", rootfs.resolve("tmp").absolutePath)
 
             val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", mappedCommand))
-            val output = process.inputStream.bufferedReader().readText()
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            process.errorStream?.bufferedReader()?.use { it.readText() }
             process.waitFor()
             output
         } catch (e: Exception) {

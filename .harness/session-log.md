@@ -665,3 +665,68 @@ Exported to: `/storage/emulated/0/app-debug.apk` (2.9MB)
 已知问题：无
 下一步：无活跃计划。可选集成测试 (androidTest)。
 ```
+
+## 2026-06-24 — EmbeddedShellPages.kt 代码拆分
+
+### Summary
+
+将 `EmbeddedShellPages.kt` 从 2114 行拆分为主文件 + 4 个独立模块，主文件减少 30%。
+
+### 拆分步骤
+
+**Step 1: 提取数据类**
+- 4 个 `private data class` 移入 `TerminalModels.kt`，改为 `internal`
+- 编译通过，测试通过
+
+**Step 2: 提取纯工具函数**
+- 9 个零依赖函数移入 `TerminalUtils.kt`
+- 新增 `terminalDp()` 和 `tapCmdHint()` 顶层函数
+- 编译通过，测试通过，实机验证：自动补全、虚拟键盘正常
+
+**Step 3: 提取 VirtualKeyEditor**
+- `editVirtualKey()` + 别名管理移入 `VirtualKeyEditor.kt`
+- 通过 `onKeysChanged` 回调解耦
+- 编译通过，测试通过，实机验证：长按编辑、别名功能正常
+
+**Step 4: 提取 CompletionEngine**
+- 补全建议 + UI 构建 + 固定/取消固定移入 `CompletionEngine.kt`
+- 通过 `CompletionHost` 接口解耦
+- 编译通过，测试通过，实机验证：补全、路径补全、TUI 切换正常
+
+**Step 5: SessionManager — 跳过**
+- 会话管理与共享状态高度耦合（6 个状态字段 + 互相递归）
+- 提取风险过高，保持在主类中
+
+### Files Changed
+
+- `EmbeddedShellPages.kt` — 2114 → 1489 行（-30%）
+- `TerminalModels.kt` — 新建，28 行
+- `TerminalUtils.kt` — 新建，112 行
+- `VirtualKeyEditor.kt` — 新建，301 行
+- `CompletionEngine.kt` — 新建，264 行
+
+### Validation
+
+```bash
+bash /root/.android-env/scripts/build-android.sh   # BUILD SUCCESSFUL
+./gradlew :app:testDebugUnitTest --no-daemon       # 30/30 tests pass
+```
+
+### 实机验证
+
+- 自动补全：输入 gi → 出现 git status 等建议 ✓
+- 路径补全：输入 cd / → 出现目录列表 ✓
+- 虚拟键盘：所有按键正常 ✓
+- 键编辑：长按 → 编辑对话框 → 保存/恢复默认 ✓
+- TUI 模式：切换正常，补全栏隐藏/显示 ✓
+
+### Progress Report
+
+```text
+已完成：0.17.0 — EmbeddedShellPages.kt 代码拆分
+本次完成：主文件 -30%，拆分出 4 个独立模块
+总体进度：100%
+验证：BUILD SUCCESSFUL, 30/30 tests pass
+已知问题：无
+下一步：无活跃计划。可选拆分 EmbeddedFilesPage.kt。
+```

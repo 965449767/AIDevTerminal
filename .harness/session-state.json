@@ -1,31 +1,28 @@
 {
-  "task_id": "0.16.2-terminal-bug-audit-round2-plus-ime-fix",
+  "task_id": "0.17.0-embedded-shell-pages-split",
   "status": "completed",
-  "current_phase": "phase4-cleanup-coroutine-migration",
-  "last_updated": "2026-06-23",
+  "current_phase": "code-split-complete",
+  "last_updated": "2026-06-24",
   "overall_progress_percent": 100,
   "active_plan": [],
   "next_3_steps": [
+    "(Optional) 提取 EmbeddedFilesPage.kt 中的 ProjectManager",
     "(Optional) Android instrumentation tests",
-    "Deploy to production",
-    "Monitor system performance"
+    "Deploy to production"
   ],
   "changed_files": [
-    "app/src/main/java/com/aidev/terminal/NetworkDiagnosticsPage.kt",
-    "app/src/main/java/com/aidev/terminal/ContainerManagerPage.kt",
-    "app/src/main/java/com/aidev/terminal/SecurityAuditPage.kt",
-    "app/src/main/java/com/aidev/terminal/SystemMonitorPage.kt",
-    "app/src/main/java/com/aidev/terminal/ShellEnhancementsPage.kt",
     "app/src/main/java/com/aidev/terminal/EmbeddedShellPages.kt",
-    "app/src/main/java/com/aidev/terminal/AppNav.kt",
-    "app/src/main/java/com/aidev/terminal/ShellActivity.kt",
-    "app/src/main/java/com/aidev/terminal/KeepAliveService.kt"
+    "app/src/main/java/com/aidev/terminal/TerminalModels.kt",
+    "app/src/main/java/com/aidev/terminal/TerminalUtils.kt",
+    "app/src/main/java/com/aidev/terminal/VirtualKeyEditor.kt",
+    "app/src/main/java/com/aidev/terminal/CompletionEngine.kt"
   ],
   "validation": {
     "last_commands": [
-      "bash /root/.android-env/scripts/build-android.sh"
+      "bash /root/.android-env/scripts/build-android.sh",
+      "./gradlew :app:testDebugUnitTest --no-daemon"
     ],
-    "last_result": "BUILD SUCCESSFUL — all Handler/Thread patterns migrated to coroutines, deprecation warnings fixed",
+    "last_result": "BUILD SUCCESSFUL, 30/30 tests pass, APK exported to /storage/emulated/0/app-debug.apk",
     "known_failures": []
   },
   "cognitive_state": {
@@ -35,7 +32,7 @@
     "blocked_on": null
   },
   "handoff": {
-    "last_summary": "Phase 4 complete. All legacy Thread/Handler patterns migrated to coroutines across all shell pages (ShellEnhancementsPage 5×, NetworkDiagnosticsPage 4×, ContainerManagerPage 1×, SecurityAuditPage 1×, SystemMonitorPage postDelayed+runOnUiThread). 10 deprecation warnings fixed (scaledDensity, overridePendingTransition, WIFI_MODE). BUILD SUCCESSFUL. APK exported to /storage/emulated/0/app-debug.apk.",
-    "resume_from": "Phase 4 complete. All pages use coroutines. Deprecation warnings fixed. Build passes. APK ready for installation."
+    "last_summary": "EmbeddedShellPages.kt 代码拆分完成。主文件从 2114 行减至 1489 行（-30%）。拆分出 4 个新文件：TerminalModels.kt（数据类）、TerminalUtils.kt（工具函数）、VirtualKeyEditor.kt（按键编辑器）、CompletionEngine.kt（补全引擎）。每步均通过编译和单元测试验证，实机测试确认自动补全、虚拟键盘、键编辑、TUI 模式正常。SessionManager 因耦合度过高跳过。",
+    "resume_from": "EmbeddedShellPages.kt 拆分完成。主文件 1489 行，4 个新文件职责清晰。可选继续拆分 EmbeddedFilesPage.kt。"
   }
 }

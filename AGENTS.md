@@ -523,3 +523,45 @@ After completing Phase 3, the team should:
 
 **Current Phase:** Phase 2 - Architecture Optimization (Completed)
 **Next Phase:** Phase 3 - Integration Testing and Validation
+
+---
+
+## Workflow Execution Protocol (强制执行)
+
+每次执行优化 Phase 时，必须遵循以下步骤：
+
+### 执行步骤
+
+1. **执行修改** — 一次只改一个文件或一组紧密相关的文件
+2. **编译验证** — `bash /root/.android-env/scripts/build-android.sh`
+3. **单元测试** — `./gradlew :app:testDebugUnitTest --no-daemon`
+4. **告知用户** — 明确说明：
+   - 本次改了什么
+   - 用户需要测试哪些功能
+   - 具体的操作步骤
+5. **等待反馈** — 必须等用户安装 APK 并确认测试结果后，才能进入下一步
+6. **确认通过** — 用户确认无问题后，继续下一个步骤
+
+### 禁止事项
+
+- 不得跳过用户验证环节
+- 不得一次修改多个不相关的文件
+- 不得在用户反馈前继续下一步
+
+### 当前进行中：Phase A（稳定性 + 安全）
+
+| Step | 内容 | 状态 |
+|------|------|------|
+| A1 | 修复进程流泄漏（3文件） | 待执行 |
+| A1-fix | 修复 NetworkDiagnostics 闪退 + bootstrap 自动输入 | 待执行 |
+| A2 | 修复 CoroutineScope 泄漏（2文件） | 待执行 |
+| A3 | SystemMonitorPage 主线程 IO 移到后台 | 待执行 |
+| A4 | AndroidManifest 安全加固 | 待执行 |
+| A5 | 命令输入校验（2文件） | 待执行 |
+
+### 后续计划
+
+| 任务 | 优先级 | 说明 |
+|------|--------|------|
+| Android 集成测试 | High | 补充 androidTest/ 目录，覆盖权限、生命周期、进程间通信等运行时场景 |
+| Phase B: 代码质量 | Medium | SharedPreferences 集中化、死代码清理 |

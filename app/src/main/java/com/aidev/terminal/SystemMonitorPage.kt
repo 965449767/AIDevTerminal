@@ -24,9 +24,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.BufferedReader
 import java.io.File
-import java.io.InputStreamReader
 
 /**
  * 系统监控页面：CPU、内存、磁盘、网络、进程列表、电池信息
@@ -131,16 +129,18 @@ class SystemMonitorPage : ShellPage {
 
     private fun refreshData() {
         if (!::list.isInitialized) return
-
-        // 采集 CPU
-        collectCpuUsage()
-        // 采集网络流量
-        collectNetworkTraffic()
-        // 采集电池
-        collectBatteryInfo()
-
-        // 重建 UI
-        rebuildUi()
+        scope.launch(Dispatchers.IO) {
+            // IO 线程采集数据
+            collectCpuUsage()
+            collectNetworkTraffic()
+            val diskInfo = getDiskInfo()
+            val processList = getProcessList()
+            // Main 线程更新 UI
+            withContext(Dispatchers.Main) {
+                collectBatteryInfo()
+                rebuildUi(diskInfo, processList)
+            }
+        }
     }
 
     /** 解析 /proc/stat 计算 CPU 使用率（两次采样差值法） */
@@ -298,24 +298,25 @@ class SystemMonitorPage : ShellPage {
         val result = mutableListOf<DiskInfo>()
         try {
             val process = Runtime.getRuntime().exec(arrayOf("df", "-h"))
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            var line: String?
-            var first = true
-            while (reader.readLine().also { line = it } != null) {
-                if (first) { first = false; continue } // 跳过表头
-                val parts = line!!.trim().split(Regex("\\s+"))
-                if (parts.size >= 6) {
-                    result.add(DiskInfo(
-                        filesystem = parts[0],
-                        size = parts[1],
-                        used = parts[2],
-                        available = parts[3],
-                        usePercent = parts[4],
-                        mountedOn = parts[5]
-                    ))
+            process.inputStream.bufferedReader().use { reader ->
+                var line: String?
+                var first = true
+                while (reader.readLine().also { line = it } != null) {
+                    if (first) { first = false; continue }
+                    val parts = line!!.trim().split(Regex("\\s+"))
+                    if (parts.size >= 6) {
+                        result.add(DiskInfo(
+                            filesystem = parts[0],
+                            size = parts[1],
+                            used = parts[2],
+                            available = parts[3],
+                            usePercent = parts[4],
+                            mountedOn = parts[5]
+                        ))
+                    }
                 }
             }
-            reader.close()
+            process.errorStream?.bufferedReader()?.use { it.readText() }
             process.waitFor()
         } catch (_: Exception) {
             // 执行失败
@@ -328,26 +329,27 @@ class SystemMonitorPage : ShellPage {
         val result = mutableListOf<ProcessInfo>()
         try {
             val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", "ps aux --sort=-%cpu 2>/dev/null || ps aux"))
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
-            var line: String?
-            var first = true
-            while (reader.readLine().also { line = it } != null) {
-                if (first) { first = false; continue } // 跳过表头
-                val parts = line!!.trim().split(Regex("\\s+"))
-                if (parts.size >= 11) {
-                    result.add(ProcessInfo(
-                        user = parts[0],
-                        pid = parts[1],
-                        cpu = parts[2],
-                        mem = parts[3],
-                        vsz = parts[4],
-                        rss = parts[5],
-                        stat = parts[7].takeIf { parts.size > 7 } ?: "",
-                        command = parts.drop(10).joinToString(" ")
-                    ))
+            process.inputStream.bufferedReader().use { reader ->
+                var line: String?
+                var first = true
+                while (reader.readLine().also { line = it } != null) {
+                    if (first) { first = false; continue }
+                    val parts = line!!.trim().split(Regex("\\s+"))
+                    if (parts.size >= 11) {
+                        result.add(ProcessInfo(
+                            user = parts[0],
+                            pid = parts[1],
+                            cpu = parts[2],
+                            mem = parts[3],
+                            vsz = parts[4],
+                            rss = parts[5],
+                            stat = parts[7].takeIf { parts.size > 7 } ?: "",
+                            command = parts.drop(10).joinToString(" ")
+                        ))
+                    }
                 }
             }
-            reader.close()
+            process.errorStream?.bufferedReader()?.use { it.readText() }
             process.waitFor()
         } catch (_: Exception) {
             // 执行失败
@@ -357,7 +359,7 @@ class SystemMonitorPage : ShellPage {
 
     // ==================== UI 构建 ====================
 
-    private fun rebuildUi() {
+    private fun rebuildUi(diskInfo: List<DiskInfo>, processes: List<ProcessInfo>) {
         list.removeAllViews()
 
         // 标题
@@ -370,7 +372,6 @@ class SystemMonitorPage : ShellPage {
 
         // 磁盘详情
         list.addView(ui.section("磁盘使用", "分区使用情况"))
-        val diskInfo = getDiskInfo()
         if (diskInfo.isEmpty()) {
             list.addView(ui.muted("无法获取磁盘信息"))
         } else {
@@ -383,7 +384,6 @@ class SystemMonitorPage : ShellPage {
 
         // 进程列表
         list.addView(ui.section("进程列表 (Top $MAX_PROCESS_COUNT)", "按 CPU 使用率排序"))
-        val processes = getProcessList()
         if (processes.isEmpty()) {
             list.addView(ui.muted("无法获取进程列表"))
         } else {
@@ -617,6 +617,8 @@ class SystemMonitorPage : ShellPage {
         scope.launch(Dispatchers.IO) {
             val result = try {
                 val process = Runtime.getRuntime().exec(arrayOf("kill", pid))
+                process.inputStream?.bufferedReader()?.use { it.readText() }
+                process.errorStream?.bufferedReader()?.use { it.readText() }
                 val exitCode = process.waitFor()
                 if (exitCode == 0) "进程 $pid 已终止" else "终止失败 (exit=$exitCode)"
             } catch (e: Exception) {

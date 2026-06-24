@@ -28,6 +28,8 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputConnectionWrapper
 import android.view.inputmethod.InputMethodManager
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import android.widget.EditText
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
@@ -44,31 +46,6 @@ import kotlin.math.abs
 import android.animation.Animator
 import java.io.File
 
-private data class EmbeddedTermSession(
-    val id: Int,
-    var title: String,
-    val session: TerminalSession,
-    var aiSession: Boolean = false
-)
-
-private data class EmbeddedVirtualKey(
-    val label: String,
-    val input: String,
-    val swipeCommand: String = "",
-    val id: String = label
-)
-
-private data class KeyAlias(
-    val name: String,
-    val value: String
-)
-
-private data class TerminalCompletion(
-    val label: String,
-    val insertText: String = label,
-    val kind: String = "CMD"
-)
-
 /**
  * 内嵌终端页面：终端会话管理、虚拟键盘、自动补全、TUI 模式。
  *
@@ -79,7 +56,7 @@ private data class TerminalCompletion(
  *   4. 会话管理相关方法 (L1416-1640) -> SessionManager 辅助类
  *   5. TerminalSessionClient / TerminalViewClient (L1663-1753) -> 独立 Client 类
  */
-class EmbeddedTerminalPage : ShellPage {
+class EmbeddedTerminalPage : ShellPage, CompletionHost {
     private companion object {
         const val DEFAULT_FONT_SP = 10f
         const val MIN_FONT_SP = 10f
@@ -105,7 +82,8 @@ class EmbeddedTerminalPage : ShellPage {
         return (sp * config.fontScale * config.densityDpi / 160f).toInt()
     }
     private var ctrlLatched = false
-    private var autoBootstrapDispatched = false
+    private var _autoBootstrapDone = false
+    val autoBootstrapDone: Boolean get() = _autoBootstrapDone
     private var pendingFontSp = DEFAULT_FONT_SP
     private var fontApplyScheduled = false
     private var inputBuffer = ""
@@ -115,9 +93,16 @@ class EmbeddedTerminalPage : ShellPage {
     private var lastSyncedPwd = ""
     private var syncIndicator: TextView? = null
     private var tuiIndicator: TextView? = null
+    private var keyboardIndicator: TextView? = null
+    private var root: View? = null
     private var tuiActive = false
     private var cachedCompletionPwd = ""
     private val sharedHandler = Handler(Looper.getMainLooper())
+    private val keyEditor = VirtualKeyEditor {
+        val act = activity ?: return@VirtualKeyEditor
+        ui?.let { buildKeyboardRows(act, it, getOrderedKeys(act)) }
+    }
+    private lateinit var completionEngine: CompletionEngine
 
     private var manualTuiOverride = false
 
@@ -127,6 +112,17 @@ class EmbeddedTerminalPage : ShellPage {
     private var selectedKeyView: View? = null
     private var wiggleAnimator: android.animation.ValueAnimator? = null
     private val SWIPE_THRESHOLD_DP = 72
+
+    // ── CompletionHost ──
+    override val completionInputBuffer: String get() = inputBuffer
+    override val completionComposingBuffer: String get() = composingBuffer
+    override val completionHomeDir: File? get() = homeDir
+    override val completionCachedPwd: String get() = cachedCompletionPwd
+    override fun completionWriteSession(text: String) { session?.write(text) }
+    override fun completionClearComposing() { clearComposingInput() }
+    override fun completionSetInputBuffer(value: String) { inputBuffer = value }
+    override fun completionFocusInput() { val act = activity ?: return; focusTerminalInput(act) }
+    override fun completionRefresh() { val act = activity ?: return; completionEngine.refresh(act, ui ?: return, completionRow) }
 
     private fun updateTuiMode() {
         val s = session ?: return
@@ -151,21 +147,23 @@ class EmbeddedTerminalPage : ShellPage {
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
         this.ui = ui
-        val root = LinearLayout(activity).apply {
+        completionEngine = CompletionEngine(this)
+        val rootView = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.BLACK)
         }
-        root.addView(topBar(activity, ui, host), LinearLayout.LayoutParams(-1, ui.dp(40)))
+        root = rootView
+        rootView.addView(topBar(activity, ui, host), LinearLayout.LayoutParams(-1, ui.dp(40)))
         tabBar = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(ui.dp(6), ui.dp(2), ui.dp(6), ui.dp(2))
         }
-        root.addView(HorizontalScrollView(activity).apply {
+        rootView.addView(HorizontalScrollView(activity).apply {
             isHorizontalScrollBarEnabled = false
             setBackgroundColor(0xFF0B0E12.toInt())
             addView(tabBar)
         }, LinearLayout.LayoutParams(-1, ui.dp(32)))
-        root.addView(statusBar(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(24)))
+        rootView.addView(statusBar(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(24)))
         terminalView = TerminalView(activity, null).apply {
             setBackgroundColor(Color.BLACK)
             isFocusable = true
@@ -214,21 +212,30 @@ class EmbeddedTerminalPage : ShellPage {
         inputProxy?.tuiKeyHandler = { event ->
             terminalView?.onKeyDown(event.keyCode, event) ?: false
         }
-        root.addView(terminalView, LinearLayout.LayoutParams(-1, 0, 1f))
-        root.addView(inputProxy, LinearLayout.LayoutParams(1, 1))
-        root.addView(completionBar(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(32)))
+        rootView.addView(terminalView, LinearLayout.LayoutParams(-1, 0, 1f))
+        rootView.addView(inputProxy, LinearLayout.LayoutParams(1, 1))
+        rootView.addView(completionBar(activity, ui), LinearLayout.LayoutParams(-1, ui.dp(32)))
+        // 键盘可见性监听器：自动同步 ⌨ 指示器状态（WindowInsetsCompat 不受 softInputMode 影响）
+        ViewCompat.setOnApplyWindowInsetsListener(rootView) { _, insets ->
+            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime())
+            val autoShow = activity.getSharedPreferences("aidev_ui", android.content.Context.MODE_PRIVATE)
+                .getBoolean("auto_show_keyboard", true)
+            val active = imeVisible || autoShow
+            keyboardIndicator?.setTextColor(if (active) DesignTokens.ACCENT else 0xFF9CA3AF.toInt())
+            insets
+        }
         keyboardView = keys(activity, ui)
-        root.addView(keyboardView, LinearLayout.LayoutParams(-1, ui.dp(70)))
+        rootView.addView(keyboardView, LinearLayout.LayoutParams(-1, ui.dp(70)))
         ensureSession(activity)
         initPwdObserver(activity)
         startShizukuBridge(activity)
-        trackPostDelayed(root, 250) { focusTerminalInput(activity) }
+        trackPostDelayed(rootView, 250) { focusTerminalInput(activity) }
         terminalView?.postDelayed({
             consumePendingCommand()
             maybeAutoBootstrapUbuntu(activity)
             focusTerminalInput(activity)
         }, 600)
-        return root
+        return rootView
     }
 
     private fun statusBar(activity: Activity, ui: AIDevUi): View =
@@ -265,95 +272,38 @@ class EmbeddedTerminalPage : ShellPage {
         if (::statusText.isInitialized) statusText.text = terminalStatus(activity)
     }
 
-    private fun completionBar(activity: Activity, ui: AIDevUi): View =
-        HorizontalScrollView(activity).apply {
-            isHorizontalScrollBarEnabled = false
-            setBackgroundColor(0xFF0D1117.toInt())
-        completionBarView = this
-        completionRow = LinearLayout(activity).apply {
+    private fun completionBar(activity: Activity, ui: AIDevUi): View {
+        val container = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(ui.dp(6), ui.dp(3), ui.dp(6), ui.dp(3))
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setBackgroundColor(0xFF0D1117.toInt())
         }
-        addView(completionRow)
-            post { refreshCompletions(activity) }
+        completionBarView = completionEngine.buildBar(activity, ui).apply {
+            completionRow = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(ui.dp(6), ui.dp(3), ui.dp(6), ui.dp(3))
+            }
+            addView(completionRow)
+            post { completionEngine.refresh(activity, ui, completionRow) }
         }
-
-    private fun refreshCompletions(activity: Activity) {
-        if (!::completionRow.isInitialized) return
-        val uiRef = ui ?: return
-        completionRow.removeAllViews()
-        val suggestions = completionSuggestions(activity).take(8)
-        if (suggestions.isEmpty()) {
-            completionRow.addView(completionHintChip(activity, uiRef), LinearLayout.LayoutParams(-2, -1))
-            return
+        container.addView(completionBarView, LinearLayout.LayoutParams(0, -1, 1f))
+        keyboardIndicator = keyboardIndicatorView(activity, ui)
+        // FrameLayout 包裹键盘指示器，固定贴右边，TUI 模式下不会跳到左边
+        val indicatorWrapper = android.widget.FrameLayout(activity).apply {
+            addView(keyboardIndicator, android.widget.FrameLayout.LayoutParams(
+                ui.dp(30), -1, android.view.Gravity.END
+            ))
         }
-        suggestions.forEach { item ->
-            completionRow.addView(completionChip(activity, uiRef, item), LinearLayout.LayoutParams(-2, -1).apply {
-                setMargins(0, 0, uiRef.dp(5), 0)
-            })
-        }
+        container.addView(indicatorWrapper, LinearLayout.LayoutParams(ui.dp(30), -1))
+        return container
     }
 
-    private fun completionHintChip(activity: Activity, ui: AIDevUi): TextView =
-        TextView(activity).apply {
-            text = "点击输入框获取焦点"
-            textSize = 11f
-            gravity = Gravity.CENTER
-            includeFontPadding = false
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-            setTextColor(0xFF9CA3AF.toInt())
-            setPadding(ui.dp(10), 0, ui.dp(10), 0)
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(0xFF111827.toInt())
-                cornerRadius = ui.dp(12).toFloat()
-                setStroke(ui.dp(1), 0xFF374151.toInt())
-            }
-            setOnClickListener { focusTerminalInput(activity) }
-        }
+    private fun refreshCompletions(activity: Activity) {
+        if (!::completionRow.isInitialized || !::completionEngine.isInitialized) return
+        completionEngine.refresh(activity, ui ?: return, completionRow)
+    }
 
-    private fun completionChip(activity: Activity, ui: AIDevUi, item: TerminalCompletion): TextView =
-        TextView(activity).apply {
-            text = when (item.kind) {
-                "PIN" -> "固定 ${item.label}"
-                "ENV" -> "环境 ${item.label}"
-                "PATH" -> "路径 ${item.label}"
-                else -> item.label
-            }
-            textSize = 11f
-            gravity = Gravity.CENTER
-            includeFontPadding = false
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-            setTextColor(when (item.kind) {
-                "PIN" -> 0xFFA7F3D0.toInt()
-                "ENV" -> 0xFFBFDBFE.toInt()
-                "PATH" -> 0xFFFDE68A.toInt()
-                else -> 0xFFD1D5DB.toInt()
-            })
-            setPadding(ui.dp(10), 0, ui.dp(10), 0)
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(when (item.kind) {
-                    "PIN" -> 0xFF0F2A22.toInt()
-                    "ENV" -> 0xFF111D35.toInt()
-                    "PATH" -> 0xFF2A220C.toInt()
-                    else -> 0xFF172033.toInt()
-                })
-                cornerRadius = ui.dp(12).toFloat()
-                setStroke(ui.dp(1), when (item.kind) {
-                    "PIN" -> 0xFF059669.toInt()
-                    "ENV" -> 0xFF2563EB.toInt()
-                    "PATH" -> 0xFFD97706.toInt()
-                    else -> 0xFF2B3650.toInt()
-                })
-            }
-            setOnClickListener { applyCompletion(item) }
-            setOnLongClickListener {
-                showCompletionMenu(activity, item)
-                true
-            }
-        }
 
     override fun onSelected(activity: Activity, view: View) {
         this.activity = activity
@@ -373,6 +323,8 @@ class EmbeddedTerminalPage : ShellPage {
     }
 
     override fun onDestroy(activity: Activity) {
+        // 移除键盘可见性监听器
+        root?.let { ViewCompat.setOnApplyWindowInsetsListener(it, null) }
         // 停止 pwd 观察者
         pwdObserver?.stop()
         pwdObserver = null
@@ -483,6 +435,40 @@ class EmbeddedTerminalPage : ShellPage {
                 true
             }
         }
+
+    private fun keyboardIndicatorView(activity: Activity, ui: AIDevUi): TextView {
+        val prefs = activity.getSharedPreferences("aidev_ui", android.content.Context.MODE_PRIVATE)
+        val enabled = prefs.getBoolean("auto_show_keyboard", true)
+        return TextView(activity).apply {
+            gravity = Gravity.CENTER
+            textSize = 11f
+            includeFontPadding = false
+            maxWidth = ui.dp(30)
+            text = "\u2328"
+            setTextColor(if (enabled) DesignTokens.ACCENT else 0xFF9CA3AF.toInt())
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(0x000D1117.toInt(), 0xFF0D1117.toInt())
+            )
+            setOnClickListener {
+                val newValue = !prefs.getBoolean("auto_show_keyboard", true)
+                prefs.edit().putBoolean("auto_show_keyboard", newValue).apply()
+                setTextColor(if (newValue) DesignTokens.ACCENT else 0xFF9CA3AF.toInt())
+                val imm = activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                val target = inputProxy ?: terminalView
+                if (newValue) {
+                    target?.requestFocus()
+                    target?.let { v -> imm?.showSoftInput(v, InputMethodManager.SHOW_IMPLICIT) }
+                } else {
+                    target?.windowToken?.let { t -> imm?.hideSoftInputFromWindow(t, 0) }
+                }
+            }
+            setOnLongClickListener {
+                Toast.makeText(activity, if (prefs.getBoolean("auto_show_keyboard", true)) "键盘已开启" else "键盘已关闭", Toast.LENGTH_SHORT).show()
+                true
+            }
+        }
+    }
 
     fun prefillCdCommand(ubuntuPath: String) {
         val cmd = "cd $ubuntuPath"
@@ -633,229 +619,6 @@ class EmbeddedTerminalPage : ShellPage {
         page.dismiss = { dialog.dismiss() }
     }
 
-    private fun completionSuggestions(activity: Activity): List<TerminalCompletion> {
-        val prefix = completionInput().trimStart()
-        val pinned = pinnedCompletions(activity)
-        val paths = pathCompletions(prefix)
-        val builtIns = builtinCompletions()
-        val source = (paths + pinned + builtIns).distinctBy { it.insertText }
-        if (prefix.isBlank()) return source.take(8)
-        val direct = source.filter { it.insertText.startsWith(prefix, ignoreCase = true) || it.label.startsWith(prefix, ignoreCase = true) }
-        val matches = direct.ifEmpty { source.filter { fuzzyCompletionMatch(prefix, it) } }
-        return matches
-            .sortedWith(compareBy<TerminalCompletion> { completionRank(prefix, it) }.thenBy { it.insertText.length }.thenBy { it.insertText })
-            .take(8)
-    }
-
-    private fun completionInput(): String = inputBuffer + composingBuffer
-
-    private fun completionRank(prefix: String, item: TerminalCompletion): Int {
-        val p = prefix.lowercase()
-        val text = item.insertText.lowercase()
-        val kindBase = when (item.kind) {
-            "PIN" -> 0
-            "PATH" -> 10
-            "ENV" -> 20
-            else -> 40
-        }
-        return when {
-            text == p -> kindBase
-            text.startsWith(p) -> kindBase + 1
-            text.split(Regex("[^\\p{L}\\p{N}]+")).any { it.startsWith(p) } -> kindBase + 4
-            else -> kindBase + 9
-        }
-    }
-
-    private fun fuzzyCompletionMatch(prefix: String, item: TerminalCompletion): Boolean {
-        if (prefix.length < 2) return false
-        val normalizedPrefix = prefix.lowercase().filter { it.isLetterOrDigit() }
-        if (normalizedPrefix.length < 2) return false
-        return item.insertText
-            .lowercase()
-            .split(Regex("[^\\p{L}\\p{N}]+"))
-            .filter { it.isNotBlank() }
-            .any { it.startsWith(normalizedPrefix) }
-    }
-
-    private fun builtinCompletions(): List<TerminalCompletion> =
-        listOf(
-            "aidev-doctor",
-            "aidev-agent-context",
-            "aidev-agent-context-file",
-
-            "ubuntu",
-            "help",
-            "history",
-            "pwd",
-            "clear",
-            "alias",
-            "alias ll='ls -lah'",
-            "ll",
-            "ls",
-            "ls -la",
-            "git status",
-            "git status --short",
-            "git add .",
-            "git commit -m \"\"",
-            "git diff --stat",
-            "git log --oneline -10",
-            "git pull",
-            "git switch ",
-            "git checkout ",
-            "grep -R ",
-            "find . -maxdepth 2 -type f",
-            "df -h",
-            "ps aux",
-            "env | sort",
-            "whoami",
-            "cat /etc/os-release",
-            "task-list",
-            "list-listen-ports"
-        ).map { TerminalCompletion(it) }
-
-    private fun pinnedCompletions(activity: Activity): List<TerminalCompletion> =
-        activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-            .getString("terminal_pinned_completions", "")
-            ?.lines()
-            ?.filter { it.isNotBlank() }
-            ?.map { TerminalCompletion(it, it, "PIN") }
-            .orEmpty()
-
-    private fun pathCompletions(input: String): List<TerminalCompletion> {
-        val home = homeDir ?: return emptyList()
-        val token = input.substringAfterLast(' ', "")
-        val command = input.substringBefore(' ', "").lowercase()
-        val pathMode = input.contains(' ') && command in setOf("cd", "ls", "cat", "less", "tail", "head", "nano", "vim", "rm", "cp", "mv", "mkdir", "touch", "grep") ||
-            token.startsWith("/") || token.startsWith("./") || token.startsWith("../") || token.startsWith("~")
-        if (!pathMode) return emptyList()
-        val currentDir = currentUbuntuDirFile(home)
-        val hostHome = home
-        val (baseDir, typedPrefix, displayPrefix) = when {
-            token.startsWith("/root/") -> {
-                pathParts(token.removePrefix("/root/"), "/root/", File(home, "ubuntu-rootfs/root"))
-            }
-            token == "/root" || token == "~" || token == "~/" -> Triple(File(home, "ubuntu-rootfs/root"), "", if (token.startsWith("~")) "~/" else "/root/")
-            token.startsWith("/host-home/") -> {
-                pathParts(token.removePrefix("/host-home/"), "/host-home/", hostHome)
-            }
-            token.startsWith("/") -> {
-                val relative = token.removePrefix("/")
-                pathParts(relative, "/", File(home, "ubuntu-rootfs"))
-            }
-            token.contains('/') -> {
-                val slash = token.lastIndexOf('/')
-                val dirPart = token.substring(0, slash)
-                val namePart = token.substring(slash + 1)
-                val cleanDir = dirPart.removePrefix("./")
-                Triple(File(currentDir, cleanDir), namePart, if (dirPart.isBlank()) "" else "$dirPart/")
-            }
-            else -> Triple(currentDir, token, "")
-        }
-        if (!baseDir.isDirectory) return emptyList()
-        val beforeToken = input.dropLast(token.length)
-        return baseDir.listFiles().orEmpty()
-            .asSequence()
-            .filter { it.name.startsWith(typedPrefix, ignoreCase = true) }
-            .sortedWith(compareBy<File> { !it.isDirectory }.thenBy { it.name.lowercase() })
-            .take(8)
-            .map { file ->
-                val suffix = if (file.isDirectory) "/" else ""
-                val path = displayPrefix + file.name + suffix
-                TerminalCompletion(path, beforeToken + path, "PATH")
-            }
-            .toList()
-    }
-
-    private fun pathParts(relative: String, displayRoot: String, hostRoot: File): Triple<File, String, String> {
-        val slash = relative.lastIndexOf('/')
-        val dirPart = if (slash >= 0) relative.substring(0, slash) else ""
-        val namePart = if (slash >= 0) relative.substring(slash + 1) else relative
-        return Triple(File(hostRoot, dirPart), namePart, displayRoot + dirPart.let { if (it.isBlank()) "" else "$it/" })
-    }
-
-    private fun currentUbuntuDirFile(home: File): File {
-        val pwd = cachedCompletionPwd.takeIf { it.isNotBlank() }
-            ?: File(home, ".aidev-current-pwd").takeIf { it.isFile }?.readText()?.trim().orEmpty()
-            .ifBlank { "/root" }
-        return when {
-            pwd == "/host-home" -> home
-            pwd.startsWith("/host-home/") -> File(home, pwd.removePrefix("/host-home/"))
-            pwd == "/root" -> File(home, "ubuntu-rootfs/root")
-            pwd.startsWith("/root/") -> File(home, "ubuntu-rootfs/root/${pwd.removePrefix("/root/")}")
-            pwd.startsWith("/") -> File(home, "ubuntu-rootfs/${pwd.removePrefix("/")}")
-            else -> File(home, "ubuntu-rootfs/root")
-        }
-    }
-
-    private fun applyCompletion(item: TerminalCompletion) {
-        val target = item.insertText
-        val committed = inputBuffer
-        val current = completionInput()
-        val insert = if (composingBuffer.isNotEmpty() && target.equals(current, ignoreCase = true)) {
-            if (target.startsWith(committed, ignoreCase = true)) target.drop(committed.length) else target
-        } else if (target.equals(current, ignoreCase = true) || target.equals(committed, ignoreCase = true)) {
-            ""
-        } else if (target.startsWith(committed, ignoreCase = true) && composingBuffer.isEmpty()) {
-            target.drop(committed.length)
-        } else {
-            "\u007F".repeat(committed.length) + target
-        }
-        if (insert.isEmpty()) return
-        clearComposingInput()
-        session?.write(insert)
-        inputBuffer = target
-        val currentActivity = activity ?: return
-        refreshCompletions(currentActivity)
-        focusTerminalInput(currentActivity)
-    }
-
-    private fun executeCompletion(activity: Activity, item: TerminalCompletion) {
-        session?.write(item.insertText.trimEnd() + "\r")
-        inputBuffer = ""
-        clearComposingInput()
-        refreshCompletions(activity)
-        focusTerminalInput(activity)
-    }
-
-    private fun showCompletionMenu(activity: Activity, item: TerminalCompletion) {
-        val options = if (item.kind == "PIN") {
-            arrayOf("补全", "执行并回车", "复制命令", "取消固定")
-        } else {
-            arrayOf("补全", "执行并回车", "复制命令", "固定到常用")
-        }
-        MaterialAlertDialogBuilder(activity)
-            .setTitle(item.label)
-            .setItems(options) { _, which ->
-                when (options[which]) {
-                    "补全" -> applyCompletion(item)
-                    "执行并回车" -> executeCompletion(activity, item)
-                    "复制命令" -> {
-                        (activity.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)
-                            ?.setPrimaryClip(ClipData.newPlainText("AIDev command", item.insertText))
-                        Toast.makeText(activity, "已复制命令", Toast.LENGTH_SHORT).show()
-                    }
-                    "固定到常用" -> pinCompletion(activity, item)
-                    "取消固定" -> unpinCompletion(activity, item)
-                }
-            }
-            .show()
-    }
-
-    private fun pinCompletion(activity: Activity, item: TerminalCompletion) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val old = prefs.getString("terminal_pinned_completions", "")?.lines()?.filter { it.isNotBlank() && it != item.insertText }.orEmpty()
-        prefs.edit().putString("terminal_pinned_completions", (listOf(item.insertText) + old).take(12).joinToString("\n")).apply()
-        refreshCompletions(activity)
-        Toast.makeText(activity, "已固定到常用", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun unpinCompletion(activity: Activity, item: TerminalCompletion) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val old = prefs.getString("terminal_pinned_completions", "")?.lines().orEmpty()
-        prefs.edit().putString("terminal_pinned_completions", old.filter { it.isNotBlank() && it != item.insertText }.joinToString("\n")).apply()
-        refreshCompletions(activity)
-        Toast.makeText(activity, "已取消固定", Toast.LENGTH_SHORT).show()
-    }
 
     private fun updateInputBuffer(text: String) {
         text.forEach { ch ->
@@ -883,12 +646,8 @@ class EmbeddedTerminalPage : ShellPage {
         val proxy = inputProxy
         if (proxy != null) {
             proxy.requestFocus()
-            (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
-                ?.showSoftInput(proxy, InputMethodManager.SHOW_IMPLICIT)
         } else {
             terminalView?.requestFocus()
-            (activity.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
-                ?.showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT)
         }
     }
 
@@ -1328,334 +1087,12 @@ class EmbeddedTerminalPage : ShellPage {
             .setTitle("${key.label} 键")
             .setItems(arrayOf("编辑此键", "更多快捷键")) { _, which ->
                 when (which) {
-                    0 -> editVirtualKey(activity, key)
+                    0 -> keyEditor.show(activity, key)
                     1 -> showExtraKeysMenu(activity)
                 }
             }
             .show()
     }
-
-    private fun editVirtualKey(activity: Activity, key: EmbeddedVirtualKey) {
-        val aliases = parseKeyAliases(
-            activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-                .getString("terminal_key_aliases", "") ?: ""
-        )
-
-        val dp = { v: Int -> dp(activity, v) }
-        val pill = { label: String, onClick: () -> Unit ->
-            fillPill(activity, label, onClick)
-        }
-
-        val content = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(10), dp(20), 0)
-        }
-
-        val nameInput = EditText(activity).apply {
-            hint = "按钮名称"
-            setText(key.label)
-        }
-        content.addView(nameInput)
-
-        val divider = { ->
-            View(activity).apply {
-                setBackgroundColor(0xFF374151.toInt())
-                layoutParams = LinearLayout.LayoutParams(-1, 1).apply {
-                    topMargin = dp(12); bottomMargin = dp(8)
-                }
-            }
-        }
-
-        // ── 点击输入 section ──
-        content.addView(divider())
-        content.addView(TextView(activity).apply {
-            text = "点击输入"
-            setTextColor(0xFF9CA3AF.toInt())
-            textSize = 13f
-        })
-        val currentTap = if (key.input.isNotEmpty()) "  当前: ${encodeKeyInput(key.input)}" else "  （未设置）"
-        content.addView(TextView(activity).apply {
-            text = currentTap
-            setTextColor(0xFF6B7280.toInt())
-            textSize = 11f
-            layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
-                bottomMargin = dp(4)
-            }
-        })
-        val tapInput = EditText(activity).apply {
-            hint = tapCmdHint()
-            setText(encodeKeyInput(key.input))
-        }
-        content.addView(tapInput)
-
-        val tapPresets = HorizontalScrollView(activity).apply {
-            addView(LinearLayout(activity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                for (p in listOf("c", "l", "s", "p", "d")) {
-                    addView(pill(p) { tapInput.setText(p); tapInput.setSelection(p.length) })
-                }
-                for (cmd in listOf("clear", "exit", "ssh", "ls -la")) {
-                    val v = "${cmd}\\n"
-                    addView(pill(cmd) { tapInput.setText(v); tapInput.setSelection(v.length) })
-                }
-                for ((lbl, raw) in listOf("↹" to "\\t", "↑" to "\\e[A", "↓" to "\\e[B", "←" to "\\e[D", "→" to "\\e[C", "Home" to "\\e[H", "End" to "\\e[F")) {
-                    addView(pill(lbl) { tapInput.setText(raw); tapInput.setSelection(raw.length) })
-                }
-            })
-            isHorizontalScrollBarEnabled = false
-        }
-        content.addView(tapPresets)
-
-        var tapAliasRow: View? = null
-        var swipeAliasRow: View? = null
-
-        var refreshAliasesFn: () -> Unit = {}
-
-        tapAliasRow = aliasSection(activity, aliases,
-            onFill = { tapInput.setText(encodeKeyInput(it.value)); tapInput.setSelection(encodeKeyInput(it.value).length) },
-            onDelete = { removeKeyAlias(activity, it.name); refreshAliasesFn() },
-            onNew = { showAliasDialog(activity, null) { a -> saveKeyAlias(activity, a.name, a.value); refreshAliasesFn() } }
-        )
-        tapAliasRow?.let { content.addView(it) }
-
-        // ── 上滑命令 section ──
-        content.addView(divider())
-        content.addView(TextView(activity).apply {
-            text = "上滑命令"
-            setTextColor(0xFF9CA3AF.toInt())
-            textSize = 13f
-        })
-        val currentSwipe = if (key.swipeCommand.isNotEmpty()) "  当前: ${encodeKeyInput(key.swipeCommand)}" else "  （未设置）"
-        content.addView(TextView(activity).apply {
-            text = currentSwipe
-            setTextColor(0xFF6B7280.toInt())
-            textSize = 11f
-            layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
-                bottomMargin = dp(4)
-            }
-        })
-        val swipeInput = EditText(activity).apply {
-            hint = "例如 clear、pwd、grep "
-            setText(encodeKeyInput(key.swipeCommand))
-        }
-        content.addView(swipeInput)
-
-        val swipePresets = HorizontalScrollView(activity).apply {
-            addView(LinearLayout(activity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                for (p in listOf("clear", "ls", "pwd", "grep ", "history", "cd /", "cd -", "help")) {
-                    addView(pill(p) { swipeInput.setText(p); swipeInput.setSelection(p.length) })
-                }
-            })
-            isHorizontalScrollBarEnabled = false
-        }
-        content.addView(swipePresets)
-
-        swipeAliasRow = aliasSection(activity, aliases,
-            onFill = { swipeInput.setText(encodeKeyInput(it.value)); swipeInput.setSelection(encodeKeyInput(it.value).length) },
-            onDelete = { removeKeyAlias(activity, it.name); refreshAliasesFn() },
-            onNew = { showAliasDialog(activity, null) { a -> saveKeyAlias(activity, a.name, a.value); refreshAliasesFn() } }
-        )
-        swipeAliasRow?.let { content.addView(it) }
-
-        refreshAliasesFn = {
-            val raw = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-                .getString("terminal_key_aliases", "") ?: ""
-            val updated = parseKeyAliases(raw)
-            val tapIdx = tapAliasRow?.let { content.indexOfChild(it) } ?: -1
-            val swipeIdx = swipeAliasRow?.let { content.indexOfChild(it) } ?: -1
-            tapAliasRow?.let { content.removeView(it) }
-            swipeAliasRow?.let { content.removeView(it) }
-            tapAliasRow = aliasSection(activity, updated,
-                onFill = { tapInput.setText(encodeKeyInput(it.value)); tapInput.setSelection(encodeKeyInput(it.value).length) },
-                onDelete = { removeKeyAlias(activity, it.name); refreshAliasesFn() },
-                onNew = { showAliasDialog(activity, null) { a -> saveKeyAlias(activity, a.name, a.value); refreshAliasesFn() } }
-            )
-            swipeAliasRow = aliasSection(activity, updated,
-                onFill = { swipeInput.setText(encodeKeyInput(it.value)); swipeInput.setSelection(encodeKeyInput(it.value).length) },
-                onDelete = { removeKeyAlias(activity, it.name); refreshAliasesFn() },
-                onNew = { showAliasDialog(activity, null) { a -> saveKeyAlias(activity, a.name, a.value); refreshAliasesFn() } }
-            )
-            tapAliasRow?.let { content.addView(it, tapIdx.coerceAtLeast(0).coerceAtMost(content.childCount)) }
-            swipeAliasRow?.let { content.addView(it, swipeIdx.coerceAtLeast(0).coerceAtMost(content.childCount)) }
-        }
-
-        val scroll = ScrollView(activity).apply { addView(content) }
-
-        MaterialAlertDialogBuilder(activity)
-            .setTitle("自定义虚拟键: ${key.label}")
-            .setView(scroll)
-            .setPositiveButton("保存") { _, _ ->
-                saveKeyOverride(
-                    activity,
-                    key.id,
-                    EmbeddedVirtualKey(
-                        nameInput.text.toString().trim().ifBlank { key.label }.take(8),
-                        decodeKeyInput(tapInput.text.toString()),
-                        decodeKeyInput(swipeInput.text.toString()),
-                        key.id
-                    )
-                )
-                ui?.let { buildKeyboardRows(activity, it, getOrderedKeys(activity)) }
-            }
-            .setNeutralButton("恢复默认") { _, _ ->
-                removeKeyOverride(activity, key.id)
-                ui?.let { buildKeyboardRows(activity, it, getOrderedKeys(activity)) }
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    private fun parseCustomKeys(raw: String): List<EmbeddedVirtualKey> =
-        raw.lines().mapNotNull { line ->
-            val parts = line.split("\t")
-            val label = parts.getOrNull(0)?.trim().orEmpty()
-            val input = parts.getOrNull(1).orEmpty()
-            val swipe = parts.getOrNull(2).orEmpty()
-            if (label.isEmpty() || input.isEmpty()) null else EmbeddedVirtualKey(label.take(8), decodeKeyInput(input), decodeKeyInput(swipe), "custom_$label")
-        }.take(8)
-
-    private fun parseKeyOverrides(raw: String): Map<String, EmbeddedVirtualKey> =
-        raw.lines().mapNotNull { line ->
-            val parts = line.split("\t")
-            val id = parts.getOrNull(0)?.trim().orEmpty()
-            val label = parts.getOrNull(1)?.trim().orEmpty()
-            val input = parts.getOrNull(2).orEmpty()
-            val swipe = parts.getOrNull(3).orEmpty()
-            if (id.isEmpty() || label.isEmpty()) null else id to EmbeddedVirtualKey(label.take(8), decodeKeyInput(input), decodeKeyInput(swipe), id)
-        }.toMap()
-
-    private fun saveKeyOverride(activity: Activity, id: String, key: EmbeddedVirtualKey) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val old = prefs.getString("terminal_key_overrides", "") ?: ""
-        val lines = old.lines().filter { it.isNotBlank() && it.substringBefore("\t") != id }
-        val line = listOf(id, key.label, encodeKeyInput(key.input), encodeKeyInput(key.swipeCommand)).joinToString("\t")
-        prefs.edit().putString("terminal_key_overrides", (lines + line).joinToString("\n")).apply()
-    }
-
-    private fun removeKeyOverride(activity: Activity, id: String) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val old = prefs.getString("terminal_key_overrides", "") ?: ""
-        val lines = old.lines().filter { it.isNotBlank() && it.substringBefore("\t") != id }
-        prefs.edit().putString("terminal_key_overrides", lines.joinToString("\n")).apply()
-    }
-
-    private fun parseKeyAliases(raw: String): List<KeyAlias> =
-        raw.lines().mapNotNull { line ->
-            val parts = line.split("\t")
-            val name = parts.getOrNull(0)?.trim().orEmpty()
-            val value = parts.getOrNull(1).orEmpty()
-            if (name.isEmpty()) null else KeyAlias(name, value)
-        }
-
-    private fun saveKeyAlias(activity: Activity, name: String, value: String) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val old = prefs.getString("terminal_key_aliases", "") ?: ""
-        val lines = old.lines().filter { it.isNotBlank() && it.substringBefore("\t") != name }
-        val line = listOf(name, value).joinToString("\t")
-        prefs.edit().putString("terminal_key_aliases", (lines + line).joinToString("\n")).apply()
-    }
-
-    private fun removeKeyAlias(activity: Activity, name: String) {
-        val prefs = activity.getSharedPreferences("aidev_ui", Activity.MODE_PRIVATE)
-        val old = prefs.getString("terminal_key_aliases", "") ?: ""
-        val lines = old.lines().filter { it.isNotBlank() && it.substringBefore("\t") != name }
-        prefs.edit().putString("terminal_key_aliases", lines.joinToString("\n")).apply()
-    }
-
-    private fun decodeKeyInput(input: String): String =
-        input.replace("\\n", "\n").replace("\\t", "\t").replace("\\e", "\u001b")
-
-    private fun encodeKeyInput(input: String): String =
-        input.replace("\u001b", "\\e").replace("\n", "\\n").replace("\t", "\\t")
-
-    private fun fillPill(activity: Activity, label: String, onClick: () -> Unit): TextView =
-        TextView(activity).apply {
-            text = label
-            textSize = 12f
-            setTextColor(0xFFD1D5DB.toInt())
-            gravity = Gravity.CENTER
-            setPadding(dp(activity, 10), dp(activity, 4), dp(activity, 10), dp(activity, 4))
-            background = android.graphics.drawable.GradientDrawable().apply {
-                setColor(0xFF1F2937.toInt())
-                cornerRadius = dp(activity, 8).toFloat()
-            }
-            setOnClickListener { onClick() }
-            layoutParams = LinearLayout.LayoutParams(-2, -2).apply {
-                setMargins(0, dp(activity, 2), dp(activity, 6), 0)
-            }
-        }
-
-    private fun aliasSection(
-        activity: Activity,
-        aliases: List<KeyAlias>,
-        onFill: (KeyAlias) -> Unit,
-        onDelete: (KeyAlias) -> Unit,
-        onNew: () -> Unit
-    ): View {
-        val row = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-        }
-        for (a in aliases) {
-            row.addView(fillPill(activity, a.name) { onFill(a) }.apply {
-                setOnLongClickListener {
-                    MaterialAlertDialogBuilder(activity)
-                        .setTitle("删除别名")
-                        .setMessage("删除「${a.name}」？")
-                        .setPositiveButton("删除") { _, _ -> onDelete(a) }
-                        .setNegativeButton("取消", null)
-                        .show()
-                    true
-                }
-            })
-        }
-        row.addView(fillPill(activity, "+ 新建别名") { onNew() }.apply {
-            setTextColor(0xFF60A5FA.toInt())
-        })
-        return HorizontalScrollView(activity).apply {
-            addView(row)
-            isHorizontalScrollBarEnabled = false
-            layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
-                topMargin = dp(activity, 4)
-            }
-        }
-    }
-
-    private fun showAliasDialog(activity: Activity, existing: KeyAlias?, onSave: (KeyAlias) -> Unit) {
-        val box = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(activity, 20), dp(activity, 10), dp(activity, 20), 0)
-        }
-        val nameInput = EditText(activity).apply {
-            hint = "别名名称"
-            setText(existing?.name ?: "")
-            inputType = InputType.TYPE_CLASS_TEXT
-        }
-        val valueInput = EditText(activity).apply {
-            hint = tapCmdHint()
-            setText(encodeKeyInput(existing?.value ?: ""))
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            setLines(3)
-            isVerticalScrollBarEnabled = true
-        }
-        box.addView(nameInput)
-        box.addView(valueInput)
-        MaterialAlertDialogBuilder(activity)
-            .setTitle(if (existing != null) "编辑别名" else "新建别名")
-            .setView(box)
-            .setPositiveButton("保存") { _, _ ->
-                val name = nameInput.text.toString().trim()
-                val value = decodeKeyInput(valueInput.text.toString())
-                if (name.isNotEmpty()) onSave(KeyAlias(name, value))
-            }
-            .setNegativeButton("取消", null)
-            .show()
-    }
-
-    private fun dp(activity: Activity, v: Int): Int =
-        (activity.resources.displayMetrics.density * v + 0.5f).toInt()
-
-    private fun tapCmdHint() = "例如 c、\\n 自动回车、\\t、\\e[A"
 
     private fun fontPx(activity: Activity): Int =
         activity!!.spToPx(currentFontSp(activity))
@@ -1997,13 +1434,16 @@ class EmbeddedTerminalPage : ShellPage {
 
     private fun consumePendingCommand() {
         val command = TerminalCommandBus.consume() ?: return
-        if (command == "aidev-auto-bootstrap") autoBootstrapDispatched = true
+        if (command == "aidev-auto-bootstrap") {
+            if (_autoBootstrapDone) return
+            _autoBootstrapDone = true
+        }
         send(command, remember = false)
     }
 
     private fun maybeAutoBootstrapUbuntu(activity: Activity) {
-        if (autoBootstrapDispatched) return
-        autoBootstrapDispatched = true
+        if (_autoBootstrapDone) return
+        _autoBootstrapDone = true
         session?.write("aidev-auto-bootstrap\r")
         focusTerminalInput(activity)
     }
@@ -2077,6 +1517,8 @@ class EmbeddedTerminalPage : ShellPage {
             }
             override fun onSingleTapUp(e: MotionEvent) {
                 focusTerminalInput(activity)
+                val imm = activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                (inputProxy ?: terminalView)?.let { v -> imm?.showSoftInput(v, InputMethodManager.SHOW_IMPLICIT) }
             }
             override fun shouldBackButtonBeMappedToEscape(): Boolean = true
             override fun shouldEnforceCharBasedInput(): Boolean = false

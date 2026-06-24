@@ -1,38 +1,34 @@
-# Current Task: Path Config + Shizuku APK Install — Complete
+# Current Task: Phase A（稳定性 + 安全）+ UI/UX 修复 — Complete
 
 ## Summary
-Added centralized path management, path settings UI, and Shizuku-based silent APK installation with diagnostic mode.
+完成 Phase A 全部 6 个步骤 + 5 项 UI/UX 修复，构建和单元测试均通过。
 
-## Changes Made
-### Unified Path Management
-- **PathConfig.kt** — Centralized path object with 6 system paths (3 configurable via prefs)
-- **PreferencesManager.kt** — Added 3 path preferences: `backupDir`, `projectsDirRel`, `externalAidevDir`
-- **EmbeddedSettingsPage.kt** — Added "路径设置" row with path menu:
-  - Editable paths (backup dir, projects dir, external AIDev dir) with edit dialog + reset-to-default
-  - Read-only paths (AIDev Home, Ubuntu Rootfs, tasks dir) in gray/muted style with copy-to-clipboard
-  - Each path has a Chinese description of its purpose
+## Phase A 完成情况
 
-### Shizuku-based APK Installation
-- **ShellResult.kt** — Data class with stdout/stderr/exitCode for command results
-- **ShizukuLogcat.kt**:
-  - Added `ShizukuState` sealed class (NotInstalled/NotRunning/NotAuthorized/Ready) for tiered availability checks
-  - Added `checkState()` — progressive status check (install → running → authorized)
-  - Added `executeCommand()` — suspend function with 60s timeout, returns ShellResult
-  - Added `executeFireAndForget()` — spawns process without waiting (instant return)
-  - Added `pmInstallErrorHint()` — maps PM install exit codes/errors to Chinese hints
-- **EmbeddedFilesPage.kt**:
-  - Rewrote "系统 · 安装 APK" with 4-stage flow: path validation → Shizuku state check → install dialog → execution
-  - Added "诊断安装" option that shows raw stdout/stderr/exitCode
-  - Uses pipe method (`cat | pm install -S`) to bypass SELinux FUSE read restrictions
-  - Fire-and-forget mode for normal install (matches MT Manager experience)
-- **EmbeddedSettingsPage.kt** — Added "▶ 测试命令执行" button in Shizuku status dialog
+| Step | 内容 | 状态 |
+|------|------|------|
+| A1 | 修复进程流泄漏（SystemMonitorPage, NetworkDiagnosticsPage, SecurityAuditPage） | ✅ |
+| A1-fix | 修复 NetworkDiagnostics 闪退（ACCESS_NETWORK_STATE）+ bootstrap 自动输入修复 | ✅ |
+| A2 | 修复 CoroutineScope 泄漏（EmbeddedSettingsPage, EmbeddedFilesPage） | ✅ |
+| A3 | SystemMonitorPage 主线程 IO 移到 Dispatchers.IO | ✅ |
+| A4 | AndroidManifest 安全加固（allowBackup=false, usesCleartextTraffic=false） | ✅ |
+| A5 | 命令输入校验（NetworkDiagnosticsPage 正则 + SecurityAuditPage 白名单） | ✅ |
 
-### Backup & Repository Path Migration
-- **BackupRestorePage.kt** — Backup path display uses `PathConfig.backupDir()`
-- **BackupRepositoryImpl.kt** — Accepts Context parameter, uses PathConfig for external AIDev dir
+## UI/UX 修复
 
-## Verification
-- APK builds successfully (6950KB)
-- Shizuku test (`echo SHIZUKU_TEST_OK`) verified working
-- Silent APK install verified working with `AIDE_3.2.210316.apk`
-- All imports verified, no compilation errors
+| 内容 | 状态 |
+|------|------|
+| ⌨ 按钮背景色统一（0xFF0D1117，与 CompletionEngine 一致） | ✅ |
+| ⌨ 按钮固定右边（FrameLayout + Gravity.END，TUI 模式不跳） | ✅ |
+| 键盘状态同步（WindowInsetsCompat 替换 OnGlobalLayoutListener） | ✅ |
+| onNewIntent 页面保留（不强制切到终端页） | ✅ |
+| Shizuku 移到权限管理分类 | ✅ |
+
+## 验证
+- 编译：BUILD SUCCESSFUL
+- 单元测试：通过
+- 实机验证：待用户确认 ⌨ 按钮 TUI 模式下位置
+
+## 下一步
+- Android 集成测试（补充 androidTest/ 目录）
+- Phase B: 代码质量（SharedPreferences 集中化、死代码清理）

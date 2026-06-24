@@ -94,8 +94,11 @@ class ShellActivity : Activity() {
         if (tab in pages.indices) {
             switchTo(tab, animateForward = null, force = true)
         } else {
-            TerminalCommandBus.post("aidev-auto-bootstrap")
-            switchTo(TAB_TERMINAL, animateForward = null, force = true)
+            // 保留用户当前页面，仅在终端页面时触发 bootstrap
+            if (currentIndex == TAB_TERMINAL) {
+                TerminalCommandBus.post("aidev-auto-bootstrap")
+                renderCurrent(currentIndex, animateForward = null)
+            }
         }
     }
 
@@ -458,14 +461,14 @@ class ShellActivity : Activity() {
         }
         old?.let { pages[previousIndex].onDestroy(this) }
         pages[currentIndex].onSelected(activity = this, view = next)
-        // 键盘管理：切换到终端时弹起，离开终端时关闭
+        // 键盘管理：切换到终端时根据开关决定是否隐藏，离开终端时关闭键盘
         val imm = getSystemService(InputMethodManager::class.java)
         if (currentIndex == TAB_TERMINAL) {
-            // 延迟弹起，等待页面渲染完成
-            next.postDelayed({
-                val focusView = next.findFocus() ?: next
-                imm?.showSoftInput(focusView, InputMethodManager.SHOW_IMPLICIT)
-            }, 200)
+            val autoShow = prefs.getBoolean("auto_show_keyboard", true)
+            if (!autoShow) {
+                // onSelected 中 focusTerminalInput 触发了 requestFocus 自动弹键盘，立即隐藏
+                imm?.hideSoftInputFromWindow(next.windowToken, 0)
+            }
         } else {
             imm?.hideSoftInputFromWindow(next.windowToken, 0)
         }

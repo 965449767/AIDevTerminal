@@ -17,8 +17,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.net.InetAddress
 import java.net.NetworkInterface
 import java.net.Socket
@@ -78,20 +76,46 @@ class NetworkDiagnosticsPage : ShellPage {
 
         list.addView(ui.divider())
 
-        // 常用端口状态
+        // 常用端口状态（后台检查，避免阻塞主线程）
         list.addView(ui.section("常用端口", "本地常用服务端口状态"))
         val commonPorts = listOf(22, 80, 443, 3000, 8080, 8000, 5000, 9000)
-        commonPorts.chunked(2).forEach { pair ->
+        val portViews = commonPorts.map { port ->
+            portStatusItem(port, checking = true)
+        }
+        portViews.chunked(2).forEach { pair ->
             list.addView(ui.rowOf(
-                portStatusItem(pair[0]),
-                if (pair.size > 1) portStatusItem(pair[1]) else View(activity)
+                pair[0],
+                if (pair.size > 1) pair[1] else View(activity)
             ))
+        }
+        // 后台检查端口状态并更新 UI
+        scope.launch(Dispatchers.IO) {
+            val results = commonPorts.map { port -> port to isLocalPortOpen(port) }
+            withContext(Dispatchers.Main) {
+                results.forEachIndexed { index, (port, isOpen) ->
+                    if (index < portViews.size) {
+                        val updated = portStatusItem(port, checking = false, isOpen = isOpen)
+                        val parent = portViews[index].parent as? android.view.ViewGroup
+                        if (parent != null) {
+                            val pos = parent.indexOfChild(portViews[index])
+                            if (pos >= 0) {
+                                parent.removeViewAt(pos)
+                                parent.addView(updated, pos)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
-    private fun portStatusItem(port: Int): View {
-        val isOpen = isLocalPortOpen(port)
-        return ui.listItem("端口 $port", if (isOpen) "开放" else "关闭", isOpen)
+    private fun portStatusItem(port: Int, checking: Boolean = false, isOpen: Boolean = false): View {
+        val status = when {
+            checking -> "检查中..."
+            isOpen -> "开放"
+            else -> "关闭"
+        }
+        return ui.listItem("端口 $port", status, isOpen && !checking)
     }
 
     private fun showPingDialog() {
@@ -101,7 +125,12 @@ class NetworkDiagnosticsPage : ShellPage {
             .setView(edit)
             .setPositiveButton("执行") { _, _ ->
                 val host = edit.text.toString().trim()
-                if (host.isNotEmpty()) executePing(host)
+                if (host.isEmpty()) return@setPositiveButton
+                if (!isValidHostName(host)) {
+                    Toast.makeText(activity, "无效的主机名或 IP", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                executePing(host)
             }
             .setNegativeButton("取消", null)
             .show()
@@ -111,8 +140,8 @@ class NetworkDiagnosticsPage : ShellPage {
         scope.launch(Dispatchers.IO) {
             val result = try {
                 val process = Runtime.getRuntime().exec(arrayOf("ping", "-c", "4", "-W", "3", host))
-                val output = process.inputStream.bufferedReader().readText()
-                val error = process.errorStream.bufferedReader().readText()
+                val output = process.inputStream.bufferedReader().use { it.readText() }
+                val error = process.errorStream.bufferedReader().use { it.readText() }
                 val exitCode = process.waitFor()
                 if (exitCode == 0) output else "Ping 失败 (exit=$exitCode):\n$error\n$output"
             } catch (e: Exception) {
@@ -146,7 +175,12 @@ class NetworkDiagnosticsPage : ShellPage {
             .setPositiveButton("发送") { _, _ ->
                 val url = urlEdit.text.toString().trim()
                 val method = methodEdit.text.toString().trim().uppercase()
-                if (url.isNotEmpty()) executeHttp(url, method)
+                if (url.isEmpty()) return@setPositiveButton
+                if (!isValidUrl(url)) {
+                    Toast.makeText(activity, "URL 必须以 http:// 或 https:// 开头", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                executeHttp(url, method)
             }
             .setNegativeButton("取消", null)
             .show()
@@ -172,7 +206,7 @@ class NetworkDiagnosticsPage : ShellPage {
                 }
 
                 if (method == "GET") {
-                    val body = conn.inputStream.bufferedReader().readText()
+                    val body = conn.inputStream.bufferedReader().use { it.readText() }
                     sb.append("\nBody (first 2000 chars):\n${body.take(2000)}")
                 }
                 conn.disconnect()
@@ -207,7 +241,12 @@ class NetworkDiagnosticsPage : ShellPage {
             .setPositiveButton("检查") { _, _ ->
                 val host = hostEdit.text.toString().trim()
                 val port = portEdit.text.toString().trim().toIntOrNull()
-                if (host.isNotEmpty() && port != null) checkPort(host, port)
+                if (host.isEmpty() || port == null) return@setPositiveButton
+                if (!isValidHostName(host)) {
+                    Toast.makeText(activity, "无效的主机名或 IP", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                checkPort(host, port)
             }
             .setNegativeButton("取消", null)
             .show()
@@ -242,7 +281,12 @@ class NetworkDiagnosticsPage : ShellPage {
             .setView(edit)
             .setPositiveButton("查询") { _, _ ->
                 val domain = edit.text.toString().trim()
-                if (domain.isNotEmpty()) executeDns(domain)
+                if (domain.isEmpty()) return@setPositiveButton
+                if (!isValidDomain(domain)) {
+                    Toast.makeText(activity, "无效的域名格式", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                executeDns(domain)
             }
             .setNegativeButton("取消", null)
             .show()
@@ -297,7 +341,10 @@ class NetworkDiagnosticsPage : ShellPage {
             }
 
             sb.append("\n=== 路由 ===\n")
-            val route = Runtime.getRuntime().exec("ip route").inputStream.bufferedReader().readText()
+            val routeProcess = Runtime.getRuntime().exec(arrayOf("sh", "-c", "ip route 2>/dev/null || route -n"))
+            val route = routeProcess.inputStream.bufferedReader().use { it.readText() }
+            routeProcess.errorStream?.bufferedReader()?.use { it.readText() }
+            routeProcess.waitFor()
             sb.append(route.take(1000))
         } catch (e: Exception) {
             sb.append("获取信息失败: ${e.message}")
@@ -312,26 +359,34 @@ class NetworkDiagnosticsPage : ShellPage {
     }
 
     private fun isNetworkAvailable(): Boolean {
-        val cm = activity.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        return if (Build.VERSION.SDK_INT >= 23) {
-            cm.activeNetwork?.let { network ->
-                cm.getNetworkCapabilities(network)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            } ?: false
-        } else {
-            @Suppress("DEPRECATION")
-            cm.activeNetworkInfo?.isConnected == true
+        return try {
+            val cm = activity.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            if (Build.VERSION.SDK_INT >= 23) {
+                cm.activeNetwork?.let { network ->
+                    cm.getNetworkCapabilities(network)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                } ?: false
+            } else {
+                @Suppress("DEPRECATION")
+                cm.activeNetworkInfo?.isConnected == true
+            }
+        } catch (e: Exception) {
+            false
         }
     }
 
     private fun isWifiConnected(): Boolean {
-        val cm = activity.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        return if (Build.VERSION.SDK_INT >= 23) {
-            cm.activeNetwork?.let { network ->
-                cm.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-            } ?: false
-        } else {
-            @Suppress("DEPRECATION")
-            cm.activeNetworkInfo?.type == ConnectivityManager.TYPE_WIFI
+        return try {
+            val cm = activity.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            if (Build.VERSION.SDK_INT >= 23) {
+                cm.activeNetwork?.let { network ->
+                    cm.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                } ?: false
+            } else {
+                @Suppress("DEPRECATION")
+                cm.activeNetworkInfo?.type == ConnectivityManager.TYPE_WIFI
+            }
+        } catch (e: Exception) {
+            false
         }
     }
 
@@ -342,6 +397,21 @@ class NetworkDiagnosticsPage : ShellPage {
         } catch (e: Exception) {
             false
         }
+    }
+
+    private fun isValidHostName(host: String): Boolean {
+        if (host.length > 253) return false
+        // IPv4: digits and dots; IPv6: hex and colons; hostname: alphanum, dots, hyphens
+        return host.matches(Regex("^([\\w\\-.]+|\\d{1,3}(\\.\\d{1,3}){3}|[\\da-fA-F:]+)$"))
+    }
+
+    private fun isValidDomain(domain: String): Boolean {
+        if (domain.length > 253) return false
+        return domain.matches(Regex("^\\w[\\w\\-]*(\\.\\w[\\w\\-]*)*$"))
+    }
+
+    private fun isValidUrl(url: String): Boolean {
+        return url.startsWith("http://") || url.startsWith("https://")
     }
 
     private fun copyText(label: String, text: String) {
