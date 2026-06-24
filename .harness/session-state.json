@@ -1,38 +1,45 @@
 {
-  "task_id": "0.17.0-embedded-shell-pages-split",
+  "task_id": "menu-cleanup-complete",
   "status": "completed",
-  "current_phase": "code-split-complete",
-  "last_updated": "2026-06-24",
+  "current_phase": "all-done",
+  "last_updated": "2026-06-25",
   "overall_progress_percent": 100,
   "active_plan": [],
-  "next_3_steps": [
-    "(Optional) 提取 EmbeddedFilesPage.kt 中的 ProjectManager",
-    "(Optional) Android instrumentation tests",
-    "Deploy to production"
-  ],
+  "next_3_steps": [],
   "changed_files": [
-    "app/src/main/java/com/aidev/terminal/EmbeddedShellPages.kt",
-    "app/src/main/java/com/aidev/terminal/TerminalModels.kt",
-    "app/src/main/java/com/aidev/terminal/TerminalUtils.kt",
-    "app/src/main/java/com/aidev/terminal/VirtualKeyEditor.kt",
-    "app/src/main/java/com/aidev/terminal/CompletionEngine.kt"
+    "EmbeddedShellPages.kt",
+    "EmbeddedFilesPage.kt",
+    "EmbeddedSettingsPage.kt",
+    "ShellActivity.kt",
+    "ServerCenterActivity.kt",
+    "PreferencesManager.kt",
+    "Constants.kt",
+    "KeepAliveBootReceiver.kt",
+    "UbuntuBootstrapScripts.kt",
+    "TerminalShellAssets.kt",
+    "TerminalUtils.kt",
+    "ContainerManagerPage.kt",
+    "AppNav.kt",
+    "knowledge_base.json",
+    "assets/scripts/deploy-dev-env.sh → setup-dev-env.sh (renamed)",
+    "assets/scripts/install-aitool.sh → opencode-install.sh (renamed)",
+    "AIAgentActivity.kt (deleted)"
   ],
   "validation": {
     "last_commands": [
-      "bash /root/.android-env/scripts/build-android.sh",
-      "./gradlew :app:testDebugUnitTest --no-daemon"
+      "./gradlew :app:assembleDebug :app:testDebugUnitTest --no-daemon"
     ],
-    "last_result": "BUILD SUCCESSFUL, 30/30 tests pass, APK exported to /storage/emulated/0/app-debug.apk",
+    "last_result": "BUILD SUCCESSFUL",
     "known_failures": []
   },
   "cognitive_state": {
     "failure_count": 0,
-    "current_mode": "handoff_ready",
+    "current_mode": "idle",
     "tried_approaches": [],
     "blocked_on": null
   },
   "handoff": {
-    "last_summary": "EmbeddedShellPages.kt 代码拆分完成。主文件从 2114 行减至 1489 行（-30%）。拆分出 4 个新文件：TerminalModels.kt（数据类）、TerminalUtils.kt（工具函数）、VirtualKeyEditor.kt（按键编辑器）、CompletionEngine.kt（补全引擎）。每步均通过编译和单元测试验证，实机测试确认自动补全、虚拟键盘、键编辑、TUI 模式正常。SessionManager 因耦合度过高跳过。",
-    "resume_from": "EmbeddedShellPages.kt 拆分完成。主文件 1489 行，4 个新文件职责清晰。可选继续拆分 EmbeddedFilesPage.kt。"
+    "last_summary": "Full session complete. Menu cleanup + command renames + knowledge base overhaul. Key changes: removed AIAgentActivity, terminal exit button, files legacy entry, keepalive manual controls, 9 duplicate palette items. Settings reorganized. install-aitool → opencode-install, deploy-dev-env → setup-dev-env (7 files, 12 refs). builtinCompletions() now has all 26 custom commands. knowledge_base.json: added 内置命令 category (26 items), fixed ping→curl, removed traceroute/last/systemctl, pkg→apt, chown/find-SUID PRoot warnings. Build and tests pass.",
+    "resume_from": "No active work."
   }
 }

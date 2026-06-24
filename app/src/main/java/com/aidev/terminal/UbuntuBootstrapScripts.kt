@@ -241,7 +241,7 @@ object UbuntuBootstrapScripts {
         if (!rootfs.isDirectory) return
         val binDir = java.io.File(rootfs, "usr/local/bin")
         binDir.mkdirs()
-        val scripts = listOf("check-dev-env.sh", "repair-dev-env.sh", "deploy-dev-env.sh", "install-aitool.sh", "aidev-logcat.sh")
+        val scripts = listOf("check-dev-env.sh", "repair-dev-env.sh", "setup-dev-env.sh", "opencode-install.sh", "aidev-logcat.sh")
         for (script in scripts) {
             val dstName = script.removeSuffix(".sh")
             val dst = java.io.File(binDir, dstName)
@@ -569,6 +569,8 @@ AIDEV_PWD_HOOK_EOF
           ubuntu) enter_ubuntu "${'$'}@" ;;
           install-ubuntu) install_ubuntu "${'$'}@" ;;
           aidev-doctor) aidev_doctor_android ;;
+          setup-dev-env) run_ubuntu_command "/usr/local/bin/setup-dev-env" ;;
+          opencode-install) run_ubuntu_command "/usr/local/bin/opencode-install" ;;
           fix-bashrc) fix_bashrc ;;
           aidev-auto-bootstrap)
             if has_ubuntu; then

@@ -118,6 +118,8 @@ object TerminalShellAssets {
             install-ubuntu() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" install-ubuntu "${'$'}@"; }
             aidev-auto-bootstrap() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-auto-bootstrap "${'$'}@"; }
             aidev-doctor() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-doctor "${'$'}@"; }
+            setup-dev-env() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" setup-dev-env "${'$'}@"; }
+            opencode-install() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" opencode-install "${'$'}@"; }
             aidev-current-project() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-current-project" "${'$'}@"; }
             aidev-agent-context() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-agent-context" "${'$'}@"; }
             aidev-agent-context-file() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-agent-context-file" "${'$'}@"; }

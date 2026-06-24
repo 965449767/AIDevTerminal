@@ -46,7 +46,6 @@ object Constants {
         const val BG_IMAGE_URI = "bg_image_uri"
         const val HAPTIC_TAP = "haptic_tap"
         const val FONT_SP = "font_sp"
-        const val KEEPALIVE_AUTO = "keepalive_auto"
         const val WRITE_SETTINGS_PROMPTED = "write_settings_prompted"
         const val SYNC_TERMINAL_FILES = "sync_terminal_files"
         const val CURRENT_PROJECT_PATH = "current_project_path"

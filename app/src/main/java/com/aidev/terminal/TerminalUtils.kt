@@ -63,7 +63,36 @@ internal fun builtinCompletions(): List<TerminalCompletion> =
         "whoami",
         "cat /etc/os-release",
         "task-list",
-        "list-listen-ports"
+        "list-listen-ports",
+
+        "install-ubuntu",
+        "setup-dev-env",
+        "check-dev-env",
+        "repair-dev-env",
+        "opencode-install",
+        "aidev-logcat",
+
+        "aidev-current-project",
+        "aidev-agent-summary",
+        "aidev-agent-log",
+        "aidev-agent-tail",
+
+        "task-run",
+
+        "sysnotify",
+        "screencap",
+        "volume",
+        "brightness",
+        "startapp",
+        "stopapp",
+        "installapk",
+        "uninstallapp",
+
+        "android-sh",
+        "pmx",
+        "amx",
+        "getpropx",
+        "logcatx"
     ).map { TerminalCompletion(it) }
 
 internal fun decodeKeyInput(input: String): String =

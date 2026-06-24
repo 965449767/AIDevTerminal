@@ -47,10 +47,6 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString("terminal_pinned_completions", "") ?: ""
         set(value) = prefs.edit().putString("terminal_pinned_completions", value).apply()
 
-    var keepaliveAuto: Boolean
-        get() = prefs.getBoolean("keepalive_auto", true)
-        set(value) = prefs.edit().putBoolean("keepalive_auto", value).apply()
-
     var writeSettingsPrompted: Boolean
         get() = prefs.getBoolean("write_settings_prompted", false)
         set(value) = prefs.edit().putBoolean("write_settings_prompted", value).apply()

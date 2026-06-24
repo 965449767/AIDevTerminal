@@ -479,9 +479,6 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
                 ellipsize = TextUtils.TruncateAt.END
             }, LinearLayout.LayoutParams(0, -1, 1f))
             addView(button(activity, ui, "+") { newSession(activity) }, LinearLayout.LayoutParams(ui.dp(42), ui.dp(30)))
-            addView(button(activity, ui, "退出") { host.switchTab(ShellActivity.TAB_TERMINAL) }, LinearLayout.LayoutParams(ui.dp(54), ui.dp(30)).apply {
-                leftMargin = ui.dp(4)
-            })
             addView(button(activity, ui, "粘贴") {
                 val text = ClipboardHelper.paste(activity)
                 if (text != null) session?.write(text)
@@ -520,11 +517,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
         showGroupedActionMenu(activity, "更多设置", "recent_terminal_more", listOf(
             "终端 · 诊断 Doctor" to { send("aidev-doctor") },
             "终端 · Shell 增强" to { showShellEnhancements(activity) },
-            "SSH · 连接管理" to { showSshBookmarks(activity, host) },
-            "设置 · 字号" to { showFontDialog(activity) },
-            "设置 · 紧凑显示" to { applyFontPreset(activity, 12f) },
-            "设置 · 大字显示" to { applyFontPreset(activity, 18f) },
-            "系统 · 端口检查" to { send("list-listen-ports") }
+            "SSH · 连接管理" to { showSshBookmarks(activity, host) }
         ))
     }
 

@@ -22,16 +22,15 @@ class ServerCenterActivity : Activity() {
     private fun buildUi() {
         val root = ui.pageRoot()
         AppNav.attach(this, ui, root, ServerCenterActivity::class.java)
-        root.addView(ui.topBar("服务器中心", "常驻" to { KeepAliveService.start(this) }, "关闭" to { finish() }))
+        root.addView(ui.topBar("服务器中心", "关闭" to { finish() }))
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(ui.dp(18), ui.dp(12), ui.dp(18), ui.dp(24))
             addView(ui.section("运行状态", "作为移动 Linux 服务器时最关键的状态"))
-            addView(ui.rowOf(
-                ui.listItem("后台常驻", if (keepAliveEnabled()) "已启用" else "未启用", keepAliveEnabled()),
-                ui.listItem("电池优化", if (batteryIgnored()) "已忽略" else "受限制", batteryIgnored())
-            ))
+            addView(ui.listItem("电池优化", if (batteryIgnored()) "已忽略" else "受限制", batteryIgnored()).apply {
+                layoutParams = LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, ui.dp(8)) }
+            })
             addView(ui.rowOf(
                 ui.listItem("任务记录", "${taskCount()} 个", taskCount() > 0),
                 ui.listItem("Ubuntu", if (ubuntuInstalled()) "可用" else "未安装", ubuntuInstalled())
@@ -42,10 +41,7 @@ class ServerCenterActivity : Activity() {
                 ui.actionRow("监听端口", "查看当前本机服务端口") { openTerminal("list-listen-ports\n") },
                 ui.actionRow("访问诊断", "检查 127.0.0.1 服务") { openTerminal("check-local-server 3000\n") }
             ))
-            addView(ui.rowOf(
-                ui.actionRow("后台说明", "HyperOS 长后台建议") { openTerminal("keepalive-explain\ncheck-keepalive\n") },
-                ui.actionRow("任务中心", "查看服务日志和任务") { AppNav.openTerminal(this@ServerCenterActivity, "aidev-agent-log\n") }
-            ))
+            addView(ui.actionRow("任务中心", "查看服务日志和任务") { AppNav.openTerminal(this@ServerCenterActivity, "aidev-agent-log\n") })
 
             addView(ui.section("服务器模式原则", "服务类任务不应该依赖前台终端页面"))
             addView(infoCard())
@@ -66,9 +62,6 @@ class ServerCenterActivity : Activity() {
                 setPadding(0, ui.dp(8), 0, 0)
             })
         }
-
-    private fun keepAliveEnabled(): Boolean =
-        pm.keepaliveAuto
 
     private fun batteryIgnored(): Boolean {
         if (Build.VERSION.SDK_INT < 23) return true

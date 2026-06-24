@@ -101,13 +101,7 @@ class EmbeddedFilesPage : ShellPage {
             "位置 · 收藏/跳转" to { showFavorites() },
             "位置 · 常用目录" to { showQuickDirs() },
             "位置 · 最近项目" to { showRecentProjects() },
-            "项目 · 项目识别" to { inspectProject() },
-            "项目 · 项目工作区" to { projectWorkspace() },
-            "项目 · 标记当前项目" to { markCurrentProject() },
-            "项目 · 跳到当前项目" to { jumpCurrentProject() },
-            "系统 · 安装 APK" to { installSelectedApk(host) },
-            "系统 · 存储权限" to { openStorageSettings() },
-            "系统 · 旧版文件管理" to { host.switchTab(ShellActivity.TAB_FILES) }
+            "系统 · 安装 APK" to { installSelectedApk(host) }
         )
         val recent = recentFileMenuLabels().filter { label -> actions.any { it.first == label } }
         val display = recent.map { "最近 · ${it.substringAfter(" · ")}" to it } + actions.filterNot { recent.contains(it.first) }.map { it.first to it.first }

@@ -54,7 +54,7 @@ class ContainerManagerPage : ShellPage {
 
     private fun showLoading() {
         list.removeAllViews()
-        list.addView(ui.section("容器管理", "rootfs 管理、环境隔离、快照备份"))
+        list.addView(ui.section("Ubuntu 管理", "rootfs 管理、环境隔离、快照备份"))
         list.addView(ui.emptyState("正在加载...", "请稍候，正在获取容器信息"))
     }
 

@@ -60,7 +60,7 @@ class ShellActivity : Activity() {
         ui = AIDevUi(this, prefs.sharedPreferences)
         requestEssentialPermissions()
         ensureNotificationChannel()
-        if (prefs.keepaliveAuto) runCatching { KeepAliveService.start(this) }
+        runCatching { KeepAliveService.start(this) }
             .onFailure { Log.e("ShellActivity", "KeepAliveService start failed", it) }
         buildShell()
         val requestedTab = intent?.getIntExtra("shell_tab", -1) ?: -1
@@ -142,23 +142,11 @@ class ShellActivity : Activity() {
 
     fun showCommandPalette() {
         val items = arrayOf(
-            "打开终端",
-            "打开文件",
-            "打开设置",
-            "打开知识库",
             "进入 Ubuntu",
             "环境诊断",
             "监听端口",
             "安装 OpenCode",
-            "启动后台常驻",
             "选择背景图片",
-            "任务模板",
-            "Python HTTP 服务",
-            "Node Dev 服务",
-            "Gradle Debug 构建",
-            "Logcat 任务",
-            "Git 状态",
-            "清屏",
             "当前项目",
             "当前项目 Git",
             "当前项目测试",
@@ -250,37 +238,27 @@ class ShellActivity : Activity() {
 
     private fun handleCommandPalette(which: Int) {
         when (which) {
-            0 -> switchTo(TAB_TERMINAL)
-            1 -> switchTo(TAB_FILES)
-            2 -> switchTo(TAB_SETTINGS)
-            3 -> switchTo(TAB_KNOWLEDGE)
-            4 -> openTerminalCommand("ubuntu")
-            5 -> openTerminalCommand("check-dev-env")
-            6 -> openTerminalCommand("list-listen-ports")
-            7 -> openTerminalCommand("install-aitool")
-            8 -> runCatching { KeepAliveService.start(this) }
-            10 -> pickBackgroundImage()
-            11 -> openTerminalCommand("task-run pyserver 'python3 -m http.server 8000'")
-            13 -> openTerminalCommand("task-run npm-dev 'npm run dev'")
-            14 -> openTerminalCommand("task-run gradle './gradlew assembleDebug'")
-            15 -> openTerminalCommand("task-run logcat 'logcat'")
-            16 -> openTerminalCommand("git status")
-            17 -> openTerminalCommand("clear")
-            18 -> openCurrentProject("pwd && ls -la")
-            20 -> openCurrentProject(ProjectCommands.testCommand(currentProjectDir()))
-            21 -> openCurrentProject(ProjectCommands.buildCommand(currentProjectDir()))
-            22 -> {
+            0 -> openTerminalCommand("ubuntu")
+            1 -> openTerminalCommand("check-dev-env")
+            2 -> openTerminalCommand("list-listen-ports")
+            3 -> openTerminalCommand("opencode-install")
+            4 -> pickBackgroundImage()
+            5 -> openCurrentProject("pwd && ls -la")
+            6 -> openCurrentProject("git status --short --branch")
+            7 -> openCurrentProject(ProjectCommands.testCommand(currentProjectDir()))
+            8 -> openCurrentProject(ProjectCommands.buildCommand(currentProjectDir()))
+            9 -> {
                 prefs.currentProjectPath = ""
                 switchTo(TAB_FILES)
             }
-            23 -> openTerminalCommand("ls -lah \"${filesDir.absolutePath}/home/tasks\"")
-            24 -> openCurrentProject(ProjectCommands.healthCommand(currentProjectDir()))
-            25 -> openTerminalCommand("ls -lt \"${filesDir.absolutePath}/home/tasks\"/*.log 2>/dev/null | head -20")
-            26 -> confirmCurrentProjectRepair()
-            27 -> openCurrentProject("aidev-agent-context")
-            28 -> openCurrentProject("aidev-agent-context-file")
-            29 -> openTerminalCommand("aidev-agent-summary")
-            30 -> openTerminalCommand("aidev-agent-log")
+            10 -> openTerminalCommand("ls -lah \"${filesDir.absolutePath}/home/tasks\"")
+            11 -> openCurrentProject(ProjectCommands.healthCommand(currentProjectDir()))
+            12 -> openTerminalCommand("ls -lt \"${filesDir.absolutePath}/home/tasks\"/*.log 2>/dev/null | head -20")
+            13 -> confirmCurrentProjectRepair()
+            14 -> openCurrentProject("aidev-agent-context")
+            15 -> openCurrentProject("aidev-agent-context-file")
+            16 -> openTerminalCommand("aidev-agent-summary")
+            17 -> openTerminalCommand("aidev-agent-log")
         }
     }
 

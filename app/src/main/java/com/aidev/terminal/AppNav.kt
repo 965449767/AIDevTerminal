@@ -7,7 +7,6 @@ import android.os.Build
 object AppNav {
     private val fullOrder = listOf(
         ShellActivity::class.java,
-        AIAgentActivity::class.java,
         ServerCenterActivity::class.java
     )
 

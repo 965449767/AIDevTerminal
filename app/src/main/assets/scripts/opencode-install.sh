@@ -5,8 +5,8 @@ echo "来源：opencode 官方安装脚本 https://opencode.ai/install"
 echo "目标目录：$HOME/.opencode/bin"
 echo
 if ! command -v curl >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1; then
-  echo "缺少 curl/unzip，先执行 deploy-dev-env。"
-  deploy-dev-env
+  echo "缺少 curl/unzip，先执行 setup-dev-env。"
+  setup-dev-env
 fi
 if ! command -v curl >/dev/null 2>&1; then
   echo "curl 仍然不可用，请运行 check-dev-env 查看原因。"

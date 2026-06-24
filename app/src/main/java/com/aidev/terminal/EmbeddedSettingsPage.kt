@@ -1,5 +1,4 @@
 package com.aidev.terminal
-import android.app.AlertDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 import android.app.Activity
@@ -7,8 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.os.Environment
-import android.os.PowerManager
 import android.provider.Settings
 import android.view.View
 import android.widget.EditText
@@ -39,11 +36,12 @@ class EmbeddedSettingsPage : ShellPage {
             orientation = LinearLayout.VERTICAL
             setPadding(ui.dp(18), ui.dp(12), ui.dp(18), ui.dp(24))
         }
-        content.addView(ui.section("设置", "一级入口保持通用，二级动作以内嵌菜单展开，底部导航不离开 Shell"))
+        content.addView(ui.section("设置", ""))
+        content.addView(ui.divider())
         content.addView(row("外观与交互", "主题、背景、触觉反馈") { appearanceMenu() })
-        content.addView(row("开发环境", "环境检测、Shell 增强、网络诊断、系统监控、容器管理") { devMenu() })
-content.addView(row("权限管理", "存储、通知、安装应用、修改系统设置、Shizuku") { permissionMenu() })
-content.addView(row("系统与后台", "电池优化、后台常驻、应用详情") { systemMenu() })
+        content.addView(row("Android 诊断", "系统监控、网络诊断工具") { androidDevMenu() })
+        content.addView(row("Ubuntu 环境", "环境检查、安全审计、Ubuntu 管理、端口与进程") { ubuntuDevMenu() })
+        content.addView(row("权限与后台", "存储、通知、安装应用、修改系统设置、Shizuku、电池优化、应用详情") { permissionMenu() })
         content.addView(row("数据备份", "备份和恢复 Ubuntu 环境、任务数据、设置和项目文件") { backupRestoreMenu() })
         content.addView(row("路径设置", "备份目录、项目目录、外部存储路径") { pathMenu() })
         return ScrollView(activity).apply { addView(content) }
@@ -108,28 +106,22 @@ content.addView(row("系统与后台", "电池优化、后台常驻、应用详�
             .show()
     }
 
-
-    private fun openShellEnhancements() {
-        val page = ShellEnhancementsPage()
-        val view = page.create(activity, ui, host)
-        MaterialAlertDialogBuilder(activity)
-            .setTitle("Shell 增强")
-            .setView(view)
-            .setNegativeButton("关闭") { _, _ -> page.onSelected(activity, view) }
-            .show()
+    private fun androidDevMenu() {
+        val items = listOf(
+            MenuBottomSheet.MenuItem("系统监控", "实时查看 CPU、内存与进程状态") { openSystemMonitor() },
+            MenuBottomSheet.MenuItem("网络诊断工具", "检测端口监听与网络连通性") { openNetworkDiagnostics() }
+        )
+        MenuBottomSheet(activity, ui).show("Android 诊断", items)
     }
 
-    private fun devMenu() {
+    private fun ubuntuDevMenu() {
         val items = listOf(
             MenuBottomSheet.MenuItem("环境检查与修复", "全面检测 Ubuntu 与开发工具状态") { devCheckAndRepair() },
-            MenuBottomSheet.MenuItem("Shell 增强", "命令历史统计、别名管理、收藏夹与模板") { openShellEnhancements() },
-            MenuBottomSheet.MenuItem("网络诊断工具", "检测端口监听与网络连通性") { openNetworkDiagnostics() },
-            MenuBottomSheet.MenuItem("监听端口", "查看当前所有监听中的网络端口") { host.openTerminal("list-listen-ports") },
-            MenuBottomSheet.MenuItem("系统监控", "实时查看 CPU、内存与进程状态") { openSystemMonitor() },
-            MenuBottomSheet.MenuItem("安全审计", "检查权限、密钥与容器安全") { openSecurityAudit() },
-            MenuBottomSheet.MenuItem("容器管理", "管理 Docker/Podman 容器生命周期") { openContainerManager() }
+            MenuBottomSheet.MenuItem("Ubuntu 管理", "rootfs 管理、环境信息、包快照") { openContainerManager() },
+            MenuBottomSheet.MenuItem("监听端口", "查看当前所有监听中的网络端口") { host.openTerminal("ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || cat /proc/net/tcp 2>/dev/null | head -40") },
+            MenuBottomSheet.MenuItem("进程 & 资源", "查看内存、磁盘、进程占用") { host.openTerminal("free -m && echo '---' && df -h && echo '---' && ps aux --sort=-%mem | head -25") }
         )
-        MenuBottomSheet(activity, ui).show("开发环境", items)
+        MenuBottomSheet(activity, ui).show("Ubuntu 环境", items)
     }
 
     private fun openNetworkDiagnostics() {
@@ -154,21 +146,11 @@ content.addView(row("系统与后台", "电池优化、后台常驻、应用详�
         page.onSelected(activity, view)
     }
 
-    private fun openSecurityAudit() {
-        val page = SecurityAuditPage()
-        val view = page.create(activity, ui, host)
-        MaterialAlertDialogBuilder(activity)
-            .setTitle("安全审计")
-            .setView(view)
-            .setNegativeButton("关闭") { _, _ -> page.onSelected(activity, view) }
-            .show()
-    }
-
     private fun openContainerManager() {
         val page = ContainerManagerPage()
         val view = page.create(activity, ui, host)
         MaterialAlertDialogBuilder(activity)
-            .setTitle("容器管理")
+            .setTitle("Ubuntu 管理")
             .setView(view)
             .setNegativeButton("关闭") { _, _ -> page.onSelected(activity, view) }
             .show()
@@ -179,19 +161,11 @@ content.addView(row("系统与后台", "电池优化、后台常驻、应用详�
         val rootfs = File(home, "ubuntu-rootfs")
         val checks = mutableListOf<CheckItem>()
 
-        // Android 系统权限（直接修复，不走终端）
-        val storageOk = if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager() else true
-        checks.add(CheckItem("存储权限", storageOk, "读取下载目录、项目目录和 APK", if (!storageOk) "action:storage" else null))
-        val batteryOk = if (Build.VERSION.SDK_INT < 23) true else (activity.getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isIgnoringBatteryOptimizations(activity.packageName) ?: false
-        checks.add(CheckItem("电池优化白名单", batteryOk, "后台任务与长时间服务更稳定", if (!batteryOk) "action:battery" else null))
-
-        // Ubuntu 环境
         checks.add(CheckItem("AIDev Home", home.exists(), home.absolutePath, null))
         checks.add(CheckItem("Ubuntu rootfs", rootfs.exists(), rootfs.absolutePath, null))
         val prootOk = File(home, "proot-lib/libtalloc.so.2").exists()
         checks.add(CheckItem("PRoot 依赖", prootOk, "终端 Ubuntu 入口依赖", null))
 
-        // 开发工具（在 rootfs 内检测）
         val devTools = listOf(
             "node" to "Node.js",
             "python3" to "Python3",
@@ -207,7 +181,6 @@ content.addView(row("系统与后台", "电池优化、后台常驻、应用详�
                 File(rootfs, "root/.opencode/bin/$cmd"),
                 File(rootfs, "bin/$cmd")
             )
-            // Java 特殊处理：也检查 /usr/lib/jvm/ 目录
             val exists = if (cmd == "java") {
                 binPaths.any { it.exists() } || File(rootfs, "usr/lib/jvm").listFiles()?.any { it.isDirectory } == true
             } else {
@@ -216,40 +189,21 @@ content.addView(row("系统与后台", "电池优化、后台常驻、应用详�
             if (!exists) hasBaseMissing = true
             checks.add(CheckItem(label, exists, cmd, null))
         }
-        // 基础工具统一修复（deploy-dev-env 安装所有基础包）
         if (hasBaseMissing) {
-            checks.add(CheckItem("基础开发工具包", false, "Node.js/Python3/Git/JDK/npm", "deploy-dev-env"))
+            checks.add(CheckItem("基础开发工具包", false, "Node.js/Python3/Git/JDK/npm", "setup-dev-env"))
         } else {
             checks.add(CheckItem("基础开发工具包", true, "Node.js/Python3/Git/JDK/npm", null))
         }
 
-        // 可选工具（不显示在基础包中）
-        val optionalTools = listOf(
-            "opencode" to "OpenCode",
-            "gradle" to "Gradle",
-            "go" to "Go",
-            "cargo" to "Rust/Cargo"
+        val opencodeBinPaths = listOf(
+            File(rootfs, "usr/bin/opencode"),
+            File(rootfs, "usr/local/bin/opencode"),
+            File(rootfs, "root/.opencode/bin/opencode"),
+            File(rootfs, "bin/opencode")
         )
-        for ((cmd, label) in optionalTools) {
-            val binPaths = listOf(
-                File(rootfs, "usr/bin/$cmd"),
-                File(rootfs, "usr/local/bin/$cmd"),
-                File(rootfs, "root/.opencode/bin/$cmd"),
-                File(rootfs, "bin/$cmd")
-            )
-            val exists = binPaths.any { it.exists() }
-            val fixCmd = when (cmd) {
-                "opencode" -> "install-aitool"
-                else -> null
-            }
-            checks.add(CheckItem(label, exists, cmd, fixCmd))
-        }
+        val opencodeOk = opencodeBinPaths.any { it.exists() }
+        checks.add(CheckItem("OpenCode", opencodeOk, "AI 编程助手", if (!opencodeOk) "opencode-install" else null))
 
-        // Shizuku
-        val shizukuInstalled = runCatching { activity.packageManager.getPackageInfo("moe.shizuku.privileged.api", 0) }.isSuccess
-        checks.add(CheckItem("Shizuku 应用", shizukuInstalled, "高权限操作支持", null))
-
-        // 构建显示内容
         val failedChecks = checks.filter { !it.ok }
         val allOk = failedChecks.isEmpty()
 
@@ -269,39 +223,14 @@ content.addView(row("系统与后台", "电池优化、后台常驻、应用详�
                 .setPositiveButton("关闭", null)
                 .show()
         } else {
-            val fixLabels = failedChecks.filter { it.fixAction != null }.map { it.name }.toTypedArray()
-            val fixActions = failedChecks.filter { it.fixAction != null }.mapNotNull { it.fixAction }.toTypedArray()
+            val hasFixable = failedChecks.any { it.fixAction != null }
             MaterialAlertDialogBuilder(activity)
                 .setTitle("开发环境检查")
                 .setMessage(body.toString())
-                .setPositiveButton(if (fixLabels.isNotEmpty()) "一键修复" else "关闭") { _, _ ->
-                    if (fixLabels.isEmpty()) return@setPositiveButton
-                    MaterialAlertDialogBuilder(activity)
-                        .setTitle("选择要修复的项目")
-                        .setMultiChoiceItems(fixLabels, null) { _, _, _ -> }
-                        .setPositiveButton("执行修复") { dialog, _ ->
-                            val selected = (dialog as? AlertDialog)?.listView?.checkedItemPositions
-                            val cmds = mutableListOf<String>()
-                            for (i in 0 until fixActions.size) {
-                                if (selected?.get(i, false) == true) {
-                                    when (fixActions[i]) {
-                                        "action:storage" -> openStorageSettings()
-                                        "action:battery" -> {
-                                            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                                                data = Uri.parse("package:${activity.packageName}")
-                                            }
-                                            activity.startActivity(intent)
-                                        }
-                                        else -> cmds.add(fixActions[i])
-                                    }
-                                }
-                            }
-                            if (cmds.isNotEmpty()) {
-                                host.openTerminal(cmds.joinToString(" && "))
-                            }
-                        }
-                        .setNegativeButton("取消", null)
-                        .show()
+                .setPositiveButton(if (hasFixable) "一键修复" else "关闭") { _, _ ->
+                    if (hasFixable) {
+                        host.openTerminal("setup-dev-env && opencode-install")
+                    }
                 }
                 .setNeutralButton("终端详细检测") { _, _ ->
                     if (!rootfs.exists()) {
@@ -348,30 +277,19 @@ content.addView(row("系统与后台", "电池优化、后台常驻、应用详�
                 }
             }
         },
-        MenuBottomSheet.MenuItem("Shizuku 状态", "实时检测 Shizuku 安装和授权状态") { showShizukuStatus() }
+        MenuBottomSheet.MenuItem("Shizuku 状态", "实时检测 Shizuku 安装和授权状态") { showShizukuStatus() },
+        MenuBottomSheet.MenuItem("电池优化", "将应用加入电池优化白名单，防止后台被限制") {
+            if (Build.VERSION.SDK_INT >= 23) {
+                activity.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:${activity.packageName}")
+                })
+            }
+        },
+        MenuBottomSheet.MenuItem("应用详情", "跳转到系统应用信息页") { openAppSettings() }
     )
 
     private fun permissionMenu() {
-        MenuBottomSheet(activity, ui).show("权限管理", permissionItems)
-    }
-
-    private fun systemMenu() {
-        val items = listOf(
-            MenuBottomSheet.MenuItem("电池优化", "将应用加入电池优化白名单，防止后台被限制") {
-                if (Build.VERSION.SDK_INT >= 23) {
-                    activity.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                        data = Uri.parse("package:${activity.packageName}")
-                    })
-                }
-            },
-            MenuBottomSheet.MenuItem("后台常驻", "启动保活服务防止进程被系统回收") {
-                KeepAliveService.start(activity)
-                prefs.keepaliveAuto = true
-                toast("后台常驻已启动")
-            },
-            MenuBottomSheet.MenuItem("应用详情", "跳转到系统应用信息页") { openAppSettings() }
-        )
-        MenuBottomSheet(activity, ui).show("系统与后台", items)
+        MenuBottomSheet(activity, ui).show("权限与后台", permissionItems)
     }
 
     private fun showShizukuStatus() {

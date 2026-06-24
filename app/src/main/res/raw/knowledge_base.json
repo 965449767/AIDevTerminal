@@ -25,8 +25,7 @@
       "id": "network",
       "name": "网络诊断",
       "items": [
-        {"title": "测试连通性", "cmd": "ping -c 4 google.com", "desc": "发送4个ICMP包测试连通性"},
-        {"title": "路由追踪", "cmd": "traceroute google.com", "desc": "显示数据包到达目标的路由路径"},
+        {"title": "测试连通性", "cmd": "curl -I https://google.com", "desc": "用 HTTP HEAD 请求测试网络连通性"},
         {"title": "查看网络接口", "cmd": "ip addr", "desc": "显示所有网络接口信息"},
         {"title": "查看路由表", "cmd": "ip route", "desc": "显示内核路由表"},
         {"title": "查看连接", "cmd": "ss -tlnp", "desc": "显示所有TCP监听端口和进程"},
@@ -66,11 +65,10 @@
       "items": [
         {"title": "查看文件权限", "cmd": "ls -la | grep '^-'", "desc": "列出所有文件及其权限"},
         {"title": "修改权限", "cmd": "chmod 600 ~/.ssh/id_rsa", "desc": "设置私钥为仅所有者可读"},
-        {"title": "修改所有者", "cmd": "chown user:group file.txt", "desc": "修改文件所有者和组"},
-        {"title": "查找SUID文件", "cmd": "find / -perm -4000 2>/dev/null", "desc": "查找系统上的SUID文件"},
+        {"title": "修改所有者", "cmd": "chown user:group file.txt", "desc": "修改文件所有者和组（PRoot 内仅当前会话生效）"},
+        {"title": "查找SUID文件", "cmd": "find / -perm -4000 2>/dev/null", "desc": "查找SUID文件（PRoot 中 SUID 位无法生效）"},
         {"title": "生成密钥", "cmd": "ssh-keygen -t ed25519 -C 'email@example.com'", "desc": "生成SSH密钥对"},
         {"title": "查看进程", "cmd": "ps aux | grep suspicious", "desc": "查找可疑进程"},
-        {"title": "查看登录记录", "cmd": "last -a", "desc": "查看最近的登录记录"},
         {"title": "检查开放端口", "cmd": "ss -tlnp", "desc": "查看系统监听的端口"},
         {"title": "文件哈希", "cmd": "sha256sum file.txt", "desc": "计算文件SHA256哈希值"},
         {"title": "加密文件", "cmd": "openssl enc -aes-256-cbc -in file.txt -out file.enc", "desc": "使用AES加密文件"}
@@ -85,14 +83,13 @@
         {"title": "安装软件", "cmd": "apt install -y nginx", "desc": "安装指定软件包"},
         {"title": "搜索软件", "cmd": "apt search nginx", "desc": "搜索软件包"},
         {"title": "查看已安装", "cmd": "dpkg -l | grep nginx", "desc": "查看已安装的软件包"},
-        {"title": "Termux包管理", "cmd": "pkg install git", "desc": "Termux内置包管理器"},
+        {"title": "安装软件包", "cmd": "apt install git", "desc": "在 Ubuntu 中用 apt 安装软件包"},
         {"title": "查看环境变量", "cmd": "env | sort", "desc": "查看所有环境变量"},
         {"title": "查看PATH", "cmd": "echo $PATH | tr ':' '\n'", "desc": "以每行一个目录显示PATH"},
         {"title": "查看系统信息", "cmd": "uname -a", "desc": "显示内核和系统信息"},
         {"title": "查看内存", "cmd": "free -h", "desc": "以人类可读格式显示内存使用"},
         {"title": "查看CPU", "cmd": "lscpu", "desc": "显示CPU详细信息"},
         {"title": "查看进程", "cmd": "htop", "desc": "交互式进程查看器"},
-        {"title": "服务管理", "cmd": "systemctl status ssh", "desc": "查看服务状态"},
         {"title": "用户管理", "cmd": "whoami && id", "desc": "查看当前用户信息"}
       ]
     },
@@ -115,6 +112,38 @@
         {"title": "查看命令位置", "cmd": "which python3", "desc": "查找命令的完整路径"},
         {"title": "查看命令类型", "cmd": "type ls", "desc": "显示命令是内置还是外部"},
         {"title": "后台运行", "cmd": "nohup command &", "desc": "在后台运行命令，忽略挂起信号"}
+      ]
+    },
+    {
+      "id": "builtin",
+      "name": "内置命令",
+      "items": [
+        {"title": "进入 Ubuntu 环境", "cmd": "ubuntu", "desc": "进入 Ubuntu 容器环境（PRoot），与 Android 系统隔离运行"},
+        {"title": "安装 Ubuntu", "cmd": "install-ubuntu", "desc": "下载安装或重新安装 Ubuntu rootfs，重置环境"},
+        {"title": "一键安装开发环境", "cmd": "setup-dev-env", "desc": "一键安装 Node.js、Python3、Git、JDK 17、npm 等开发工具"},
+        {"title": "检测开发环境", "cmd": "check-dev-env", "desc": "终端内检测开发环境各组件的安装状态，显示缺失项"},
+        {"title": "修复开发环境", "cmd": "repair-dev-env", "desc": "尝试修复开发环境中缺失或损坏的组件"},
+        {"title": "安装 OpenCode", "cmd": "opencode-install", "desc": "安装 AI 编程助手 OpenCode（来自 opencode.ai 官方脚本）"},
+        {"title": "环境诊断", "cmd": "aidev-doctor", "desc": "全面诊断 AIDev 运行环境：PRoot 状态、Ubuntu 配置、资源占用"},
+        {"title": "查看日志", "cmd": "aidev-logcat", "desc": "查看 AIDev 系统运行日志，用于排查启动或连接问题"},
+        {"title": "查看项目信息", "cmd": "aidev-current-project", "desc": "查看当前项目的目录路径、Git 状态和项目类型（Gradle/npm/Python 等）"},
+        {"title": "AI 上下文", "cmd": "aidev-agent-context", "desc": "将当前项目和任务的上下文信息打包输出，供 AI 分析使用"},
+        {"title": "AI 上下文导出", "cmd": "aidev-agent-context-file", "desc": "将上下文信息导出到 aidev-agent-context.txt 文件"},
+        {"title": "AI 任务摘要", "cmd": "aidev-agent-summary", "desc": "查看最近一次后台任务的日志摘要：执行的命令、报错、文件变更"},
+        {"title": "AI 任务日志", "cmd": "aidev-agent-log", "desc": "列出所有 AI 代理的后台任务日志文件"},
+        {"title": "实时跟踪日志", "cmd": "aidev-agent-tail", "desc": "实时跟踪最新任务日志的输出（类似 tail -f）"},
+        {"title": "启动后台任务", "cmd": "task-run", "desc": "在后台启动一个任务并管理其生命周期，支持并发管理"},
+        {"title": "任务列表", "cmd": "task-list", "desc": "列出所有正在运行或已结束的后台任务及状态"},
+        {"title": "查看监听端口", "cmd": "list-listen-ports", "desc": "查看当前系统所有监听的 TCP/UDP 网络端口"},
+        {"title": "系统通知", "cmd": "sysnotify", "desc": "发送一条 Android 系统通知到状态栏"},
+        {"title": "截取屏幕", "cmd": "screencap", "desc": "截取当前 Android 屏幕并保存为 PNG 图片"},
+        {"title": "音量控制", "cmd": "volume", "desc": "调整 Android 系统音量（可指定媒体/通知/闹钟通道）"},
+        {"title": "亮度控制", "cmd": "brightness", "desc": "调整 Android 屏幕亮度（0-255）"},
+        {"title": "启动应用", "cmd": "startapp", "desc": "通过包名启动 Android 应用，如 startapp com.example.app"},
+        {"title": "停止应用", "cmd": "stopapp", "desc": "强制停止指定包名的 Android 应用"},
+        {"title": "安装 APK", "cmd": "installapk", "desc": "安装指定路径的 APK 文件到 Android 系统"},
+        {"title": "卸载应用", "cmd": "uninstallapp", "desc": "卸载指定包名的 Android 应用"},
+        {"title": "Android Shell", "cmd": "android-sh", "desc": "在 Android 宿主 shell 环境中执行命令（跨容器操作用）"}
       ]
     }
   ]

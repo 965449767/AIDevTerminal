@@ -41,12 +41,6 @@
         </activity>
 
         <activity
-            android:name=".AIAgentActivity"
-            android:exported="false"
-            android:label="AI 助手中心"
-            android:theme="@style/AppTheme" />
-
-        <activity
             android:name=".ServerCenterActivity"
             android:exported="false"
             android:label="服务器中心"
