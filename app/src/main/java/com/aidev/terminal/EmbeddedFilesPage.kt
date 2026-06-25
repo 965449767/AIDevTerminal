@@ -10,10 +10,13 @@ import android.os.Build
 import android.os.Environment
 import android.provider.Settings
 import android.text.TextUtils
+import android.text.Editable
 import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -24,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class EmbeddedFilesPage : ShellPage {
     private lateinit var activity: Activity
@@ -32,14 +36,32 @@ class EmbeddedFilesPage : ShellPage {
     private lateinit var rightList: LinearLayout
     private lateinit var leftPath: TextView
     private lateinit var rightPath: TextView
+    private lateinit var splitView: View
+    private lateinit var treeView: View
+    private lateinit var projectTree: ProjectTreeView
+    private lateinit var modeToggle: View
+    private var collapseBtn: View? = null
+    private var toolbarActions: View? = null
+    private var treeContainer: View? = null
+    private lateinit var editorPanel: LinearLayout
+    private lateinit var editorName: TextView
+    private lateinit var editorContent: EditText
+    private lateinit var editorInfo: TextView
+    private var editingFile: File? = null
+    private var isEditing = false
+    private var isEditorDirty = false
+    private var originalText = ""
+    private var pendingSyncPath: String? = null
+    private var multiMode = false
+    private val multiSelected = mutableSetOf<String>()
+    private lateinit var multiBar: LinearLayout
+    private lateinit var multiInfo: TextView
     private var leftDir: File = Environment.getExternalStorageDirectory()
     private var rightDir: File = File("/")
     private var activeLeft = true
     private var leftSelected: File? = null
     private var rightSelected: File? = null
-    private var syncEnabled = false
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private var syncDot: TextView? = null
     private val pm by lazy { PreferencesManager(activity) }
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
@@ -50,22 +72,48 @@ class EmbeddedFilesPage : ShellPage {
             setPadding(ui.dp(8), ui.dp(8), ui.dp(8), ui.dp(8))
         }
         root.addView(toolbar(host), LinearLayout.LayoutParams(-1, ui.dp(42)))
-        val panes = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
-        leftList = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-        rightList = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-        panes.addView(pane(true), LinearLayout.LayoutParams(0, -1, 1f).apply { setMargins(0, 0, ui.dp(4), 0) })
-        panes.addView(pane(false), LinearLayout.LayoutParams(0, -1, 1f).apply { setMargins(ui.dp(4), 0, 0, 0) })
-        root.addView(panes, LinearLayout.LayoutParams(-1, 0, 1f))
+        splitView = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }.also { panes ->
+            leftList = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+            rightList = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+            panes.addView(pane(true), LinearLayout.LayoutParams(0, -1, 1f).apply { setMargins(0, 0, ui.dp(4), 0) })
+            panes.addView(pane(false), LinearLayout.LayoutParams(0, -1, 1f).apply { setMargins(ui.dp(4), 0, 0, 0) })
+        }
+        projectTree = ProjectTreeView(activity, ui).apply {
+            setCallbacks(
+                dirClick = { file -> notifyTerminalCd(file) },
+                fileClick = { file -> loadEditor(file) },
+                fileAction = { file ->
+                    leftSelected = file
+                    rightSelected = null
+                    activeLeft = true
+                    fileActions(file)
+                },
+                onSaveExpanded = { paths -> pm.treeExpandedPaths = paths }
+            )
+        }
+        treeView = projectTree
+        buildEditorPanel()
+        treeContainer = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(treeView, LinearLayout.LayoutParams(0, -1, 0.4f))
+            addView(editorPanel, LinearLayout.LayoutParams(0, -1, 0.6f).apply { setMargins(ui.dp(4), 0, 0, 0) })
+        }
+        val contentContainer = FrameLayout(activity).apply {
+            addView(splitView, FrameLayout.LayoutParams(-1, -1))
+            addView(treeContainer, FrameLayout.LayoutParams(-1, -1))
+        }
+        root.addView(contentContainer, LinearLayout.LayoutParams(-1, 0, 1f))
+        buildMultiBar()
+        root.addView(multiBar, LinearLayout.LayoutParams(-1, ui.dp(36)))
         reloadAll()
+        applyLayoutMode()
         return root
     }
 
     override fun onSelected(activity: Activity, view: View) {
         if (::leftList.isInitialized) reloadAll()
-        syncEnabled = SyncCoordinator.isEnabled(pm.sharedPreferences)
-        syncDot?.let { tv ->
-            tv.text = if (syncEnabled) "●" else "○"
-            tv.setTextColor(if (syncEnabled) 0xFF22D3A7.toInt() else 0xFF4B5563.toInt())
+        if (::projectTree.isInitialized && pm.fileLayoutMode == "tree") {
+            projectTree.refresh()
         }
     }
 
@@ -74,20 +122,36 @@ class EmbeddedFilesPage : ShellPage {
     }
 
     private fun toolbar(host: ShellHost): View =
-        LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            addView(syncDot(activity).also { syncDot = it })
-            addView(action("复制") { copyToOther(false) })
-            addView(action("移动") { copyToOther(true) })
-            addView(action("新建") { newFolder() })
-            addView(action("编辑") { editSelected() }.apply {
-                setOnLongClickListener {
-                    previewSelected()
-                    true
-                }
+        HorizontalScrollView(activity).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(modeButton("📁") { toggleMode() }.also { modeToggle = it })
+                addView(modeButton("▼") { if (::projectTree.isInitialized) projectTree.collapseAll() }.also { collapseBtn = it }.apply { visibility = View.GONE })
+                addView(LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    addView(action("复制") { copyToOther(false) })
+                    addView(action("移动") { copyToOther(true) })
+                    addView(action("新建") { newFolder() })
+                    addView(action("粘贴") { pasteClipboard() }.apply {
+                        addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                            override fun onViewAttachedToWindow(v: View) {
+                                v.isEnabled = hasClipboardItems()
+                                v.alpha = if (v.isEnabled) 1f else 0.4f
+                            }
+                            override fun onViewDetachedFromWindow(v: View) {}
+                        })
+                    })
+                    addView(action("编辑") { editSelected() }.apply {
+                        setOnLongClickListener {
+                            previewSelected()
+                            true
+                        }
+                    })
+                    addView(action("搜索") { searchActiveDir() })
+                    addView(action("更多") { showFileMoreMenu(host) })
+                }.also { toolbarActions = it })
             })
-            addView(action("搜索") { searchActiveDir() })
-            addView(action("更多") { showFileMoreMenu(host) })
         }
 
     private fun showFileMoreMenu(host: ShellHost) {
@@ -155,7 +219,7 @@ class EmbeddedFilesPage : ShellPage {
         val path = ui.text("", 12f, ui.palette.accent, bold = true).apply {
             setPadding(ui.dp(8), ui.dp(7), ui.dp(8), ui.dp(7))
             maxLines = 2
-            ellipsize = TextUtils.TruncateAt.START
+            ellipsize = TextUtils.TruncateAt.MIDDLE
             background = paneHeaderBg()
         }
         if (isLeft) leftPath = path else rightPath = path
@@ -167,6 +231,9 @@ class EmbeddedFilesPage : ShellPage {
     private fun reloadAll() {
         loadPane(true)
         loadPane(false)
+        if (::projectTree.isInitialized && pm.fileLayoutMode == "tree") {
+            projectTree.refresh()
+        }
     }
 
     private fun loadPane(isLeft: Boolean) {
@@ -201,24 +268,35 @@ class EmbeddedFilesPage : ShellPage {
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.MIDDLE
             includeFontPadding = false
-            setBackgroundColor(if ((if (isLeft) leftSelected else rightSelected)?.absolutePath == file.absolutePath) ui.palette.accent else Color.TRANSPARENT)
+            setBackgroundColor(
+                if (multiMode && file.absolutePath in multiSelected) ui.palette.accent
+                else if (!multiMode && (if (isLeft) leftSelected else rightSelected)?.absolutePath == file.absolutePath) ui.palette.accent
+                else Color.TRANSPARENT
+            )
             setOnClickListener {
                 ui.pulse()
                 activeLeft = isLeft
-                if (file.isDirectory) {
+                if (multiMode) {
+                    toggleMultiSelect(file)
+                } else if (file.isDirectory) {
                     if (isLeft) leftDir = file else rightDir = file
                     if (isLeft) leftSelected = null else rightSelected = null
                     rememberRecentDir(file)
-                    if (syncEnabled) notifyTerminalCd(file)
+                    notifyTerminalCd(file)
+                    loadPane(isLeft)
                 } else if (!parent) {
                     if (isLeft) leftSelected = file else rightSelected = file
+                    loadPane(isLeft)
                 }
-                loadPane(isLeft)
             }
             setOnLongClickListener {
-                activeLeft = isLeft
-                if (isLeft) leftSelected = file else rightSelected = file
-                fileActions(file)
+                if (multiMode) {
+                    exitMultiMode()
+                } else {
+                    activeLeft = isLeft
+                    if (isLeft) leftSelected = file else rightSelected = file
+                    enterMultiMode(file)
+                }
                 true
             }
         }
@@ -230,39 +308,347 @@ class EmbeddedFilesPage : ShellPage {
     fun syncNavigateTo(targetDir: File) {
         android.util.Log.d("AIDEV_SYNC", "syncNavigateTo: ${targetDir.absolutePath}, exists=${targetDir.exists()}, isDir=${targetDir.isDirectory}")
         if (!targetDir.isDirectory) return
-        if (activeLeft) { leftDir = targetDir; leftSelected = null }
-        else { rightDir = targetDir; rightSelected = null }
+        if (pm.fileLayoutMode == "split") {
+            if (activeLeft) { leftDir = targetDir; leftSelected = null }
+            else { rightDir = targetDir; rightSelected = null }
+            loadPane(activeLeft)
+        } else {
+            if (::projectTree.isInitialized) {
+                val r = projectTree.currentRoot
+                if (r != null && !targetDir.absolutePath.startsWith(r.absolutePath)) {
+                    val newRoot = ProjectDetector.findProjectRoot(targetDir) ?: targetDir
+                    projectTree.setRoot(newRoot)
+                    projectTree.restoreExpanded(pm.treeExpandedPaths)
+                }
+                projectTree.expandTo(targetDir)
+            } else {
+                pendingSyncPath = targetDir.absolutePath
+            }
+        }
+    }
+
+    private fun modeButton(text: String, click: () -> Unit): View =
+        TextView(activity).apply {
+            this.text = text
+            textSize = 13f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            setPadding(ui.dp(10), 0, ui.dp(10), 0)
+            layoutParams = LinearLayout.LayoutParams(-2, ui.dp(30)).apply {
+                setMargins(0, 0, ui.dp(4), 0)
+            }
+            setOnClickListener { ui.pulse(); click() }
+        }
+
+    private fun toggleMode() {
+        pm.fileLayoutMode = if (pm.fileLayoutMode == "split") "tree" else "split"
+        applyLayoutMode()
+    }
+
+    private fun applyLayoutMode() {
+        val split = pm.fileLayoutMode == "split"
+        splitView.visibility = if (split) View.VISIBLE else View.GONE
+        treeContainer?.visibility = if (split) View.GONE else View.VISIBLE
+        toolbarActions?.visibility = if (split) View.VISIBLE else View.GONE
+        collapseBtn?.visibility = if (split) View.GONE else View.VISIBLE
+        (modeToggle as TextView).text = if (split) "⚡" else "📁"
+        if (!split && ::projectTree.isInitialized) {
+            val home = File(activity.filesDir, "home")
+            val root = pm.currentProjectPath.takeIf { it.isNotBlank() }?.let { File(it) }
+                ?: ProjectDetector.findProjectRoot(home)
+                ?: home
+            projectTree.setRoot(root)
+            projectTree.restoreExpanded(pm.treeExpandedPaths)
+            pendingSyncPath?.let {
+                projectTree.expandTo(File(it))
+                pendingSyncPath = null
+            }
+        }
+    }
+
+    private fun buildEditorPanel() {
+        editorPanel = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(ui.dp(4), 0, 0, 0)
+        }
+        editorName = ui.text("", 12f, ui.palette.accent, bold = true).apply {
+            setPadding(0, ui.dp(4), 0, ui.dp(4))
+        }
+        editorPanel.addView(editorName, LinearLayout.LayoutParams(-1, -2))
+        editorContent = EditText(activity).apply {
+            isFocusable = false
+            isClickable = true
+            setTextColor(ui.palette.text)
+            setHintTextColor(ui.palette.muted)
+            setBackgroundColor(ui.palette.surfaceAlt)
+            setPadding(ui.dp(6), ui.dp(6), ui.dp(6), ui.dp(6))
+            textSize = 12f
+            typeface = android.graphics.Typeface.MONOSPACE
+            hint = "\u2190 点击文件以预览"
+            gravity = Gravity.TOP
+            layoutParams = LinearLayout.LayoutParams(-1, 0, 1f)
+            addTextChangedListener(object : android.text.TextWatcher {
+                private var timer: java.util.Timer? = null
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    timer?.cancel(); timer?.purge()
+                    timer = java.util.Timer()
+                    timer?.schedule(object : java.util.TimerTask() {
+                        override fun run() {
+                            val current = editorContent.text.toString()
+                            isEditorDirty = editingFile != null && current != originalText
+                        }
+                    }, 250)
+                }
+                override fun afterTextChanged(s: Editable?) {}
+            })
+        }
+        editorPanel.addView(editorContent)
+        editorInfo = ui.text("", 11f, ui.palette.muted)
+        val bottomBar = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(editorInfo, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(action("编辑") { toggleEditorMode() })
+            addView(action("保存") { saveEditorContent() })
+            addView(action("预览") { previewCurrentEditor() })
+        }
+        editorPanel.addView(bottomBar, LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, ui.dp(2), 0, 0) })
+    }
+
+    private fun buildMultiBar() {
+        multiInfo = ui.text("", 12f, ui.palette.text).apply {
+            gravity = Gravity.CENTER
+        }
+        multiBar = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            visibility = View.GONE
+            setPadding(ui.dp(4), 0, ui.dp(4), 0)
+            background = ui.surfaceBackground()
+            addView(action("\u2715 \u53D6\u6D88") { exitMultiMode() }, LinearLayout.LayoutParams(-2, -1))
+            addView(multiInfo, LinearLayout.LayoutParams(0, -1, 1f))
+            addView(action("\u5220\u9664") { multiDelete() })
+            addView(action("\u590D\u5236") { multiCopy() })
+            addView(action("\u79FB\u52A8") { multiMove() })
+        }
+    }
+
+    private fun enterMultiMode(file: File) {
+        if (multiMode) return
+        multiMode = true
+        multiSelected.clear()
+        multiSelected.add(file.absolutePath)
+        multiBar.visibility = View.VISIBLE
+        updateMultiInfo()
+        loadPane(true); loadPane(false)
+    }
+
+    private fun exitMultiMode() {
+        if (!multiMode) return
+        multiMode = false
+        multiSelected.clear()
+        multiBar.visibility = View.GONE
+        loadPane(true); loadPane(false)
+    }
+
+    private fun toggleMultiSelect(file: File) {
+        val path = file.absolutePath
+        if (path in multiSelected) multiSelected.remove(path) else multiSelected.add(path)
+        updateMultiInfo()
         loadPane(activeLeft)
+    }
+
+    private fun updateMultiInfo() {
+        multiInfo.text = if (multiSelected.isEmpty()) "\u70B9\u51FB\u9009\u62E9\u6587\u4EF6" else "${multiSelected.size} \u9879\u5DF2\u9009"
+    }
+
+    private fun multiDelete() {
+        if (multiSelected.isEmpty()) return toast("\u8BF7\u5148\u9009\u62E9\u6587\u4EF6")
+        val list = multiSelected.toList()
+        val count = list.size
+        MaterialAlertDialogBuilder(activity)
+            .setTitle("\u786E\u8BA4\u5220\u9664")
+            .setMessage("\u786E\u5B9A\u5220\u9664\u8FD9 $count \u4E2A\u6587\u4EF6/\u76EE\u5F55\uFF1F")
+            .setPositiveButton("\u5220\u9664") { _, _ ->
+                list.forEach { File(it).deleteRecursively() }
+                exitMultiMode()
+                toast("\u5DF2\u5220\u9664 $count \u9879")
+            }
+            .setNegativeButton("\u53D6\u6D88", null)
+            .show()
+    }
+
+    private fun multiCopy() {
+        if (multiSelected.isEmpty()) return toast("\u8BF7\u5148\u9009\u62E9\u6587\u4EF6")
+        copyToClipbook(multiSelected.toList(), false)
+        exitMultiMode()
+        toast("\u5DF2\u590D\u5236 ${multiSelected.size} \u9879")
+    }
+
+    private fun multiMove() {
+        if (multiSelected.isEmpty()) return toast("\u8BF7\u5148\u9009\u62E9\u6587\u4EF6")
+        copyToClipbook(multiSelected.toList(), true)
+        exitMultiMode()
+        toast("\u5DF2\u5207\u5272 ${multiSelected.size} \u9879")
+    }
+
+    private fun copyToClipbook(paths: List<String>, move: Boolean) {
+        val serialized = paths.joinToString("\n")
+        val label = if (move) "aidiv_move" else "aidiv_copy"
+        pm.sharedPreferences.edit().putString(label, serialized).apply()
+    }
+
+    private fun hasClipboardItems(): Boolean {
+        val copy = pm.sharedPreferences.getString("aidiv_copy", null)
+        val move = pm.sharedPreferences.getString("aidiv_move", null)
+        return !copy.isNullOrBlank() || !move.isNullOrBlank()
+    }
+
+    private fun pasteClipboard() {
+        val dir = activeDir()
+        val prefs = pm.sharedPreferences
+        val movePaths = prefs.getString("aidiv_move", null)
+        val copyPaths = prefs.getString("aidiv_copy", null)
+
+        if (!movePaths.isNullOrBlank()) {
+            val files = movePaths.lines().map { File(it) }.filter { it.exists() }
+            if (files.isEmpty()) return toast("剪切板中的文件已不存在")
+            files.forEach { src ->
+                val dst = File(dir, src.name)
+                runCatching { src.renameTo(dst) }
+            }
+            prefs.edit().remove("aidiv_move").apply()
+            toast("已移动 ${files.size} 项")
+        } else if (!copyPaths.isNullOrBlank()) {
+            val files = copyPaths.lines().map { File(it) }.filter { it.exists() }
+            if (files.isEmpty()) return toast("剪贴板中的文件已不存在")
+            files.forEach { src ->
+                val dst = File(dir, src.name)
+                if (src.isDirectory) {
+                    runCatching { src.copyRecursively(dst, overwrite = false) }
+                } else {
+                    runCatching { src.copyTo(dst, overwrite = false) }
+                }
+            }
+            prefs.edit().remove("aidiv_copy").apply()
+            toast("已复制 ${files.size} 项")
+        } else {
+            toast("剪贴板中没有文件")
+        }
+        reloadAll()
+    }
+
+    private fun loadEditor(file: File) {
+        if (!file.isFile || !isLikelyText(file) || file.length() > 512 * 1024) {
+            editingFile = null
+            editorName.text = ""
+            editorContent.setText("")
+            editorContent.hint = "\u2190 选择文本文件以预览"
+            editorInfo.text = ""
+            return
+        }
+        if (isEditorDirty && editingFile != null) {
+            MaterialAlertDialogBuilder(activity)
+                .setTitle("未保存的修改")
+                .setMessage("文件 \"${editingFile?.name}\" 已修改，是否保存？")
+                .setPositiveButton("保存") { _, _ -> saveEditor(after = { doLoadEditor(file) }) }
+                .setNegativeButton("不保存") { _, _ -> doLoadEditor(file) }
+                .setNeutralButton("取消", null)
+                .show()
+        } else {
+            doLoadEditor(file)
+        }
+    }
+
+    private fun doLoadEditor(file: File) {
+        editingFile = file
+        isEditing = false
+        isEditorDirty = false
+        leftSelected = file
+        activeLeft = true
+        editorName.text = file.name
+        editorContent.isEnabled = false
+        editorContent.hint = "加载中..."
+        val kb = if (file.length() > 1024) "${file.length() / 1024}KB" else "${file.length()}B"
+        val mod = java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(file.lastModified())
+        editorInfo.text = ""
+        scope.launch {
+            val text = withContext(Dispatchers.IO) {
+                runCatching { file.readText() }.getOrElse { "无法读取：${it.message}" }
+            }
+            originalText = text
+            editorContent.setText(text)
+            editorContent.setSelection(0)
+            editorContent.isEnabled = true
+            editorContent.isFocusable = false
+            editorContent.isClickable = true
+            editorInfo.text = "$kb  \u00B7  $mod"
+        }
+    }
+
+    private fun saveEditor(after: (() -> Unit)? = null) {
+        val file = editingFile ?: return
+        val text = editorContent.text.toString()
+        editorContent.isEnabled = false
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching { file.writeText(text) }.isSuccess
+            }
+            editorContent.isEnabled = true
+            if (ok) {
+                isEditing = false
+                isEditorDirty = false
+                originalText = text
+                editorContent.isFocusable = false
+                if (::projectTree.isInitialized) projectTree.refresh()
+                after?.invoke()
+            } else {
+                toast("保存失败")
+            }
+        }
+    }
+
+    private fun toggleEditorMode() {
+        if (editingFile == null) return toast("\u8BF7\u5148\u9009\u62E9\u6587\u4EF6")
+        if (isEditing) {
+            isEditing = false
+            editorContent.isFocusable = false
+        } else {
+            isEditing = true
+            editorContent.isFocusable = true
+            editorContent.isFocusableInTouchMode = true
+            editorContent.requestFocus()
+        }
+    }
+
+    private fun saveEditorContent() {
+        val file = editingFile ?: return toast("请先选择文件")
+        if (!isEditing) return toast("请先点击编辑")
+        saveEditor()
+    }
+
+    private fun previewCurrentEditor() {
+        val file = editingFile ?: return toast("请先选择文件")
+        if (!file.isFile) return
+        if (!isLikelyText(file)) return toast("该文件不像文本文件")
+        val text = editorContent.text.toString()
+        MaterialAlertDialogBuilder(activity)
+            .setTitle(file.name)
+            .setMessage(text.take(12000))
+            .setPositiveButton("复制内容") { _, _ ->
+                copyText("AIDev 文件内容", text)
+                toast("已复制内容")
+            }
+            .setNegativeButton("关闭", null)
+            .show()
     }
 
     private fun notifyTerminalCd(dir: File) {
         val act = activity
         val home = File(act.filesDir, "home")
-        val prefs = pm.sharedPreferences
-        SyncCoordinator.onBrowserDirChanged(dir, home, prefs) { ubuntuPath ->
-            if (act is ShellActivity) act.syncTerminalCd(ubuntuPath)
-        }
+        val ubuntuPath = SyncCoordinator.toUbuntuPath(dir, home) ?: return
+        if (act is ShellActivity) act.syncTerminalCd(ubuntuPath)
     }
-
-    private fun syncDot(activity: Activity): TextView =
-        TextView(activity).apply {
-            gravity = Gravity.CENTER
-            textSize = 11f
-            val on = SyncCoordinator.isEnabled(pm.sharedPreferences)
-            text = if (on) "●" else "○"
-            setTextColor(if (on) 0xFF22D3A7.toInt() else 0xFF4B5563.toInt())
-            setOnClickListener {
-                val prefs = pm.sharedPreferences
-                val current = SyncCoordinator.isEnabled(prefs)
-                SyncCoordinator.setEnabled(prefs, !current)
-                val nowOn = !current
-                syncEnabled = nowOn
-                text = if (nowOn) "●" else "○"
-                setTextColor(if (nowOn) 0xFF22D3A7.toInt() else 0xFF4B5563.toInt())
-                Toast.makeText(activity, if (nowOn) "联动已开启" else "联动已关闭", Toast.LENGTH_SHORT).show()
-            }
-
-        }
 
     private fun copyToOther(move: Boolean) {
         val src = selected() ?: return toast("请先选择文件或目录")
@@ -1077,22 +1463,49 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
     }
 
     private fun fileActions(file: File) {
+        val items = mutableListOf(
+            "预览", "编辑", "另存为", "标记当前项目",
+            "跳到当前项目", "项目识别", "项目工作区",
+            "复制路径", "复制到对侧", "移动到对侧", "重命名", "删除"
+        )
+        if (file.isDirectory && pm.fileLayoutMode == "tree") {
+            items.add(0, "新建文件夹")
+            items.add(0, "新建文件")
+        }
+        if (file.isDirectory) items.add(0, "cd 到终端")
         MaterialAlertDialogBuilder(activity)
             .setTitle(file.name)
-            .setItems(arrayOf("预览", "编辑", "另存为", "标记当前项目", "跳到当前项目", "项目识别", "项目工作区", "复制路径", "复制到对侧", "移动到对侧", "重命名", "删除")) { _, which ->
-                when (which) {
-                    0 -> previewSelected()
-                    1 -> editSelected()
-                    2 -> saveSelectedAs()
-                    3 -> markCurrentProject()
-                    4 -> jumpCurrentProject()
-                    5 -> inspectProject()
-                    6 -> projectWorkspace()
-                    7 -> copySelectedPath()
-                    8 -> copyToOther(false)
-                    9 -> copyToOther(true)
-                    10 -> renameSelected()
-                    11 -> deleteSelected()
+            .setItems(items.toTypedArray()) { _, which ->
+                when (items[which]) {
+                    "cd 到终端" -> notifyTerminalCd(file)
+                    "新建文件" -> input("新建文件", "file.txt") { name ->
+                        if (!name.contains("/") && File(file, name).createNewFile()) {
+                            if (::projectTree.isInitialized) projectTree.refresh()
+                            toast("已创建")
+                        } else {
+                            toast("创建失败")
+                        }
+                    }
+                    "新建文件夹" -> input("新建文件夹", "folder") { name ->
+                        if (File(file, name).mkdir()) {
+                            if (::projectTree.isInitialized) projectTree.refresh()
+                            toast("已创建")
+                        } else {
+                            toast("创建失败")
+                        }
+                    }
+                    "预览" -> previewSelected()
+                    "编辑" -> editSelected()
+                    "另存为" -> saveSelectedAs()
+                    "标记当前项目" -> markCurrentProject()
+                    "跳到当前项目" -> jumpCurrentProject()
+                    "项目识别" -> inspectProject()
+                    "项目工作区" -> projectWorkspace()
+                    "复制路径" -> copySelectedPath()
+                    "复制到对侧" -> copyToOther(false)
+                    "移动到对侧" -> copyToOther(true)
+                    "重命名" -> renameSelected()
+                    "删除" -> deleteSelected()
                 }
             }.show()
     }
@@ -1129,13 +1542,27 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
     }
 
     private fun action(label: String, click: () -> Unit): View =
-        ui.smallButton(label, click).apply {
-            layoutParams = LinearLayout.LayoutParams(ui.dp(64), ui.dp(34)).apply { setMargins(ui.dp(2), ui.dp(2), ui.dp(2), ui.dp(4)) }
+        TextView(activity).apply {
+            text = label
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(ui.palette.text)
+            includeFontPadding = false
+            setPadding(ui.dp(12), 0, ui.dp(12), 0)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xFF1C2430.toInt())
+                cornerRadius = ui.dp(9).toFloat()
+                setStroke(ui.dp(1), 0xFF334155.toInt())
+            }
+            layoutParams = LinearLayout.LayoutParams(-2, ui.dp(34)).apply {
+                setMargins(ui.dp(3), 0, ui.dp(3), 0)
+            }
+            setOnClickListener { ui.pulse(); click() }
         }
 
     private fun paneHeaderBg(): android.graphics.drawable.GradientDrawable =
         android.graphics.drawable.GradientDrawable().apply {
-            setColor(0x221D4ED8)
+            setColor(0x1A7C3AED)
             cornerRadius = ui.dp(10).toFloat()
             setStroke(ui.dp(1), ui.palette.outline)
         }

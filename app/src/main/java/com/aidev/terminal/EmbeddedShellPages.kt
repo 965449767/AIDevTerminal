@@ -78,7 +78,6 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
     private var pwdObserver: PwdFileObserver? = null
     private val pendingRunnables = mutableListOf<Pair<View, Runnable>>()
     private var lastSyncedPwd = ""
-    private var syncIndicator: TextView? = null
     private var tuiIndicator: TextView? = null
     private var keyboardIndicator: TextView? = null
     private var root: View? = null
@@ -249,8 +248,6 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
             addView(textView, LinearLayout.LayoutParams(0, -1, 1f))
             tuiIndicator = tuiIndicatorView(activity, ui)
             addView(tuiIndicator, LinearLayout.LayoutParams(ui.dp(28), -1))
-            syncIndicator = syncIndicatorView(activity, ui)
-            addView(syncIndicator, LinearLayout.LayoutParams(ui.dp(36), -1))
         }
 
     private fun terminalStatus(activity: Activity): String =
@@ -299,11 +296,6 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
         initPwdObserver(activity)
         focusTerminalInput(activity)
         consumePendingCommand()
-        syncIndicator?.let { tv ->
-            val on = SyncCoordinator.isEnabled(pm.sharedPreferences)
-            tv.text = if (on) "●" else "○"
-            tv.setTextColor(if (on) DesignTokens.ACCENT else 0xFF9CA3AF.toInt())
-        }
         terminalView?.postDelayed({
             maybeAutoBootstrapUbuntu(activity)
             focusTerminalInput(activity)
@@ -336,7 +328,12 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
 
     private fun initPwdObserver(activity: Activity) {
         if (this.activity == null) return
-        val home = homeDir ?: return
+        val home = homeDir ?: run {
+            val act = this.activity ?: return
+            val contentView = act.findViewById<View>(android.R.id.content) ?: return
+            trackPostDelayed(contentView, 3000) { initPwdObserver(act) }
+            return
+        }
         val pwdFile = File(home, ".aidev-current-pwd")
         pwdObserver?.stop()
         if (!pwdFile.isFile) {
@@ -348,47 +345,46 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
             }
             return
         }
+        val syncLog = File(home, "aidev-sync.log")
         pwdObserver = PwdFileObserver(pwdFile) { ubuntuPwd ->
             if (ubuntuPwd == lastSyncedPwd) return@PwdFileObserver
             lastSyncedPwd = ubuntuPwd
             cachedCompletionPwd = ubuntuPwd
             val act = this.activity ?: return@PwdFileObserver
-            val prefs = pm.sharedPreferences
-            SyncCoordinator.onTerminalPwdChanged(ubuntuPwd, home, prefs) { targetDir ->
-                android.util.Log.d("AIDEV_SYNC", "L1 sync: $ubuntuPwd -> ${targetDir.absolutePath}, isDir=${targetDir.isDirectory}")
+            val sb = StringBuilder()
+            sb.appendLine("[${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())}] PWD: $ubuntuPwd")
+            sb.appendLine("  home: ${home.absolutePath}")
+            sb.appendLine("  home.exists: ${home.exists()}")
+            val targetDir = SyncCoordinator.toAndroidDir(ubuntuPwd, home)
+            if (targetDir != null) {
+                sb.appendLine("  target: ${targetDir.absolutePath}")
+                sb.appendLine("  target.exists: ${targetDir.exists()}")
+                sb.appendLine("  target.isDir: ${targetDir.isDirectory}")
+                sb.appendLine("  target.canRead: ${targetDir.canRead()}")
+                sb.appendLine("  target.listFiles: ${targetDir.listFiles()?.size}")
+                android.util.Log.d("AIDEV_SYNC", "terminal sync: $ubuntuPwd -> ${targetDir.absolutePath}")
                 try {
                     if (act is ShellActivity) act.syncBrowserToDir(targetDir)
+                    sb.appendLine("  -> syncBrowserToDir OK")
                 } catch (e: Exception) {
+                    sb.appendLine("  -> syncBrowserToDir ERROR: ${e.message}")
                     android.util.Log.e("AIDEV_SYNC", "syncBrowserToDir error", e)
                 }
+            } else {
+                val mapped = PathBridge.ubuntuToAndroid(home, ubuntuPwd)
+                sb.appendLine("  ubuntuToAndroid: ${mapped?.absolutePath}")
+                sb.appendLine("  mapped.exists: ${mapped?.exists()}")
+                sb.appendLine("  mapped.isDir: ${mapped?.isDirectory}")
+                sb.appendLine("  isBrowsable: ${PathBridge.isBrowsable(ubuntuPwd)}")
+                sb.appendLine("  -> target is null, sync SKIPPED")
             }
+            try {
+                syncLog.appendText(sb.toString())
+                android.util.Log.d("AIDEV_SYNC_DIAG", sb.toString())
+            } catch (_: Exception) {}
         }
         pwdObserver?.start()
     }
-
-    private fun syncIndicatorView(activity: Activity, ui: AIDevUi): TextView =
-        TextView(activity).apply {
-            gravity = Gravity.CENTER
-            textSize = 11f
-            includeFontPadding = false
-            val on = SyncCoordinator.isEnabled(pm.sharedPreferences)
-            text = if (on) "●" else "○"
-            setTextColor(if (on) DesignTokens.ACCENT else 0xFF9CA3AF.toInt())
-            setOnClickListener {
-                val prefs = pm.sharedPreferences
-                val current = SyncCoordinator.isEnabled(prefs)
-                SyncCoordinator.setEnabled(prefs, !current)
-                val nowOn = !current
-                text = if (nowOn) "●" else "○"
-                setTextColor(if (nowOn) DesignTokens.ACCENT else 0xFF9CA3AF.toInt())
-                Toast.makeText(activity, if (nowOn) "联动已开启" else "联动已关闭", Toast.LENGTH_SHORT).show()
-            }
-            setOnLongClickListener {
-            val on = SyncCoordinator.isEnabled(pm.sharedPreferences)
-                Toast.makeText(activity, if (on) "终端-文件联动中" else "已关闭，点击开启", Toast.LENGTH_SHORT).show()
-                true
-            }
-        }
 
     fun silentCd(ubuntuPath: String) {
         session?.write("cd $ubuntuPath\r")
@@ -1148,6 +1144,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
             Handler(Looper.getMainLooper()).post {
                 if (this.activity == null || this.activity !== activity) return@post
                 homeDir = shellAssets.home
+                initPwdObserver(activity)
                 val entry = shellAssets.entry
                 if (current != null) {
                     session = current?.session

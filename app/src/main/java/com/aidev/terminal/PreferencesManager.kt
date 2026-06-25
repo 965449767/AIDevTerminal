@@ -98,4 +98,12 @@ class PreferencesManager(context: Context) {
     var fileRecentDirs: Set<String>
         get() = prefs.getStringSet("file_recent_dirs", emptySet()) ?: emptySet()
         set(value) = prefs.edit().putStringSet("file_recent_dirs", value).apply()
+
+    var fileLayoutMode: String
+        get() = prefs.getString("file_layout_mode", "split") ?: "split"
+        set(value) = prefs.edit().putString("file_layout_mode", value).apply()
+
+    var treeExpandedPaths: Set<String>
+        get() = prefs.getStringSet("tree_expanded_paths", emptySet()) ?: emptySet()
+        set(value) = prefs.edit().putStringSet("tree_expanded_paths", value).apply()
 }

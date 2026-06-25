@@ -24,14 +24,20 @@ class PwdFileObserver(
     override fun onEvent(event: Int, path: String?) {
         if (event != MODIFY) return
         pendingRunnable?.let { handler.removeCallbacks(it) }
+        pendingRunnable = Runnable { confirmRead() }.also { handler.postDelayed(it, 200) }
+    }
+
+    private fun confirmRead() {
+        val callback = callbackRef.get() ?: return
+        val firstRead = pwdFile.readText().trim()
         pendingRunnable = Runnable {
-            val callback = callbackRef.get() ?: return@Runnable
-            val newValue = pwdFile.readText().trim()
-            if (newValue != lastValue && newValue.isNotBlank()) {
-                lastValue = newValue
-                callback(newValue)
+            val secondRead = pwdFile.readText().trim()
+            if (secondRead != firstRead) return@Runnable
+            if (secondRead != lastValue && secondRead.isNotBlank()) {
+                lastValue = secondRead
+                callback(secondRead)
             }
-        }.also { handler.postDelayed(it, 200) }
+        }.also { handler.postDelayed(it, 50) }
     }
 
     fun start() {

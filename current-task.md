@@ -1,62 +1,66 @@
-# Current Task: 无
+# Current Task: Phase 4 — 树视图 + 内置编辑器 + AnExplorer 集成
 
-所有已计划的任务均已完成。
+## 功能审计
 
-## 完成情况
+### Layout 1 — 双栏分屏
 
-### Phase A（稳定性 + 安全）— 提交: 2ec8fb0
+| # | 功能 | 状态 |
+|---|------|------|
+| 1 | 左右双栏导航 | ✅ |
+| 2 | terminal ↔ browser 双向同步（始终开启） | ✅ |
+| 3 | 复制/移动/新建/编辑/搜索/更多 | ✅ |
+| 4 | 文件预览（长按编辑） | ✅ |
+| 5 | 收藏/常用目录/最近项目 | ✅ |
+| 6 | 标记当前项目/跳到项目 | ✅ |
+| 7 | 暗色圆角芯片工具栏 | ✅ |
+| 8 | HorizontalScrollView 防溢出 | ✅ |
+| 9 | 路径栏紫色半透明底色 | ✅ |
+| 10 | 多选模式（长按进入→批量删除/复制/移动） | ✅ |
+| 11 | 剪贴板粘贴（aidiv_copy / aidiv_move） | ✅ |
 
-| Step | 内容 | 状态 |
-|------|------|------|
-| A1 | 修复进程流泄漏（SystemMonitorPage, NetworkDiagnosticsPage, SecurityAuditPage） | ✅ |
-| A1-fix | 修复 NetworkDiagnostics 闪退（ACCESS_NETWORK_STATE）+ bootstrap 自动输入修复 | ✅ |
-| A2 | 修复 CoroutineScope 泄漏（EmbeddedSettingsPage, EmbeddedFilesPage） | ✅ |
-| A3 | SystemMonitorPage 主线程 IO 移到 Dispatchers.IO | ✅ |
-| A4 | AndroidManifest 安全加固（allowBackup=false, usesCleartextTraffic=false） | ✅ |
-| A5 | 命令输入校验（NetworkDiagnosticsPage 正则 + SecurityAuditPage 白名单） | ✅ |
+### Layout 2 — 项目树视图 + 编辑器
 
-### Phase B（代码质量）— 提交: 810e666
+| # | 功能 | 状态 |
+|---|------|------|
+| 1 | 📁↔⚡ 单键切换模式 | ✅ |
+| 2 | 模式持久化 `fileLayoutMode` | ✅ |
+| 3 | ProjectDetector 找项目根 | ✅ |
+| 4 | flat list + 深度缩进 | ✅ |
+| 5 | 点击目录展开/折叠 + cd 终端 | ✅ |
+| 6 | 点击文件选中高亮 + 加载到编辑器 | ✅ |
+| 7 | 长按弹出文件操作菜单 | ✅ |
+| 8 | terminal cd → 树自动展开 + 高亮 | ✅ |
+| 9 | 切回文件页自动刷新 | ✅ |
+| 10 | 展开状态持久化 `treeExpandedPaths` | ✅ |
+| 11 | 工具栏按钮在树模式隐藏 | ✅ |
+| 12 | ▼ 收起全部按钮 | ✅ |
+| 13 | 超出根 cd → 重新检测根 | ✅ |
+| 14 | 长按菜单新建文件/文件夹 + 树自动刷新 | ✅ |
+| 15 | 文件图标（资源 drawable + 彩色圆形背景） | ✅ |
+| 16 | 点击文件加载内容到右侧编辑器 | ✅ |
+| 17 | 编辑/保存/预览按钮 | ✅ |
+| 18 | 底部信息栏（大小/修改时间） | ✅ |
+| 19 | 异步加载（coroutine + IO 线程） | ✅ |
+| 20 | 未保存修改检测 + 切文件确认框 | ✅ |
 
-| Step | 内容 | 状态 |
-|------|------|------|
-| B1 | Constants.kt + PreferencesManager.kt（PrefKeys, sharedPreferences, StringSet 属性） | ✅ |
-| B2 | 字符串常量替换（AIAgentActivity, ShellEnhancementsPage, SyncCoordinator） | ✅ |
-| B3 | 小文件迁移（EmbeddedTasksPage, ContainerManagerPage, CompletionEngine） | ✅ |
-| B4 | 中等文件迁移（VirtualKeyEditor, ServerCenterActivity） | ✅ |
-| B5a | ShellActivity prefs 类型改为 PreferencesManager | ✅ |
-| B5b | EmbeddedFilesPage SP 访问迁移 | ✅ |
-| B5c | EmbeddedShellPages SP 访问迁移 | ✅ |
-| B6 | 清理未使用 import（17 个，跨 5 文件） | ✅ |
+### 已知问题
+- 目录图标圆形背景颜色未区分（统一琥珀色）
+- 窄屏编辑器未自动隐藏（待优化）
 
-### UI/UX 修复（陪跑）
+### 未来规划
+- 语法高亮
+- 行号
+- 大文件截断提示
+- 分栏模式多选 + 批量操作
+- 树视图搜索/过滤
+- 拖拽排序/移动
 
-| 内容 | 状态 |
-|------|------|
-| ⌨ 按钮背景色统一 | ✅ |
-| ⌨ 按钮固定右边 | ✅ |
-| 键盘状态同步 | ✅ |
-| onNewIntent 页面保留 | ✅ |
-| Shizuku 移到权限管理分类 | ✅ |
+## 参考文档
 
-### 菜单去冗余 + 命令优化
-
-| 内容 | 状态 |
-|------|------|
-| 终端"更多"菜单移除 3 个字号条目 | ✅ |
-| 删除 AIAgentActivity | ✅ |
-| 移除终端"退出"按钮 | ✅ |
-| 移除文件页"旧版文件管理" | ✅ |
-| 命令面板 handleCommandPalette 索引对齐（30→18 项，补洞 + 去重） | ✅ |
-| 设置页：开发环境拆为 Android 诊断 + Ubuntu 环境 | ✅ |
-| 设置页：权限管理 + 系统与后台 合并为 权限与后台 | ✅ |
-| 设置页：容器管理 → Ubuntu 管理，监听端口改用 ss/netstat 绕过失效脚本 | ✅ |
-| 设置页：顶部说明文字 → 分隔线 | ✅ |
-| 保活 KeepAliveService 自动执行（删掉按钮 + 命令面板项 + if 守卫 + bootReceiver if + pref + const） | ✅ |
-| ServerCenterActivity：去"常驻"按钮 + "后台常驻"状态行 + "后台说明"行 | ✅ |
-| 命令面板删除 9 项重复（切Tab 4 + 后台常驻 1 + 任务模板 5 + Git状态 + 清屏） | ✅ |
-| 一键修复简化：去除 Android 权限检查 + 可选工具检查 + 多选子对话框，直接执行 | ✅ |
-| deploy-dev-env / install-aitool 注册到 aidev-ubuntu-core + .aidevrc 确保跨环境可用 | ✅ |
-| 命令改名：install-aitool → opencode-install, deploy-dev-env → setup-dev-env（7 文件 12 处引用） | ✅ |
-| Command suggestions 补全 26 个自定义命令（TerminalUtils.kt builtinCompletions） | ✅ |
-| 知识库新增"内置命令"分类（26 项，含 aidev-agent-* 内部命令） | ✅ |
-| 知识库修正：ping → curl, 删除 traceroute/last/systemctl, pkg → apt, chown/find-SUID 加 PRoot 说明 | ✅ |
+`docs/anexplorer-patterns.md` — 从 1hakr/AnExplorer 提取的模式库：
+- MultiChoiceHelper 多选模式适配指南
+- 22 个拖入型文件图标（ic_doc_*.xml）
+- MimeTypes 扩展名→MIME 映射表
+- NoteActivity 编辑器异步 + 未保存检测
+- UI 布局模式（item_doc_list / activity_note）
+- IconUtils 图标加载/着色策略
