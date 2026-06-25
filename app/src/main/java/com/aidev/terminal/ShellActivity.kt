@@ -13,9 +13,12 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import android.view.View
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
@@ -52,6 +55,7 @@ class ShellActivity : Activity() {
     }
     private val pageViews = mutableMapOf<Int, View>()
     private var currentIndex: Int = 0
+    private var backPressedAt = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,6 +66,16 @@ class ShellActivity : Activity() {
         ensureNotificationChannel()
         runCatching { KeepAliveService.start(this) }
             .onFailure { Log.e("ShellActivity", "KeepAliveService start failed", it) }
+        if (Build.VERSION.SDK_INT >= 33) {
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT
+            ) {
+                if (currentIndex in pages.indices) {
+                    if (pages[currentIndex].onBackPressed()) return@registerOnBackInvokedCallback
+                }
+                handleBack()
+            }
+        }
         buildShell()
         val requestedTab = intent?.getIntExtra("shell_tab", -1) ?: -1
         val shouldAutoBootstrapUbuntu = shouldAutoBootstrapUbuntu(requestedTab)
@@ -81,6 +95,25 @@ class ShellActivity : Activity() {
     override fun onDestroy() {
         super.onDestroy()
         pages.forEach { it.onDestroy(this) }
+    }
+
+    @Suppress("OVERRIDE_DEPRECATION")
+    override fun onBackPressed() {
+        if (currentIndex in pages.indices) {
+            if (pages[currentIndex].onBackPressed()) return
+        }
+        handleBack()
+    }
+
+    private fun handleBack() {
+        val now = SystemClock.uptimeMillis()
+        if (now - backPressedAt < 2000) {
+            finish()
+        } else {
+            backPressedAt = now
+            ui.pulse()
+            Toast.makeText(this, "再按一次退出应用", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun shouldAutoBootstrapUbuntu(requestedTab: Int): Boolean {
@@ -554,6 +587,7 @@ interface ShellPage {
     fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View
     fun onSelected(activity: Activity, view: View) {}
     fun onDestroy(activity: Activity) {}
+    fun onBackPressed(): Boolean = false
 }
 
 /** 提供给 ShellPage 的容器能力。后续二级页面可使用 host 打开终端、AI 中心等。 */

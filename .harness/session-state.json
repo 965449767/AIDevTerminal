@@ -1,40 +1,37 @@
 {
-  "task_id": "phase-4-anexplorer-integration",
-  "status": "completed",
-  "current_phase": "phase-4-anexplorer-integration",
+  "task_id": "file-browser-selection-fix",
+  "status": "awaiting-verification",
+  "current_phase": "file-browser-selection-fix",
   "last_updated": "2026-06-25",
   "overall_progress_percent": 100,
   "active_plan": [
-    "Phase 4: Tree editor + AnExplorer patterns integrated"
+    "File browser dual-pane selection logic fix"
   ],
-  "next_3_steps": [],
+  "next_3_steps": [
+    "User installs APK and verifies 5 test cases",
+    "Prioritize audit Critical items (ANR, Timer leak, race conditions)",
+    "Performance optimization: refreshSelection instead of full loadPane"
+  ],
   "changed_files": [
-    "docs/anexplorer-patterns.md",
-    "app/src/main/res/drawable/ic_doc_*.xml (22 files)",
-    "app/src/main/res/drawable/ic_delete.xml",
-    "app/src/main/res/drawable/ic_dialog_*.xml",
-    "app/src/main/res/drawable/ic_empty_file.xml",
-    "app/src/main/res/drawable/ic_grid_*.xml",
-    "FileIconMapper.kt",
-    "ProjectTreeView.kt",
-    "EmbeddedFilesPage.kt"
+    "app/src/main/java/com/aidev/terminal/EmbeddedFilesPage.kt"
   ],
   "validation": {
     "last_commands": [
-      "bash /root/.android-env/scripts/build-android.sh",
-      "./gradlew :app:compileDebugKotlin"
+      "./gradlew :app:compileDebugKotlin --no-daemon",
+      "./gradlew :app:testDebugUnitTest --no-daemon",
+      "bash /root/.android-env/scripts/build-android.sh"
     ],
     "last_result": "BUILD SUCCESSFUL",
     "known_failures": []
   },
   "cognitive_state": {
-    "failure_count": 1,
-    "current_mode": "verification-pending",
+    "failure_count": 0,
+    "current_mode": "awaiting-user-confirmation",
     "tried_approaches": [],
-    "blocked_on": null
+    "blocked_on": "User APK install and test"
   },
   "handoff": {
-    "last_summary": "AnExplorer integration complete. Reference doc created in docs/anexplorer-patterns.md. 28 vector drawables imported. Multi-select implemented (long-press mode + batch bar). Editor async + dirty detection done. Tree icons migrated to resource drawables with colored circle backgrounds.",
+    "last_summary": "Fixed dual-pane selection logic in EmbeddedFilesPage.kt. Merged leftSelected/rightSelected into single selectedFile. Replaced dual path labels with unified pathBar. Cross-pane multi-mode click now exits multi-mode. exitMultiMode clears single selection. Directory navigation reloads both panes. All compile/test/build pass.",
     "resume_from": "Awaiting user APK install and test confirmation."
   }
 }
