@@ -108,7 +108,7 @@ class ShellActivity : Activity() {
     private fun handleBack() {
         val now = SystemClock.uptimeMillis()
         if (now - backPressedAt < 2000) {
-            finish()
+            moveTaskToBack(true)
         } else {
             backPressedAt = now
             ui.pulse()
