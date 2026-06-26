@@ -7,18 +7,18 @@ import java.io.File
 internal interface FilePageHost {
     val hostScope: CoroutineScope
     fun hostActivity(): Activity
-    fun hostUi(): AIDevUi
     fun hostPm(): PreferencesManager
     fun hostSelectedFile(): File?
     fun hostSetSelectedFile(file: File?)
-    fun hostGetSelectedFile(): File?
     fun hostActiveDir(): File
     var hostActiveLeft: Boolean
     var hostLeftDir: File
     var hostRightDir: File
     var hostMultiMode: Boolean
     var hostMultiPaneSide: Boolean
-    val hostMultiSelected: Set<String>
+    var hostMultiSelected: Set<String>
+    var hostAnchorFile: String?
+    fun hostGetPaneFiles(left: Boolean): List<File>
     fun hostClearSelection()
     fun hostReloadAll()
     fun hostLoadPane(left: Boolean)

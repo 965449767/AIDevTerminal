@@ -67,9 +67,6 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
     private lateinit var previewScroll: NestedScrollView
     private lateinit var previewText: TextView
     private lateinit var previewWeb: WebView
-    private var isPreviewViewMode = false
-    private var isHtmlSourceMode = false
-    private var isPreviewEditMode = false
     private var previewDirtyDot: View? = null
     private val dirtyHandler = Handler(Looper.getMainLooper())
     private val dirtyCheck = object : Runnable {
@@ -79,19 +76,10 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
             updatePreviewButtons()
         }
     }
-    private var previewFile: File? = null
-    private var previewOriginalText = ""
-    private var isPreviewDirty = false
-    private var previewLineCount = 0
     private lateinit var previewHtmlToggle: View
     private lateinit var previewEditToggle: View
     private lateinit var previewSaveBtn: View
     private var contentContainer: FrameLayout? = null
-    private var lastOpenTime = 0L
-    private var lastOpenFile: File? = null
-    private var pendingSyncPath: String? = null
-    private val multiSelected = mutableSetOf<String>()
-    private var anchorFile: String? = null
     private lateinit var fileActionBar: HorizontalScrollView
     private lateinit var fileActionInfo: TextView
     private var leftPane: View? = null
@@ -124,10 +112,48 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
     private var multiPaneSide: Boolean
         get() = state.multiPaneSide
         set(v) { _state.update { it.copy(multiPaneSide = v) } }
+    private var isPreviewViewMode: Boolean
+        get() = state.isPreviewViewMode
+        set(v) { _state.update { it.copy(isPreviewViewMode = v) } }
+    private var isHtmlSourceMode: Boolean
+        get() = state.isHtmlSourceMode
+        set(v) { _state.update { it.copy(isHtmlSourceMode = v) } }
+    private var isPreviewEditMode: Boolean
+        get() = state.isPreviewEditMode
+        set(v) { _state.update { it.copy(isPreviewEditMode = v) } }
+    private var previewFile: File?
+        get() = state.previewFile
+        set(v) { _state.update { it.copy(previewFile = v) } }
+    private var previewOriginalText: String
+        get() = state.previewOriginalText
+        set(v) { _state.update { it.copy(previewOriginalText = v) } }
+    private var isPreviewDirty: Boolean
+        get() = state.isPreviewDirty
+        set(v) { _state.update { it.copy(isPreviewDirty = v) } }
+    private var previewLineCount: Int
+        get() = state.previewLineCount
+        set(v) { _state.update { it.copy(previewLineCount = v) } }
+    private var lastOpenTime: Long
+        get() = state.lastOpenTime
+        set(v) { _state.update { it.copy(lastOpenTime = v) } }
+    private var lastOpenFile: File?
+        get() = state.lastOpenFile
+        set(v) { _state.update { it.copy(lastOpenFile = v) } }
+    private var pendingSyncPath: String?
+        get() = state.pendingSyncPath
+        set(v) { _state.update { it.copy(pendingSyncPath = v) } }
+    private var multiSelected: Set<String>
+        get() = state.multiSelected
+        set(v) { _state.update { it.copy(multiSelected = v) } }
+    private var anchorFile: String?
+        get() = state.anchorFile
+        set(v) { _state.update { it.copy(anchorFile = v) } }
     private val pm by lazy { PreferencesManager(activity) }
     private val projectTools = ProjectToolsHelper(this)
     private val fileOps = FileOperationsHelper(this)
     private val navHelper = NavigationHelper(this)
+    private val navHandler = NavigationHandler(this)
+    private val multiSelectHandler = MultiSelectHandler(this)
     private val paneBg: GradientDrawable by lazy {
         val c = (ui.palette.surface and 0x00FFFFFF) or (0xCC000000.toInt())
         GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(c, c)).apply {
@@ -475,7 +501,7 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
                     if (multiMode && multiPaneSide != isLeft) {
                         multiMode = false
                         multiPaneSide = true
-                        multiSelected.clear()
+                        multiSelected = emptySet()
                         selectedFile = null
                         fileActionBar.visibility = View.GONE
                         refreshHighlight(true); refreshHighlight(false)
@@ -672,55 +698,39 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
     }
 
     private fun selected(): File? = selectedFile
-    private fun activeDir(): File = if (activeLeft) leftDir else rightDir
+    private fun activeDir(): File = navHandler.activeDir()
+    private fun otherDir(): File = navHandler.otherDir()
 
     private fun syncPanes() {
-        val src = activeDir()
-        if (activeLeft) rightDir = src else leftDir = src
-        reloadAll()
+        navHandler.syncPanes()
     }
 
     override fun onBackPressed(): Boolean {
-        val dir = activeDir()
-        val sdRoot = Environment.getExternalStorageDirectory()
-        val parent = dir.parentFile
-        if (dir != sdRoot && parent != null) {
-            navigateTo(parent)
+        if (navHandler.onBackPressed()) {
             ui.pulse()
             return true
         }
         return false
     }
-    private fun otherDir(): File = if (activeLeft) rightDir else leftDir
 
     fun syncNavigateTo(targetDir: File) {
         android.util.Log.d("AIDEV_SYNC", "syncNavigateTo: ${targetDir.absolutePath}, exists=${targetDir.exists()}, isDir=${targetDir.isDirectory}")
-        if (!targetDir.isDirectory) return
-        if (pm.fileLayoutMode == "split") {
-            if (activeLeft) { leftDir = targetDir; selectedFile = null }
-            else { rightDir = targetDir; selectedFile = null }
-            loadPane(activeLeft)
-        } else {
-            if (::projectTree.isInitialized) {
-                val r = projectTree.currentRoot
-                if (r != null && !targetDir.absolutePath.startsWith(r.absolutePath)) {
-                    val newRoot = ProjectDetector.findProjectRoot(targetDir) ?: targetDir
-                    projectTree.setRoot(newRoot)
-                    projectTree.restoreExpanded(pm.treeExpandedPaths)
-                }
-                projectTree.expandTo(targetDir)
-            } else {
-                pendingSyncPath = targetDir.absolutePath
+        if (navHandler.syncNavigateToSplit(targetDir)) return
+        if (::projectTree.isInitialized) {
+            val r = projectTree.currentRoot
+            if (r != null && !targetDir.absolutePath.startsWith(r.absolutePath)) {
+                val newRoot = ProjectDetector.findProjectRoot(targetDir) ?: targetDir
+                projectTree.setRoot(newRoot)
+                projectTree.restoreExpanded(pm.treeExpandedPaths)
             }
+            projectTree.expandTo(targetDir)
+        } else {
+            pendingSyncPath = targetDir.absolutePath
         }
     }
 
     private fun navigateTo(dir: File) {
-        if (activeLeft) leftDir = dir else rightDir = dir
-        selectedFile = null
-        rememberRecentDir(dir)
-        loadPane(true); loadPane(false)
-        fileOps.notifyTerminalCd(dir)
+        navHandler.navigateTo(dir)
     }
 
     private fun modeButton(text: String, click: () -> Unit): View =
@@ -1084,12 +1094,8 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
     }
 
     private fun enterMultiMode(file: File) {
-        if (multiMode) return
-        multiMode = true
-        multiPaneSide = activeLeft
-        multiSelected.clear()
-        multiSelected.add(file.absolutePath)
-        anchorFile = file.absolutePath
+        multiSelectHandler.enterMultiMode(file)
+        if (!multiMode) return
         fileActionBar.visibility = View.VISIBLE
         updateMultiInfo()
         dragLog("enterMultiMode file=${file.name} anchor=$anchorFile selected=${multiSelected.toList()}")
@@ -1097,23 +1103,24 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
     }
 
     private fun exitMultiMode() {
-        if (!multiMode) return
-        multiMode = false
-        multiPaneSide = true
-        multiSelected.clear()
-        anchorFile = null
-        selectedFile = null
+        multiSelectHandler.exitMultiMode()
+        if (multiMode) return
         fileActionBar.visibility = View.GONE
         refreshHighlight(true); refreshHighlight(false)
     }
 
     private fun toggleMultiSelect(file: File, isLeft: Boolean) {
-        if (multiPaneSide != isLeft) return
-        val path = file.absolutePath
-        if (path in multiSelected) multiSelected.remove(path) else multiSelected.add(path)
-        if (multiSelected.isEmpty()) { exitMultiMode(); return }
-        updateMultiInfo()
-        refreshHighlight(true); refreshHighlight(false)
+        when (multiSelectHandler.toggleMultiSelect(file, isLeft)) {
+            MultiSelectEvent.EXITED -> {
+                fileActionBar.visibility = View.GONE
+                refreshHighlight(true); refreshHighlight(false)
+            }
+            MultiSelectEvent.TOGGLED -> {
+                updateMultiInfo()
+                refreshHighlight(true); refreshHighlight(false)
+            }
+            else -> {}
+        }
     }
 
     private fun updateMultiInfo() {
@@ -1121,42 +1128,35 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
     }
 
     private fun toggleSelectAll() {
-        val files = getPaneFiles(if (multiMode) multiPaneSide else activeLeft).map { it.absolutePath }.toSet()
-        if (files.isEmpty()) return toast("\u5F53\u524D\u76EE\u5F55\u6CA1\u6709\u6587\u4EF6")
-        if (multiMode && files.all { it in multiSelected }) {
-            exitMultiMode()
-            return
+        when (multiSelectHandler.toggleSelectAll()) {
+            MultiSelectEvent.TOAST_EMPTY -> toast("\u5F53\u524D\u76EE\u5F55\u6CA1\u6709\u6587\u4EF6")
+            MultiSelectEvent.ENTERED -> {
+                fileActionBar.visibility = View.VISIBLE
+                updateMultiInfo()
+                refreshHighlight(true); refreshHighlight(false)
+            }
+            MultiSelectEvent.EXITED -> {
+                fileActionBar.visibility = View.GONE
+                refreshHighlight(true); refreshHighlight(false)
+            }
+            else -> {}
         }
-        if (!multiMode) {
-            multiMode = true
-            multiPaneSide = activeLeft
-            fileActionBar.visibility = View.VISIBLE
-        }
-        multiSelected.clear()
-        multiSelected.addAll(files)
-        anchorFile = null
-        updateMultiInfo()
-        refreshHighlight(true); refreshHighlight(false)
     }
 
     private fun invertSelection() {
-        val files = getPaneFiles(if (multiMode) multiPaneSide else activeLeft).map { it.absolutePath }.toSet()
-        if (files.isEmpty()) return toast("\u5F53\u524D\u76EE\u5F55\u6CA1\u6709\u6587\u4EF6")
-        if (!multiMode) {
-            multiMode = true
-            multiPaneSide = activeLeft
-            fileActionBar.visibility = View.VISIBLE
+        when (multiSelectHandler.invertSelection()) {
+            MultiSelectEvent.TOAST_EMPTY -> toast("\u5F53\u524D\u76EE\u5F55\u6CA1\u6709\u6587\u4EF6")
+            MultiSelectEvent.ENTERED -> {
+                fileActionBar.visibility = View.VISIBLE
+                updateMultiInfo()
+                refreshHighlight(true); refreshHighlight(false)
+            }
+            MultiSelectEvent.EXITED -> {
+                fileActionBar.visibility = View.GONE
+                refreshHighlight(true); refreshHighlight(false)
+            }
+            else -> {}
         }
-        val inverted = files - multiSelected
-        if (inverted.isEmpty()) {
-            exitMultiMode()
-            return
-        }
-        multiSelected.clear()
-        multiSelected.addAll(inverted)
-        anchorFile = null
-        updateMultiInfo()
-        refreshHighlight(true); refreshHighlight(false)
     }
 
     private fun getPaneFiles(isLeft: Boolean): List<File> {
@@ -1178,21 +1178,12 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
     }
 
     private fun rangeSelect(file: File, isLeft: Boolean) {
-        if (multiPaneSide != isLeft) return
-        val anchor = anchorFile ?: return
-        val files = getPaneFiles(isLeft)
-        val anchorIdx = files.indexOfFirst { it.absolutePath == anchor }
-        val currentIdx = files.indexOfFirst { it.absolutePath == file.absolutePath }
-        if (anchorIdx < 0 || currentIdx < 0) return
-        var changed = false
-        val range = minOf(anchorIdx, currentIdx)..maxOf(anchorIdx, currentIdx)
-        for (i in range) {
-            if (multiSelected.add(files[i].absolutePath)) changed = true
-        }
-        dragLog("rangeSelect anchor=${File(anchor).name}[$anchorIdx] file=${file.name}[$currentIdx] range=$range selected=${multiSelected.toList()}")
-        if (changed) {
-            updateMultiInfo()
-            refreshHighlight(true); refreshHighlight(false)
+        when (multiSelectHandler.rangeSelect(file, isLeft)) {
+            MultiSelectEvent.TOGGLED -> {
+                updateMultiInfo()
+                refreshHighlight(true); refreshHighlight(false)
+            }
+            else -> {}
         }
     }
 
@@ -1242,32 +1233,9 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
             .show()
     }
 
-    private fun isHtmlFile(file: File?): Boolean =
-        file?.name?.let { it.endsWith(".html", ignoreCase = true) || it.endsWith(".htm", ignoreCase = true) } ?: false
-
-    private fun isEnhancedFile(file: File?): Boolean {
-        if (file == null) return false
-        val ext = file.extension.lowercase()
-        return ext in setOf("md", "kt", "kts", "java", "js", "mjs", "ts", "py", "rs", "go", "sh", "bash", "cpp", "cc", "c", "h", "swift", "xml", "json", "yaml", "yml", "css", "scss", "sql", "gradle", "toml", "proto", "rb", "php", "pl", "lua", "r", "dart")
-    }
-
-    private fun getHighlightLanguage(file: File?): String {
-        val ext = file?.extension?.lowercase() ?: return ""
-        return when (ext) {
-            "kt", "kts" -> "kotlin"
-            "js", "mjs" -> "javascript"
-            "ts" -> "typescript"
-            "py" -> "python"
-            "sh", "bash" -> "bash"
-            "cpp", "cc" -> "cpp"
-            "md" -> "md"
-            "yml" -> "yaml"
-            "scss" -> "scss"
-            "gradle" -> "gradle"
-            "toml" -> "ini"
-            else -> ext
-        }
-    }
+    private fun isHtmlFile(file: File?): Boolean = FileUtils.isHtmlFile(file)
+    private fun isEnhancedFile(file: File?): Boolean = FileUtils.isEnhancedFile(file)
+    private fun getHighlightLanguage(file: File?): String = FileUtils.getHighlightLanguage(file)
 
     private fun loadEnhancedPreview(file: File, text: String, maxLen: Int = 512 * 1024) {
         val lang = getHighlightLanguage(file)
@@ -1336,22 +1304,8 @@ $lnCss
     private fun readAssetText(name: String): String =
         runCatching { activity.assets.open(name).bufferedReader().use { it.readText() } }.getOrDefault("")
 
-    private fun isImageFile(file: File): Boolean =
-        file.extension.lowercase() in setOf("png", "jpg", "jpeg", "webp", "gif", "bmp")
-
-    private fun isLikelyText(file: File): Boolean =
-        runCatching {
-            file.inputStream().use { input ->
-                val buffer = ByteArray(2048)
-                val n = input.read(buffer)
-                if (n <= 0) return@use true
-                for (i in 0 until n) {
-                    val b = buffer[i].toInt() and 0xFF
-                    if (b == 0) return@use false
-                }
-                true
-            }
-        }.getOrDefault(false)
+    private fun isImageFile(file: File): Boolean = FileUtils.isImageFile(file)
+    private fun isLikelyText(file: File): Boolean = FileUtils.isLikelyText(file)
 
     private fun copySelectedPath() {
         val src = selected() ?: activeDir()
@@ -1601,12 +1555,7 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
     }
 
     private fun label(file: File): String = (if (file.isDirectory) "📁 " else "📄 ") + file.name + if (file.isFile) "  ${formatSize(file.length())}" else ""
-    private fun formatSize(n: Long): String = when {
-        n < 1024 -> "${n}B"
-        n < 1024 * 1024 -> "%.1fK".format(n / 1024.0)
-        n < 1024L * 1024L * 1024L -> "%.1fM".format(n / 1024.0 / 1024.0)
-        else -> "%.1fG".format(n / 1024.0 / 1024.0 / 1024.0)
-    }
+    private fun formatSize(n: Long): String = FileUtils.formatSize(n)
     private fun info(text: String): TextView = ui.text(text, 12f, ui.palette.muted).apply { setPadding(ui.dp(8), ui.dp(10), ui.dp(8), ui.dp(10)) }
     private fun copyText(label: String, text: String) {
         ClipboardHelper.copy(activity, label, text)
@@ -1614,7 +1563,6 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
     private fun toast(text: String) = Toast.makeText(activity, text, Toast.LENGTH_SHORT).show()
 
     override fun hostActivity(): Activity = activity
-    override fun hostUi(): AIDevUi = ui
     override fun hostPm(): PreferencesManager = pm
     override fun hostSelectedFile(): File? = selectedFile
     override fun hostSetSelectedFile(file: File?) { selectedFile = file }
@@ -1637,7 +1585,6 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
     override fun hostCopySelectedPath() { copySelectedPath() }
     override fun hostRememberRecentDir(dir: File) { rememberRecentDir(dir) }
     override fun hostFormatSize(n: Long): String = formatSize(n)
-    override fun hostGetSelectedFile(): File? = selectedFile
 
     override var hostMultiMode: Boolean
         get() = multiMode
@@ -1645,8 +1592,13 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
     override var hostMultiPaneSide: Boolean
         get() = multiPaneSide
         set(v) { multiPaneSide = v }
-    override val hostMultiSelected: Set<String>
+    override var hostMultiSelected: Set<String>
         get() = multiSelected
+        set(v) { multiSelected = v }
+    override var hostAnchorFile: String?
+        get() = anchorFile
+        set(v) { anchorFile = v }
+    override fun hostGetPaneFiles(left: Boolean): List<File> = getPaneFiles(left)
     override fun hostDragLog(msg: String) { dragLog(msg) }
     override fun hostExitMultiMode() { exitMultiMode() }
     override fun hostUpdateMultiInfo() { updateMultiInfo() }

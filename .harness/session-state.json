@@ -1,6 +1,6 @@
 {
-  "phase": "all-phases-complete",
-  "current_step": "所有 Phase A—D 已完成",
+  "phase": "embedded-files-refactor",
+  "current_step": "B/C 轮全部完成，无活跃计划",
   "completed_phases": [
     "Phase 1-5b: all bridge commands",
     "Knowledge base enhancement (tags/usage/permissions/notes)",
@@ -16,25 +16,32 @@
     "Phase C2: logcat 增强 (watch-crash, tag presets)",
     "Phase D: aidev-index 代码搜索索引",
     "PwdFileObserver fix: FileObserver → coroutine polling",
-    "OpenCode setup integration: install + command registration"
+    "OpenCode setup integration: install + command registration",
+    "Round A (Host merge): already done - three helpers share FilePageHost",
+    "B-Phase 1a: FilePageState data class + MutableStateFlow + 6 field delegated vars",
+    "B-Phase 1b: FilePageState expanded to 18 fields (preview/multiSelect/debounce/sync)",
+    "B-Phase 2a: MultiSelectHandler extracted from EmbeddedFilesPage",
+    "B-Phase 2b: NavigationHandler extracted from EmbeddedFilesPage",
+    "B-Phase 2c: FileUtils object extracted from EmbeddedFilesPage",
+    "Round C-1: MultiSelectHandlerTest (15 tests)",
+    "Round C-2: NavigationHandlerTest (10 tests)",
+    "Round C-3: FileUtilsTest (14 tests)",
+    "Cleanup: removed dead hostUi() and hostGetSelectedFile() from FilePageHost"
   ],
   "completed_steps": [
-    "knowledge_base.json: 新增 android-sdk 分类 + builtin 条目 × 7",
-    "assets/scripts/aidev-apk-info.sh: APK 解析 (aapt2 dump badging + 中文格式化)",
-    "assets/scripts/aidev-build.sh: 智能构建 (auto/full/test/compile + 错误诊断)",
-    "assets/scripts/aidev-create-android-project.sh: 项目骨架生成",
-    "assets/scripts/aidev-gen.sh: 代码生成 (activity/fragment/viewmodel)",
-    "assets/scripts/aidev-error-why.sh: 错误诊断引擎 (11 种模式)",
-    "assets/scripts/aidev-logcat.sh: 增强 (--tags, --watch-crash)",
-    "assets/scripts/aidev-index.sh: 代码搜索索引 (class/res/string/layout/function)",
-    "UbuntuBootstrapScripts.kt: copyAssetScripts + ubuntu-core case 全部注册",
-    "TerminalShellAssets.kt: .aidevrc 函数注册",
-    "Constants.kt: ASSET_VERSION → 0.12.44-android-devtools",
-    "PwdFileObserver.kt: 重写为 coroutine 轮询 (500ms)",
-    "EmbeddedShellPages.kt: pwdScope 管理 + initPwdObserver 简化",
-    "opencode-install.sh: 重写为两阶段（安装 + 配置），7 个 command 文件内嵌",
-    "AGENTS.md: 添加 Android Development Tools 节，指导 OpenCode 使用 aidev 工具",
-    "knowledge_base.json: 更新 opencode-install 条目"
+    "FilePageState.kt: created data class with 6 fields",
+    "EmbeddedFilesPage.kt: MutableStateFlow + delegated var for activeLeft/leftDir/rightDir/selectedFile/multiMode/multiPaneSide",
+    "FilePageHost.kt: host interface implementations updated to use delegated vars",
+    "FilePageState.kt: expanded to 18 fields",
+    "EmbeddedFilesPage.kt: added 12 delegated vars, replaced all MutableSet mutations",
+    "MultiSelectHandler.kt: created - enter/exit/toggle/selectAll/invert/rangeSelect",
+    "NavigationHandler.kt: created - navigateTo/syncPanes/onBackPressed/syncNavigateToSplit",
+    "FileUtils.kt: created - formatSize/isHtmlFile/isEnhancedFile/getHighlightLanguage/isImageFile/isLikelyText",
+    "FilePageHost.kt: added hostAnchorFile, hostGetPaneFiles; removed hostUi, hostGetSelectedFile",
+    "FileUtilsTest.kt: 14 tests covering all file utility functions",
+    "MultiSelectHandlerTest.kt: 15 tests with TestFilePageHost fake",
+    "NavigationHandlerTest.kt: 10 tests with TestFilePageHost fake",
+    "APK build verified: BUILD SUCCESSFUL, 78/78 tests pass"
   ],
   "pending_steps": []
 }
