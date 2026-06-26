@@ -346,7 +346,8 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
                 val drawable = uri?.let {
                     runCatching {
                         activity.contentResolver.openInputStream(android.net.Uri.parse(it)).use { input ->
-                            BitmapDrawable(activity.resources, BitmapFactory.decodeStream(input)).apply {
+                            val opts = BitmapFactory.Options().apply { inSampleSize = 4 }
+                            BitmapDrawable(activity.resources, BitmapFactory.decodeStream(input, null, opts)).apply {
                                 gravity = Gravity.CENTER
                                 alpha = 255
                             }

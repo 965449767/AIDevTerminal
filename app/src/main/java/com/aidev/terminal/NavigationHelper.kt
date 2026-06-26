@@ -3,30 +3,12 @@ package com.aidev.terminal
 import android.app.Activity
 import android.os.Environment
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-internal interface NavigationHost {
-    val hostScope: CoroutineScope
-    fun hostActivity(): Activity
-    fun hostUi(): AIDevUi
-    fun hostPm(): PreferencesManager
-    fun hostActiveDir(): File
-    var hostActiveLeft: Boolean
-    var hostLeftDir: File
-    var hostRightDir: File
-    fun hostSetSelectedFile(file: File?)
-    fun hostGetSelectedFile(): File?
-    fun hostLoadPane(left: Boolean)
-    fun hostToast(msg: String)
-    fun hostRememberRecentDir(dir: File)
-    fun hostInputAllowAny(title: String, hint: String, cb: (String) -> Unit)
-}
-
-internal class NavigationHelper(private val h: NavigationHost) {
+internal class NavigationHelper(private val h: FilePageHost) {
 
     fun searchActiveDir() {
         h.hostInputAllowAny("搜索文件", "输入文件名关键词") { keyword ->
@@ -51,11 +33,11 @@ internal class NavigationHelper(private val h: NavigationHost) {
                         .setItems(matches.map { it.absolutePath.removePrefix(base.absolutePath).ifBlank { it.absolutePath } }.toTypedArray()) { _, which ->
                             val file = matches[which]
                             if (file.isDirectory) {
-                                if (h.hostActiveLeft) h.hostLeftDir = file else h.hostRightDir = file
+                                h.hostNavigateTo(file)
                             } else {
                                 h.hostSetSelectedFile(file)
+                                h.hostLoadPane(h.hostActiveLeft)
                             }
-                            h.hostLoadPane(h.hostActiveLeft)
                         }
                         .show()
                 }
@@ -84,8 +66,7 @@ internal class NavigationHelper(private val h: NavigationHost) {
                     h.hostToast("路径不可用")
                     return@setItems
                 }
-                if (h.hostActiveLeft) h.hostLeftDir = dir else h.hostRightDir = dir
-                h.hostLoadPane(h.hostActiveLeft)
+                h.hostNavigateTo(dir)
             }
             .setNegativeButton("清空收藏") { _, _ ->
                 h.hostPm().fileFavorites = emptySet()
@@ -108,9 +89,8 @@ internal class NavigationHelper(private val h: NavigationHost) {
             .setTitle("常用目录")
             .setItems(dirs.map { "${it.first}\n${it.second.absolutePath}" }.toTypedArray()) { _, which ->
                 val dir = dirs[which].second
-                if (h.hostActiveLeft) h.hostLeftDir = dir else h.hostRightDir = dir
                 h.hostRememberRecentDir(dir)
-                h.hostLoadPane(h.hostActiveLeft)
+                h.hostNavigateTo(dir)
             }
             .show()
     }
@@ -131,9 +111,8 @@ internal class NavigationHelper(private val h: NavigationHost) {
             .setTitle("最近项目")
             .setItems(dirs.map { "${it.name}\n${it.absolutePath}" }.toTypedArray()) { _, which ->
                 val dir = dirs[which]
-                if (h.hostActiveLeft) h.hostLeftDir = dir else h.hostRightDir = dir
                 h.hostRememberRecentDir(dir)
-                h.hostLoadPane(h.hostActiveLeft)
+                h.hostNavigateTo(dir)
             }
             .show()
     }

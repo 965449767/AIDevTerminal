@@ -5,28 +5,7 @@ import android.os.Build
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.File
 
-internal interface ProjectToolsHost {
-    fun hostActivity(): Activity
-    fun hostUi(): AIDevUi
-    fun hostPm(): PreferencesManager
-    fun hostSelectedFile(): File?
-    fun hostSetSelectedFile(file: File?)
-    fun hostActiveDir(): File
-    var hostActiveLeft: Boolean
-    var hostLeftDir: File
-    var hostRightDir: File
-    fun hostClearSelection()
-    fun hostLoadPane(left: Boolean)
-    fun hostReloadAll()
-    fun hostCopyText(label: String, text: String)
-    fun hostToast(msg: String)
-    fun hostEditSelected()
-    fun hostCopySelectedPath()
-    fun hostRememberRecentDir(dir: File)
-    fun hostFormatSize(n: Long): String
-}
-
-internal class ProjectToolsHelper(private val h: ProjectToolsHost) {
+internal class ProjectToolsHelper(private val h: FilePageHost) {
 
     fun inspectProject() {
         val dir = h.hostSelectedFile()?.takeIf { it.isDirectory } ?: h.hostActiveDir()
@@ -116,9 +95,8 @@ internal class ProjectToolsHelper(private val h: ProjectToolsHost) {
             h.hostToast("未标记当前项目")
             return
         }
-        if (h.hostActiveLeft) h.hostLeftDir = dir else h.hostRightDir = dir
         h.hostClearSelection()
-        h.hostLoadPane(h.hostActiveLeft)
+        h.hostNavigateTo(dir)
     }
 
     fun clearCurrentProject() {

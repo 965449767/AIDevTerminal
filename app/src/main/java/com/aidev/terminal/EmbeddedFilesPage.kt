@@ -44,7 +44,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class EmbeddedFilesPage : ShellPage, ProjectToolsHost, FileOperationsHost, NavigationHost {
+class EmbeddedFilesPage : ShellPage, FilePageHost {
     private lateinit var activity: Activity
     private lateinit var ui: AIDevUi
     private lateinit var leftList: LinearLayout
@@ -460,11 +460,7 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost, FileOperationsHost, Navig
                     if (multiMode) {
                         toggleMultiSelect(file, isLeft)
                     } else if (file.isDirectory) {
-                        if (isLeft) leftDir = file else rightDir = file
-                        selectedFile = null
-                        rememberRecentDir(file)
-                        fileOps.notifyTerminalCd(file)
-                        loadPane(true); loadPane(false)
+                        navigateTo(file)
                     } else if (!parent) {
                         openFile(file)
                     }
@@ -590,11 +586,7 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost, FileOperationsHost, Navig
                             v.postDelayed({
                                 if (hoverPending && file.isDirectory) {
                                     hoverPending = false
-                                    if (isLeft) leftDir = file else rightDir = file
-                                    selectedFile = null
-                                    rememberRecentDir(file)
-                                    fileOps.notifyTerminalCd(file)
-                                    loadPane(true); loadPane(false)
+                                    navigateTo(file)
                                 }
                             }, 500)
                             true
@@ -670,8 +662,7 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost, FileOperationsHost, Navig
         val sdRoot = Environment.getExternalStorageDirectory()
         val parent = dir.parentFile
         if (dir != sdRoot && parent != null) {
-            if (activeLeft) leftDir = parent else rightDir = parent
-            reloadAll()
+            navigateTo(parent)
             ui.pulse()
             return true
         }
@@ -699,6 +690,14 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost, FileOperationsHost, Navig
                 pendingSyncPath = targetDir.absolutePath
             }
         }
+    }
+
+    private fun navigateTo(dir: File) {
+        if (activeLeft) leftDir = dir else rightDir = dir
+        selectedFile = null
+        rememberRecentDir(dir)
+        loadPane(true); loadPane(false)
+        fileOps.notifyTerminalCd(dir)
     }
 
     private fun modeButton(text: String, click: () -> Unit): View =
@@ -1177,31 +1176,38 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost, FileOperationsHost, Navig
     private fun previewSelected() {
         val src = selected() ?: return toast("请先选择文件")
         if (!src.isFile) return toast("目录不能预览")
-        when {
-            src.name.endsWith(".apk", ignoreCase = true) -> projectTools.showApkInfo(src)
-            isImageFile(src) -> showImageInfo(src)
-            isLikelyText(src) && src.length() <= 512 * 1024 -> showFilePreview(src)
-            else -> showBinaryInfo(src)
+        if (src.name.endsWith(".apk", ignoreCase = true)) { projectTools.showApkInfo(src); return }
+        if (isImageFile(src)) { showImageInfo(src); return }
+        scope.launch {
+            val isText = withContext(Dispatchers.IO) { isLikelyText(src) }
+            if (isText && src.length() <= 512 * 1024) showFilePreview(src)
+            else if (!isText) showBinaryInfo(src)
+            else toast("该文件不适合直接预览")
         }
     }
 
     private fun editSelected() {
         val src = selected() ?: return toast("请先选择文本文件")
         if (!src.isFile) return toast("目录不能编辑")
-        if (!isLikelyText(src)) return toast("该文件不像文本文件")
         if (src.length() > 1024 * 1024) return toast("文件过大，请用终端编辑")
-        showFilePreview(src, editMode = true)
+        scope.launch {
+            val isText = withContext(Dispatchers.IO) { isLikelyText(src) }
+            if (!isText) toast("该文件不像文本文件")
+            else showFilePreview(src, editMode = true)
+        }
     }
 
     private fun showImageInfo(file: File) {
         val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(file.absolutePath, options)
-        MaterialAlertDialogBuilder(activity)
-            .setTitle("图片信息")
-            .setMessage("文件：${file.name}\n尺寸：${options.outWidth} × ${options.outHeight}\n类型：${options.outMimeType ?: file.extension}\n大小：${formatSize(file.length())}\n路径：${file.absolutePath}")
-            .setPositiveButton("复制路径") { _, _ -> copySelectedPath() }
-            .setNegativeButton("关闭", null)
-            .show()
+        scope.launch {
+            withContext(Dispatchers.IO) { BitmapFactory.decodeFile(file.absolutePath, options) }
+            MaterialAlertDialogBuilder(activity)
+                .setTitle("图片信息")
+                .setMessage("文件：${file.name}\n尺寸：${options.outWidth} × ${options.outHeight}\n类型：${options.outMimeType ?: file.extension}\n大小：${formatSize(file.length())}\n路径：${file.absolutePath}")
+                .setPositiveButton("复制路径") { _, _ -> copySelectedPath() }
+                .setNegativeButton("关闭", null)
+                .show()
+        }
     }
 
     private fun showBinaryInfo(file: File) {
@@ -1621,6 +1627,7 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
     override fun hostExitMultiMode() { exitMultiMode() }
     override fun hostUpdateMultiInfo() { updateMultiInfo() }
     override fun hostInputAllowAny(title: String, hint: String, cb: (String) -> Unit) { inputAllowAny(title, hint, cb) }
+    override fun hostNavigateTo(dir: File) { navigateTo(dir) }
 
     override val hostScope: CoroutineScope get() = scope
     override fun hostGetSelectedFile(): File? = selectedFile
