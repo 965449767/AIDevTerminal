@@ -9,7 +9,7 @@ import android.view.KeyEvent
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputConnectionWrapper
-import android.widget.EditText
+import androidx.appcompat.widget.AppCompatEditText
 
 /**
  * IME 代理 EditText，用于处理输入法相关功能
@@ -21,7 +21,7 @@ import android.widget.EditText
  * 
  * @author Terminal Team
  */
-class TerminalImeProxyEditText(context: Context) : EditText(context) {
+class TerminalImeProxyEditText(context: Context) : AppCompatEditText(context) {
     var onComposingChanged: (String) -> Unit = {}
     var onCommittedText: (String) -> Unit = {}
     var onBackspace: () -> Unit = {}

@@ -11,6 +11,7 @@ import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.util.concurrent.CountDownLatch
 
+@Suppress("StaticFieldLeak")
 object ShizukuBridgeService {
 
     private const val BRIDGE_DIR = ".aidev-shizuku-bridge"

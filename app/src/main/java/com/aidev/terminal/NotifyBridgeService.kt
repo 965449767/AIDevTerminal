@@ -9,6 +9,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
 
+@Suppress("StaticFieldLeak")
 object NotifyBridgeService {
 
     private const val BRIDGE_DIR = ".aidev-notify"

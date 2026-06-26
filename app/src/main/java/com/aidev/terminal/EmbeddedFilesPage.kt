@@ -151,7 +151,7 @@ class EmbeddedFilesPage : ShellPage {
             addView(splitView, FrameLayout.LayoutParams(-1, -1))
             addView(treeContainer, FrameLayout.LayoutParams(-1, -1))
         }
-        root.addView(contentContainer!!, LinearLayout.LayoutParams(-1, 0, 1f))
+        contentContainer?.let { root.addView(it, LinearLayout.LayoutParams(-1, 0, 1f)) }
         buildFilePreviewPanel()
         root.addView(filePreviewPanel, LinearLayout.LayoutParams(-1, 0, 1f))
         buildFileActionBar()

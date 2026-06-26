@@ -164,7 +164,7 @@ class SshBookmarksPage : ShellPage {
     }
 
     private fun showSshInstallPrompt(activity: Activity, host: ShellHost, conn: SshConnection) {
-        val palette = ui!!.palette
+        val palette = ui?.palette ?: return
         val dialog = MaterialAlertDialogBuilder(activity)
             .setTitle("SSH 客户端未安装")
             .setMessage("需要在 Ubuntu 中安装 openssh-client，是否继续？")

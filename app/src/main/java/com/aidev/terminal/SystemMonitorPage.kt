@@ -303,7 +303,8 @@ class SystemMonitorPage : ShellPage {
                 var first = true
                 while (reader.readLine().also { line = it } != null) {
                     if (first) { first = false; continue }
-                    val parts = line!!.trim().split(Regex("\\s+"))
+                    val lineStr = line ?: continue
+                    val parts = lineStr.trim().split(Regex("\\s+"))
                     if (parts.size >= 6) {
                         result.add(DiskInfo(
                             filesystem = parts[0],
@@ -334,7 +335,8 @@ class SystemMonitorPage : ShellPage {
                 var first = true
                 while (reader.readLine().also { line = it } != null) {
                     if (first) { first = false; continue }
-                    val parts = line!!.trim().split(Regex("\\s+"))
+                    val lineStr = line ?: continue
+                    val parts = lineStr.trim().split(Regex("\\s+"))
                     if (parts.size >= 11) {
                         result.add(ProcessInfo(
                             user = parts[0],

@@ -83,7 +83,11 @@ object ShizukuLogcat {
                 val cmd = buildLogcatCommand(packageName, lines, filters, follow = false, level = level, tag = tag)
                 Log.d(TAG, "Executing: $cmd")
 
-                val process = newProcessMethod!!.invoke(
+                val method = newProcessMethod ?: run {
+                    callback(Result.failure(RuntimeException("Shizuku newProcess 方法不可用")))
+                    return@Thread
+                }
+                val process = method.invoke(
                     null,
                     arrayOf("sh", "-c", cmd),
                     null,
@@ -133,7 +137,11 @@ object ShizukuLogcat {
             val cmd = buildLogcatCommand(packageName, 0, filters, follow = true, level = level, tag = tag)
             Log.d(TAG, "Starting stream: $cmd")
 
-            val process = newProcessMethod!!.invoke(
+            val method = newProcessMethod ?: run {
+                onError("Shizuku newProcess 方法不可用")
+                return null
+            }
+            val process = method.invoke(
                 null,
                 arrayOf("sh", "-c", cmd),
                 null,
@@ -204,7 +212,8 @@ object ShizukuLogcat {
         if (!isAvailable()) return
         Thread {
             try {
-                val process = newProcessMethod!!.invoke(
+                val method = newProcessMethod ?: return@Thread
+                val process = method.invoke(
                     null, arrayOf("sh", "-c", "logcat -c"), null, null
                 ) as? java.lang.Process
                 process?.waitFor()
