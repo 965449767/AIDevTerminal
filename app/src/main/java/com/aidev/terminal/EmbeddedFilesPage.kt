@@ -287,18 +287,35 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost, FileOperationsHost, Navig
                         val paths = event.localState as? List<*>
                         dragLog("DROP isLeft=$isLeft paths=${paths?.joinToString(",")}")
                         if (paths != null) {
-                            val results = paths.mapNotNull { it as? String }.map { path ->
-                                val src = File(path)
-                                val dst = File(if (isLeft) leftDir else rightDir, src.name)
-                                src.exists() && !dst.exists() && runCatching {
-                                        if (src.isDirectory) fileOps.copyDir(src, dst) else src.copyTo(dst)
-                                    true
-                                }.getOrDefault(false)
+                            val srcPaths = paths.mapNotNull { it as? String }
+                            if (srcPaths.any { File(it).isDirectory }) {
+                                scope.launch {
+                                    val ok = withContext(Dispatchers.IO) {
+                                        srcPaths.all { path ->
+                                            val src = File(path)
+                                            val dst = File(if (isLeft) leftDir else rightDir, src.name)
+                                            src.exists() && !dst.exists() && runCatching {
+                                                fileOps.copyDir(src, dst)
+                                                true
+                                            }.getOrDefault(false)
+                                        }
+                                    }
+                                    dragLog("DROP async ok=$ok")
+                                    if (ok) { ui.pulse(); loadPane(isLeft); updatePathBar() }
+                                }
+                            } else {
+                                val ok = srcPaths.all { path ->
+                                    val src = File(path)
+                                    val dst = File(if (isLeft) leftDir else rightDir, src.name)
+                                    src.exists() && !dst.exists() && runCatching {
+                                        src.copyTo(dst)
+                                        true
+                                    }.getOrDefault(false)
+                                }
+                                dragLog("DROP ok=$ok")
+                                if (ok) { ui.pulse(); loadPane(isLeft); updatePathBar() }
                             }
-                            val ok = results.isNotEmpty() && results.all { it }
-                            dragLog("DROP ok=$ok")
-                            if (ok) { ui.pulse(); loadPane(isLeft); updatePathBar() }
-                            ok
+                            true
                         } else {
                             dragLog("DROP localState null or not List")
                             false
@@ -592,20 +609,40 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost, FileOperationsHost, Navig
                             hoverPending = false
                             val paths = event.localState as? List<*>
                             if (paths != null) {
-                                var ok = 0; var fail = 0
-                                paths.mapNotNull { it as? String }.forEach { path ->
-                                    val src = File(path)
-                                    val dst = File(file, src.name)
-                                    try {
-                                    if (src.isDirectory) fileOps.copyDir(src, dst) else src.copyTo(dst)
-                                        ok++
-                                    } catch (e: Exception) {
-                                        fail++; dragLog("drop to dir failed: ${src.name}: ${e.message}")
+                                val srcPaths = paths.mapNotNull { it as? String }
+                                if (srcPaths.any { File(it).isDirectory }) {
+                                    scope.launch {
+                                        var ok = 0; var fail = 0
+                                        withContext(Dispatchers.IO) {
+                                            srcPaths.forEach { path ->
+                                                val src = File(path)
+                                                val dst = File(file, src.name)
+                                                try {
+                                                    fileOps.copyDir(src, dst)
+                                                    ok++
+                                                } catch (e: Exception) {
+                                                    fail++; dragLog("drop to dir failed: ${src.name}: ${e.message}")
+                                                }
+                                            }
+                                        }
+                                        toast(if (fail > 0) "已复制 ${ok} 项（${fail} 项失败）" else "已复制 ${ok} 项")
+                                        ui.pulse(); loadPane(isLeft); updatePathBar()
                                     }
+                                } else {
+                                    var ok = 0; var fail = 0
+                                    srcPaths.forEach { path ->
+                                        val src = File(path)
+                                        val dst = File(file, src.name)
+                                        try {
+                                            src.copyTo(dst)
+                                            ok++
+                                        } catch (e: Exception) {
+                                            fail++; dragLog("drop to dir failed: ${src.name}: ${e.message}")
+                                        }
+                                    }
+                                    toast(if (fail > 0) "已复制 ${ok} 项（${fail} 项失败）" else "已复制 ${ok} 项")
+                                    ui.pulse(); loadPane(isLeft); updatePathBar()
                                 }
-                                toast(if (fail > 0) "已复制 ${ok} 项（${fail} 项失败）" else "已复制 ${ok} 项")
-                                ui.pulse()
-                                loadPane(isLeft); updatePathBar()
                             }
                             true
                         }
