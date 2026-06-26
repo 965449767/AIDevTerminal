@@ -52,3 +52,31 @@ JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64 ./gradlew assembleDebug --no-daemon
 - UI via AIDevUi helper class
 - Coroutines + Flow for async
 - PreferencesManager wrapping SharedPreferences
+
+## Critical Rules
+
+## Android Development Tools
+
+This terminal environment provides custom aidev commands for Android development.
+These are available at `/usr/local/bin/aidev-*` inside the PRoot Ubuntu environment:
+
+| Command | Purpose |
+|---|---|
+| `aidev-build [--full\|--test\|--compile]` | Smart Android build with auto AAPT2 fix and error diagnosis |
+| `aidev-apk-info <file.apk>` | Parse APK (package/version/permissions/components) |
+| `aidev-error-why [keyword]` | Diagnose build errors with Chinese solutions |
+| `aidev-logcat [--tags ...] [--watch-crash]` | Enhanced log viewer with crash monitoring |
+| `aidev-create-android-project <name> <pkg>` | Create new Android project scaffold |
+| `aidev-gen activity\|fragment\|viewmodel <name>` | Generate component skeleton code |
+| `aidev-index class\|res\|layout\|string\|function <kw>` | Code search index for Android projects |
+
+Run `opencode-install` once to register these as OpenCode custom commands
+(installs OpenCode if needed + writes command files to `~/.config/opencode/commands/`).
+
+### 知识库同步规则
+任何涉及新增、修改命令的操作，必须**同时**更新 `res/raw/knowledge_base.json`：
+- 新增命令 → 添加完整条目（title/cmd/desc/tags/usage/permissions/notes）
+- 修改命令行为/参数 → 同步更新 usage 和 notes
+- 删除命令 → 移除对应条目
+- 不允许出现「命令已实现但知识库找不到」的情况
+- 知识库更新和代码修改在同一批次提交，先更新知识库再写代码

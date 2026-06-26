@@ -9,6 +9,8 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.os.StatFs
 import android.provider.Settings
 import android.text.TextUtils
@@ -20,8 +22,11 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.util.Base64
 import android.view.View
 import android.view.ViewOutlineProvider
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
@@ -29,12 +34,13 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.widget.NestedScrollView
 import java.io.File
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -51,17 +57,36 @@ class EmbeddedFilesPage : ShellPage {
     private var collapseBtn: View? = null
     private var toolbarActions: View? = null
     private var treeContainer: View? = null
-    private lateinit var editorPanel: LinearLayout
-    private lateinit var editorName: TextView
-    private lateinit var editorContent: EditText
-    private lateinit var editorInfo: TextView
-    private var editingFile: File? = null
-    private var isEditing = false
-    private var editToggleBtn: View? = null
+    private lateinit var filePreviewPanel: LinearLayout
+    private lateinit var previewName: TextView
+    private lateinit var previewInfo: TextView
+    private lateinit var previewContent: FrameLayout
+    private lateinit var previewEdit: EditText
+    private lateinit var previewScroll: NestedScrollView
+    private lateinit var previewText: TextView
+    private lateinit var previewWeb: WebView
+    private var isPreviewViewMode = false
+    private var isHtmlSourceMode = false
+    private var isPreviewEditMode = false
+    private var previewDirtyDot: View? = null
+    private val dirtyHandler = Handler(Looper.getMainLooper())
+    private val dirtyCheck = object : Runnable {
+        override fun run() {
+            val current = previewEdit.text.toString()
+            isPreviewDirty = previewFile != null && current != previewOriginalText
+            updatePreviewButtons()
+        }
+    }
+    private var previewFile: File? = null
+    private var previewOriginalText = ""
+    private var isPreviewDirty = false
+    private var previewLineCount = 0
+    private lateinit var previewHtmlToggle: View
+    private lateinit var previewEditToggle: View
+    private lateinit var previewSaveBtn: View
+    private var contentContainer: FrameLayout? = null
     private var lastOpenTime = 0L
     private var lastOpenFile: File? = null
-    private var isEditorDirty = false
-    private var originalText = ""
     private var pendingSyncPath: String? = null
     private var multiMode = false
     private var multiPaneSide = true
@@ -118,17 +143,17 @@ class EmbeddedFilesPage : ShellPage {
             )
         }
         treeView = projectTree
-        buildEditorPanel()
         treeContainer = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
-            addView(treeView, LinearLayout.LayoutParams(0, -1, 0.4f))
-            addView(editorPanel, LinearLayout.LayoutParams(0, -1, 0.6f).apply { setMargins(ui.dp(4), 0, 0, 0) })
+            addView(treeView, LinearLayout.LayoutParams(-1, -1))
         }
-        val contentContainer = FrameLayout(activity).apply {
+        contentContainer = FrameLayout(activity).apply {
             addView(splitView, FrameLayout.LayoutParams(-1, -1))
             addView(treeContainer, FrameLayout.LayoutParams(-1, -1))
         }
-        root.addView(contentContainer, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(contentContainer!!, LinearLayout.LayoutParams(-1, 0, 1f))
+        buildFilePreviewPanel()
+        root.addView(filePreviewPanel, LinearLayout.LayoutParams(-1, 0, 1f))
         buildFileActionBar()
         root.addView(fileActionBar, LinearLayout.LayoutParams(-1, ui.dp(42)))
         reloadAll()
@@ -144,7 +169,7 @@ class EmbeddedFilesPage : ShellPage {
     }
 
     override fun onDestroy(activity: Activity) {
-        scope.cancel()
+        scope.coroutineContext[Job]?.children?.forEach { it.cancel() }
     }
 
     private fun toolbar(host: ShellHost): View =
@@ -531,6 +556,58 @@ class EmbeddedFilesPage : ShellPage {
                     gdResult
                 }
             }
+
+            if (file.isDirectory && !parent) {
+                var hoverPending = false
+                setOnDragListener { v, event ->
+                    when (event.action) {
+                        DragEvent.ACTION_DRAG_STARTED -> true
+                        DragEvent.ACTION_DRAG_ENTERED -> {
+                            v.setBackgroundColor(0x3A7C3AED.toInt())
+                            hoverPending = true
+                            v.postDelayed({
+                                if (hoverPending && file.isDirectory) {
+                                    hoverPending = false
+                                    if (isLeft) leftDir = file else rightDir = file
+                                    selectedFile = null
+                                    rememberRecentDir(file)
+                                    notifyTerminalCd(file)
+                                    loadPane(true); loadPane(false)
+                                }
+                            }, 500)
+                            true
+                        }
+                        DragEvent.ACTION_DRAG_EXITED, DragEvent.ACTION_DRAG_ENDED -> {
+                            v.setBackgroundColor(Color.TRANSPARENT)
+                            hoverPending = false
+                            true
+                        }
+                        DragEvent.ACTION_DROP -> {
+                            v.setBackgroundColor(Color.TRANSPARENT)
+                            hoverPending = false
+                            val paths = event.localState as? List<*>
+                            if (paths != null) {
+                                var ok = 0; var fail = 0
+                                paths.mapNotNull { it as? String }.forEach { path ->
+                                    val src = File(path)
+                                    val dst = File(file, src.name)
+                                    try {
+                                        if (src.isDirectory) copyDir(src, dst) else src.copyTo(dst)
+                                        ok++
+                                    } catch (e: Exception) {
+                                        fail++; dragLog("drop to dir failed: ${src.name}: ${e.message}")
+                                    }
+                                }
+                                toast(if (fail > 0) "已复制 ${ok} 项（${fail} 项失败）" else "已复制 ${ok} 项")
+                                ui.pulse()
+                                loadPane(isLeft); updatePathBar()
+                            }
+                            true
+                        }
+                        else -> true
+                    }
+                }
+            }
         }
 
     private fun dragLog(msg: String) {
@@ -626,16 +703,43 @@ class EmbeddedFilesPage : ShellPage {
         }
     }
 
-    private fun buildEditorPanel() {
-        editorPanel = LinearLayout(activity).apply {
+    private fun buildFilePreviewPanel() {
+        filePreviewPanel = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(ui.dp(4), 0, 0, 0)
+            setPadding(ui.dp(4), 0, ui.dp(4), 0)
+            visibility = View.GONE
         }
-        editorName = ui.text("", 12f, ui.palette.accent, bold = true).apply {
+        val header = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(ui.dp(6), ui.dp(6), ui.dp(6), ui.dp(6))
+            background = paneHeaderBg()
+        }
+        val closeBtn = TextView(activity).apply {
+            text = "\u2715"
+            textSize = 16f
+            setTextColor(ui.palette.accent)
+            gravity = Gravity.CENTER
+            setPadding(ui.dp(8), ui.dp(4), ui.dp(8), ui.dp(4))
+            setOnClickListener { closeFilePreview() }
+        }
+        val nameLayout = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, 0, ui.dp(8), 0)
+        }
+        previewName = ui.text("", 13f, ui.palette.accent, bold = true).apply {
+            setPadding(0, 0, 0, ui.dp(2))
+        }
+        previewInfo = ui.text("", 11f, ui.palette.muted)
+        nameLayout.addView(previewName, LinearLayout.LayoutParams(-1, -2))
+        nameLayout.addView(previewInfo, LinearLayout.LayoutParams(-1, -2))
+        header.addView(nameLayout, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(closeBtn, LinearLayout.LayoutParams(-2, -2))
+        filePreviewPanel.addView(header, LinearLayout.LayoutParams(-1, -2))
+
+        previewContent = FrameLayout(activity).apply {
             setPadding(0, ui.dp(4), 0, ui.dp(4))
         }
-        editorPanel.addView(editorName, LinearLayout.LayoutParams(-1, -2))
-        editorContent = EditText(activity).apply {
+        previewEdit = EditText(activity).apply {
             isFocusable = false
             isClickable = true
             setTextColor(ui.palette.text)
@@ -644,35 +748,67 @@ class EmbeddedFilesPage : ShellPage {
             setPadding(ui.dp(6), ui.dp(6), ui.dp(6), ui.dp(6))
             textSize = 12f
             typeface = android.graphics.Typeface.MONOSPACE
-            hint = "\u2190 点击文件以预览"
             gravity = Gravity.TOP
-            layoutParams = LinearLayout.LayoutParams(-1, 0, 1f)
+            layoutParams = FrameLayout.LayoutParams(-1, -1)
             addTextChangedListener(object : android.text.TextWatcher {
-                private var timer: java.util.Timer? = null
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                    timer?.cancel(); timer?.purge()
-                    timer = java.util.Timer()
-                    timer?.schedule(object : java.util.TimerTask() {
-                        override fun run() {
-                            val current = editorContent.text.toString()
-                            isEditorDirty = editingFile != null && current != originalText
-                        }
-                    }, 250)
+                    dirtyHandler.removeCallbacks(dirtyCheck)
+                    dirtyHandler.postDelayed(dirtyCheck, 250)
                 }
                 override fun afterTextChanged(s: Editable?) {}
             })
         }
-        editorPanel.addView(editorContent)
-        editorInfo = ui.text("", 11f, ui.palette.muted)
+        previewContent.addView(previewEdit)
+        previewText = TextView(activity).apply {
+            setTextColor(ui.palette.text)
+            setBackgroundColor(ui.palette.surfaceAlt)
+            setPadding(ui.dp(6), ui.dp(6), ui.dp(6), ui.dp(6))
+            textSize = 12f
+            typeface = android.graphics.Typeface.MONOSPACE
+            gravity = Gravity.TOP
+        }
+        previewScroll = NestedScrollView(activity).apply {
+            addView(previewText)
+            layoutParams = FrameLayout.LayoutParams(-1, -1)
+            visibility = View.GONE
+        }
+        previewContent.addView(previewScroll)
+        previewWeb = WebView(activity).apply {
+            settings.javaScriptEnabled = true
+            settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            settings.allowFileAccess = true
+            settings.domStorageEnabled = true
+            settings.loadWithOverviewMode = true
+            settings.useWideViewPort = true
+            settings.builtInZoomControls = true
+            settings.setSupportZoom(true)
+            layoutParams = FrameLayout.LayoutParams(-1, -1)
+            visibility = View.GONE
+        }
+        previewContent.addView(previewWeb)
+        filePreviewPanel.addView(previewContent, LinearLayout.LayoutParams(-1, 0, 1f))
+
         val bottomBar = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
-            addView(editorInfo, LinearLayout.LayoutParams(0, -2, 1f))
-            addView(action("🔒 只读") { toggleEditorMode() }.also { editToggleBtn = it })
-            addView(action("保存") { saveEditorContent() })
-            addView(action("预览") { previewCurrentEditor() })
+            setPadding(ui.dp(4), ui.dp(2), ui.dp(4), ui.dp(2))
+            background = ui.surfaceBackground()
         }
-        editorPanel.addView(bottomBar, LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, ui.dp(2), 0, 0) })
+        previewHtmlToggle = action("源码") { toggleHtmlMode() }
+        previewEditToggle = action("编辑") { togglePreviewEditMode() }
+        previewSaveBtn = action("保存") { savePreviewContent() }
+        previewDirtyDot = View(activity).apply {
+            setBackgroundColor(0xFFFFD700.toInt())
+            val s = ui.dp(8)
+            layoutParams = LinearLayout.LayoutParams(s, s)
+            (layoutParams as LinearLayout.LayoutParams).setMargins(0, 0, ui.dp(2), 0)
+            visibility = View.GONE
+        }
+        bottomBar.addView(previewHtmlToggle)
+        bottomBar.addView(previewEditToggle)
+        bottomBar.addView(previewDirtyDot)
+        bottomBar.addView(previewSaveBtn)
+        filePreviewPanel.addView(bottomBar, LinearLayout.LayoutParams(-1, -2))
     }
 
     private fun buildFileActionBar() {
@@ -694,6 +830,192 @@ class EmbeddedFilesPage : ShellPage {
                 addView(action("\u5220\u9664") { deleteSelected() })
             })
         }
+    }
+
+    private fun showFilePreview(file: File, editMode: Boolean = false) {
+        if (!file.isFile) return
+        previewFile = file
+        isPreviewEditMode = editMode
+        isPreviewViewMode = false
+        isHtmlSourceMode = false
+        isPreviewDirty = false
+        pathBar.visibility = View.GONE
+        modeToggle.visibility = View.GONE
+        contentContainer?.visibility = View.GONE
+        filePreviewPanel.visibility = View.VISIBLE
+        previewEdit.visibility = View.GONE
+        previewScroll.visibility = View.VISIBLE
+        previewWeb.visibility = View.GONE
+        val isHtml = isHtmlFile(file)
+        previewHtmlToggle.visibility = if (isHtml || isEnhancedFile(file)) View.VISIBLE else View.GONE
+        scope.launch {
+            val text = withContext(Dispatchers.IO) {
+                runCatching { file.readText() }.getOrElse { "无法读取：${it.message}" }
+            }
+            previewOriginalText = text
+            previewText.text = text
+            previewEdit.setText(text)
+            previewEdit.setSelection(0)
+            previewEdit.isFocusable = false
+            previewEdit.isClickable = true
+            previewLineCount = text.count { it == '\n' } + (if (text.isNotEmpty()) 1 else 0)
+            val trunc = text.length > 512 * 1024 && isEnhancedFile(file) && !isHtml
+            updatePreviewHeader(file, text, trunc)
+            when {
+                isHtml && !editMode -> showHtmlRender(file)
+                isEnhancedFile(file) && !editMode -> loadEnhancedPreview(file, text)
+            }
+            updatePreviewButtons()
+        }
+    }
+
+    private fun closeFilePreview() {
+        if (isPreviewDirty && previewFile != null) {
+            MaterialAlertDialogBuilder(activity)
+                .setTitle("未保存的修改")
+                .setMessage("文件 \"${previewFile?.name}\" 已修改，是否保存？")
+                .setPositiveButton("保存") { _, _ -> savePreviewContent(after = { doClosePreview() }) }
+                .setNegativeButton("不保存") { _, _ -> doClosePreview() }
+                .setNeutralButton("取消", null)
+                .show()
+        } else {
+            doClosePreview()
+        }
+    }
+
+    private fun doClosePreview() {
+        pathBar.visibility = View.VISIBLE
+        modeToggle.visibility = View.VISIBLE
+        filePreviewPanel.visibility = View.GONE
+        contentContainer?.visibility = View.VISIBLE
+        previewFile = null
+        previewText.text = ""
+        previewEdit.setText("")
+        previewEdit.isFocusable = false
+        previewWeb.loadUrl("about:blank")
+        previewWeb.visibility = View.GONE
+        previewEdit.visibility = View.VISIBLE
+        previewScroll.visibility = View.GONE
+        isPreviewViewMode = false
+        isHtmlSourceMode = false
+        isPreviewDirty = false
+    }
+
+    private fun showHtmlRender(file: File?) {
+        val f = file ?: return
+        isPreviewViewMode = true
+        isHtmlSourceMode = false
+        previewScroll.visibility = View.GONE
+        previewEdit.visibility = View.GONE
+        previewWeb.visibility = View.VISIBLE
+        previewWeb.loadUrl("file://${f.absolutePath}")
+        updatePreviewButtons()
+    }
+
+    private fun toggleHtmlMode() {
+        val file = previewFile ?: return
+        if (isHtmlFile(file)) {
+            if (isPreviewViewMode && !isHtmlSourceMode) {
+                isHtmlSourceMode = true
+                loadEnhancedPreview(file, previewEdit.text.toString())
+            } else {
+                showHtmlRender(file)
+            }
+        } else if (isPreviewViewMode) {
+            isPreviewViewMode = false
+            previewWeb.visibility = View.GONE
+            previewScroll.visibility = View.VISIBLE
+            previewEdit.visibility = View.GONE
+        } else {
+            loadEnhancedPreview(file, previewEdit.text.toString())
+        }
+        updatePreviewButtons()
+    }
+
+    private fun togglePreviewEditMode() {
+        val file = previewFile ?: return
+        if (isPreviewViewMode) {
+            isPreviewViewMode = false
+            previewWeb.visibility = View.GONE
+            previewScroll.visibility = View.GONE
+            previewEdit.visibility = View.VISIBLE
+            isPreviewEditMode = true
+            previewEdit.isFocusable = true
+            previewEdit.isFocusableInTouchMode = true
+            previewEdit.requestFocus()
+        } else if (isPreviewEditMode) {
+            isPreviewEditMode = false
+            previewEdit.isFocusable = false
+            previewEdit.isClickable = true
+            when {
+                isHtmlFile(file) -> showHtmlRender(file)
+                isEnhancedFile(file) -> loadEnhancedPreview(file, previewEdit.text.toString())
+                else -> {
+                    previewText.text = previewEdit.text.toString()
+                    previewEdit.visibility = View.GONE
+                    previewScroll.visibility = View.VISIBLE
+                }
+            }
+        } else {
+            previewScroll.visibility = View.GONE
+            previewEdit.visibility = View.VISIBLE
+            previewEdit.setText(previewText.text)
+            previewEdit.setSelection(previewEdit.text?.length ?: 0)
+            isPreviewEditMode = true
+            previewEdit.isFocusable = true
+            previewEdit.isFocusableInTouchMode = true
+            previewEdit.requestFocus()
+        }
+        updatePreviewButtons()
+    }
+
+    private fun savePreviewContent(after: (() -> Unit)? = null) {
+        val file = previewFile ?: return
+        val text = previewEdit.text.toString()
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching { file.writeText(text) }.isSuccess
+            }
+            if (ok) {
+                isPreviewDirty = false
+                previewOriginalText = text
+                isPreviewEditMode = false
+                previewEdit.isFocusable = false
+                if (::projectTree.isInitialized) projectTree.refresh()
+                toast("已保存")
+                after?.invoke()
+            } else {
+                toast("保存失败")
+            }
+            updatePreviewButtons()
+        }
+    }
+
+    private fun updatePreviewHeader(file: File, text: String, truncated: Boolean = false) {
+        val icon = if (file.name.endsWith(".html", ignoreCase = true) || file.name.endsWith(".htm", ignoreCase = true)) "\uD83C\uDF10" else "\uD83D\uDCC4"
+        previewName.text = "$icon ${file.name}"
+        val kb = formatSize(file.length())
+        val mod = java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(file.lastModified())
+        previewInfo.text = "$kb · ${previewLineCount}行 · $mod${if (truncated) " · 截断至512KB" else ""}"
+    }
+
+    private fun updatePreviewButtons() {
+        val file = previewFile
+        val html = isHtmlFile(file)
+        val enhanced = !html && isEnhancedFile(file)
+        val showViewToggle = html || enhanced
+        previewHtmlToggle.visibility = if (showViewToggle) View.VISIBLE else View.GONE
+        (previewHtmlToggle as? TextView)?.let {
+            if (html) it.text = if (isPreviewViewMode && !isHtmlSourceMode) "源码" else "渲染"
+            else it.text = if (isPreviewViewMode) "源码" else "预览"
+        }
+        (previewEditToggle as? TextView)?.text = when {
+            isPreviewViewMode -> "编辑"
+            isPreviewEditMode -> "预览"
+            else -> "编辑"
+        }
+        previewSaveBtn.isEnabled = isPreviewEditMode && isPreviewDirty
+        previewDirtyDot?.visibility = if (isPreviewEditMode && isPreviewDirty) View.VISIBLE else View.GONE
     }
 
     private fun enterMultiMode(file: File) {
@@ -821,10 +1143,11 @@ class EmbeddedFilesPage : ShellPage {
             .setTitle("\u786E\u8BA4\u5220\u9664")
             .setMessage("\u786E\u5B9A\u5220\u9664\u8FD9 ${targets.size} \u4E2A\u6587\u4EF6/\u76EE\u5F55\uFF1F")
             .setPositiveButton("\u5220\u9664") { _, _ ->
-                targets.forEach { File(it).deleteRecursively() }
+                var fail = 0
+                targets.forEach { if (!File(it).deleteRecursively()) { fail++; dragLog("delete failed: $it") } }
                 if (multiMode) exitMultiMode() else clearSelection()
                 reloadAll()
-                toast("\u5DF2\u5220\u9664 ${targets.size} \u9879")
+                toast("\u5DF2\u5220\u9664 ${targets.size} \u9879${if (fail > 0) "（${fail} 项失败）" else ""}")
             }
             .setNegativeButton("\u53D6\u6D88", null)
             .show()
@@ -851,28 +1174,31 @@ class EmbeddedFilesPage : ShellPage {
         if (!movePaths.isNullOrBlank()) {
             val files = movePaths.lines().map { File(it) }.filter { it.exists() }
             if (files.isEmpty()) return toast("剪切板中的文件已不存在")
+            var moveFail = 0
             files.forEach { src ->
                 val dst = File(dir, src.name)
-                runCatching { src.renameTo(dst) }
+                runCatching { src.renameTo(dst) }.onFailure { moveFail++; dragLog("move failed: ${src.name}: ${it.message}") }
             }
             prefs.edit().remove("aidiv_move").apply()
-            toast("已移动 ${files.size} 项")
+            toast(if (moveFail > 0) "已移动 ${files.size - moveFail} 项（${moveFail} 项失败）" else "已移动 ${files.size} 项")
             reloadAll()
             return
         }
         if (!copyPaths.isNullOrBlank()) {
             val files = copyPaths.lines().map { File(it) }.filter { it.exists() }
             if (files.isEmpty()) return toast("剪贴板中的文件已不存在")
+            var copyFail = 0
             files.forEach { src ->
                 val dst = File(dir, src.name)
-                if (src.isDirectory) {
-                    runCatching { src.copyRecursively(dst, overwrite = false) }
-                } else {
-                    runCatching { src.copyTo(dst, overwrite = false) }
+                try {
+                    if (src.isDirectory) src.copyRecursively(dst, overwrite = false)
+                    else src.copyTo(dst, overwrite = false)
+                } catch (e: Exception) {
+                    copyFail++; dragLog("copy failed: ${src.name}: ${e.message}")
                 }
             }
             prefs.edit().remove("aidiv_copy").apply()
-            toast("已复制 ${files.size} 项")
+            toast(if (copyFail > 0) "已复制 ${files.size - copyFail} 项（${copyFail} 项失败）" else "已复制 ${files.size} 项")
             reloadAll()
             return
         }
@@ -893,113 +1219,6 @@ class EmbeddedFilesPage : ShellPage {
         }
 
         toast("没有可粘贴的内容")
-    }
-
-    private fun loadEditor(file: File) {
-        if (!file.isFile || !isLikelyText(file) || file.length() > 512 * 1024) {
-            editingFile = null
-            editorName.text = ""
-            editorContent.setText("")
-            editorContent.hint = "\u2190 选择文本文件以预览"
-            editorInfo.text = ""
-            return
-        }
-        if (isEditorDirty && editingFile != null) {
-            MaterialAlertDialogBuilder(activity)
-                .setTitle("未保存的修改")
-                .setMessage("文件 \"${editingFile?.name}\" 已修改，是否保存？")
-                .setPositiveButton("保存") { _, _ -> saveEditor(after = { doLoadEditor(file) }) }
-                .setNegativeButton("不保存") { _, _ -> doLoadEditor(file) }
-                .setNeutralButton("取消", null)
-                .show()
-        } else {
-            doLoadEditor(file)
-        }
-    }
-
-    private fun doLoadEditor(file: File) {
-        editingFile = file
-        isEditing = false
-        isEditorDirty = false
-        selectedFile = file
-        activeLeft = true
-        editorName.text = file.name
-        editorContent.isEnabled = false
-        editorContent.hint = "加载中..."
-        val kb = if (file.length() > 1024) "${file.length() / 1024}KB" else "${file.length()}B"
-        val mod = java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(file.lastModified())
-        editorInfo.text = ""
-        scope.launch {
-            val text = withContext(Dispatchers.IO) {
-                runCatching { file.readText() }.getOrElse { "无法读取：${it.message}" }
-            }
-            originalText = text
-            editorContent.setText(text)
-            editorContent.setSelection(0)
-            editorContent.isEnabled = true
-            editorContent.isFocusable = false
-            editorContent.isClickable = true
-            editorInfo.text = "$kb  \u00B7  $mod"
-        }
-    }
-
-    private fun saveEditor(after: (() -> Unit)? = null) {
-        val file = editingFile ?: return
-        val text = editorContent.text.toString()
-        editorContent.isEnabled = false
-        scope.launch {
-            val ok = withContext(Dispatchers.IO) {
-                runCatching { file.writeText(text) }.isSuccess
-            }
-            editorContent.isEnabled = true
-            if (ok) {
-                isEditing = false
-                isEditorDirty = false
-                originalText = text
-                editorContent.isFocusable = false
-                if (::projectTree.isInitialized) projectTree.refresh()
-                after?.invoke()
-            } else {
-                toast("保存失败")
-            }
-        }
-    }
-
-    private fun toggleEditorMode() {
-        if (editingFile == null) return toast("\u8BF7\u5148\u9009\u62E9\u6587\u4EF6")
-        if (isEditing) {
-            isEditing = false
-            editorContent.isFocusable = false
-            (editToggleBtn as? TextView)?.text = "\uD83D\uDD12 只读"
-        } else {
-            isEditing = true
-            editorContent.isFocusable = true
-            editorContent.isFocusableInTouchMode = true
-            editorContent.requestFocus()
-            (editToggleBtn as? TextView)?.text = "\uD83D\uDD13 编辑"
-        }
-    }
-
-    private fun saveEditorContent() {
-        val file = editingFile ?: return toast("请先选择文件")
-        if (!isEditing) return toast("请先点击编辑")
-        saveEditor()
-    }
-
-    private fun previewCurrentEditor() {
-        val file = editingFile ?: return toast("请先选择文件")
-        if (!file.isFile) return
-        if (!isLikelyText(file)) return toast("该文件不像文本文件")
-        val text = editorContent.text.toString()
-        MaterialAlertDialogBuilder(activity)
-            .setTitle(file.name)
-            .setMessage(text.take(12000))
-            .setPositiveButton("复制内容") { _, _ ->
-                copyText("AIDev 文件内容", text)
-                toast("已复制内容")
-            }
-            .setNegativeButton("关闭", null)
-            .show()
     }
 
     private fun notifyTerminalCd(dir: File) {
@@ -1023,11 +1242,13 @@ class EmbeddedFilesPage : ShellPage {
             val src = File(path)
             val dst = File(dstDir, src.name)
             if (dst.exists()) return@count false
-            runCatching {
-                if (src.isDirectory) copyDir(src, dst) else src.copyTo(dst)
-                if (move) src.deleteRecursively()
-                true
-            }.getOrDefault(false)
+            val ok = try {
+                if (src.isDirectory) copyDir(src, dst) else src.copyTo(dst).let { true }
+            } catch (e: Exception) {
+                dragLog("copy error: ${src.name}: ${e.message}"); false
+            }
+            if (ok && move && !src.deleteRecursively()) dragLog("delete after move failed: ${src.name}")
+            ok
         }
         if (multiMode) exitMultiMode() else clearSelection()
         reloadAll()
@@ -1057,20 +1278,12 @@ class EmbeddedFilesPage : ShellPage {
     private fun previewSelected() {
         val src = selected() ?: return toast("请先选择文件")
         if (!src.isFile) return toast("目录不能预览")
-        if (src.name.endsWith(".apk", ignoreCase = true)) return showApkInfo(src)
-        if (isImageFile(src)) return showImageInfo(src)
-        if (!isLikelyText(src)) return showBinaryInfo(src)
-        if (src.length() > 512 * 1024) return showBinaryInfo(src)
-        val text = runCatching { src.readText() }.getOrElse { "无法读取：${it.message}" }
-        MaterialAlertDialogBuilder(activity)
-            .setTitle(src.name)
-            .setMessage(text.take(12000))
-            .setPositiveButton("复制内容") { _, _ ->
-                copyText("AIDev 文件内容", text)
-                toast("已复制内容")
-            }
-            .setNegativeButton("关闭", null)
-            .show()
+        when {
+            src.name.endsWith(".apk", ignoreCase = true) -> showApkInfo(src)
+            isImageFile(src) -> showImageInfo(src)
+            isLikelyText(src) && src.length() <= 512 * 1024 -> showFilePreview(src)
+            else -> showBinaryInfo(src)
+        }
     }
 
     private fun editSelected() {
@@ -1078,116 +1291,7 @@ class EmbeddedFilesPage : ShellPage {
         if (!src.isFile) return toast("目录不能编辑")
         if (!isLikelyText(src)) return toast("该文件不像文本文件")
         if (src.length() > 1024 * 1024) return toast("文件过大，请用终端编辑")
-        val original = runCatching { src.readText() }.getOrElse {
-            toast("读取失败：${it.message}")
-            return
-        }
-        val edit = EditText(activity).apply {
-            setText(original)
-            textSize = 13f
-            setSingleLine(false)
-            minLines = 14
-            gravity = Gravity.START or Gravity.TOP
-        }
-        val scroll = ScrollView(activity).apply { addView(edit) }
-        MaterialAlertDialogBuilder(activity)
-            .setTitle("编辑：${src.name}")
-            .setView(scroll)
-            .setPositiveButton("保存") { _, _ ->
-                runCatching {
-                    val backup = File(src.parentFile ?: activeDir(), "${src.name}.bak")
-                    if (src.exists()) src.copyTo(backup, overwrite = true)
-                    src.writeText(edit.text.toString())
-                    backup
-                }
-                    .onSuccess {
-                        toast("已保存，已生成备份")
-                        reloadAll()
-                    }
-                    .onFailure { toast("保存失败：${it.message}") }
-            }
-            .setNegativeButton("取消", null)
-            .setNeutralButton("更多") { _, _ -> editorMore(src, edit.text.toString()) }
-            .show()
-    }
-
-    private fun editorMore(src: File, content: String) {
-        val backup = File(src.parentFile ?: activeDir(), "${src.name}.bak")
-        MaterialAlertDialogBuilder(activity)
-            .setTitle("编辑操作")
-            .setItems(arrayOf("运行当前文件", "查找内容", "另存编辑内容", "恢复备份", "复制编辑内容")) { _, which ->
-                when (which) {
-                    0 -> runFile(src)
-                    1 -> findInEditorContent(content)
-                    2 -> saveEditorContentAs(src, content)
-                    3 -> restoreBackup(src, backup)
-                    4 -> {
-                        copyText("AIDev 编辑内容", content)
-                        toast("已复制编辑内容")
-                    }
-                }
-            }
-            .show()
-    }
-
-    private fun findInEditorContent(content: String) {
-        inputAllowAny("查找内容", "输入关键词") { keyword ->
-            val lines = content.lines()
-            val matches = lines.mapIndexedNotNull { index, line ->
-                if (line.contains(keyword, ignoreCase = true)) "${index + 1}: $line" else null
-            }.take(80)
-            if (matches.isEmpty()) return@inputAllowAny toast("未找到匹配内容")
-            MaterialAlertDialogBuilder(activity)
-                .setTitle("查找结果")
-                .setMessage(matches.joinToString("\n"))
-                .setPositiveButton("复制结果") { _, _ ->
-                    copyText("AIDev 查找结果", matches.joinToString("\n"))
-                    toast("已复制查找结果")
-                }
-                .setNegativeButton("关闭", null)
-                .show()
-        }
-    }
-
-    private fun runFile(src: File) {
-        val cmd = when (src.extension.lowercase()) {
-            "sh" -> "sh \"${src.absolutePath}\""
-            "py" -> "python3 \"${src.absolutePath}\""
-            "js" -> "node \"${src.absolutePath}\""
-            "kt" -> "cat \"${src.absolutePath}\""
-            else -> "cat \"${src.absolutePath}\""
-        }
-        runInTerminal(cmd)
-    }
-
-    private fun saveEditorContentAs(src: File, content: String) {
-        inputAllowAny("另存编辑内容", "${src.name}.copy") { name ->
-            val dst = File(src.parentFile ?: activeDir(), name)
-            if (dst.exists()) return@inputAllowAny toast("目标已存在")
-            runCatching { dst.writeText(content) }
-                .onSuccess {
-                    reloadAll()
-                    toast("已另存编辑内容")
-                }
-                .onFailure { toast("另存失败：${it.message}") }
-        }
-    }
-
-    private fun restoreBackup(src: File, backup: File) {
-        if (!backup.isFile) return toast("未找到备份文件")
-        MaterialAlertDialogBuilder(activity)
-            .setTitle("恢复备份")
-            .setMessage("将用备份覆盖当前文件：\n${backup.absolutePath}")
-            .setPositiveButton("恢复") { _, _ ->
-                runCatching { backup.copyTo(src, overwrite = true) }
-                    .onSuccess {
-                        reloadAll()
-                        toast("已恢复备份")
-                    }
-                    .onFailure { toast("恢复失败：${it.message}") }
-            }
-            .setNegativeButton("取消", null)
-            .show()
+        showFilePreview(src, editMode = true)
     }
 
     private fun saveSelectedAs() {
@@ -1577,27 +1681,99 @@ class EmbeddedFilesPage : ShellPage {
             .show()
     }
 
-    private fun previewTextFile(file: File) {
-        val dialog = MaterialAlertDialogBuilder(activity)
-            .setTitle(file.name)
-            .setMessage("加载中...")
-            .setNegativeButton("关闭", null)
-            .setPositiveButton("复制路径") { _, _ -> copySelectedPath() }
-            .create()
-        dialog.show()
-        scope.launch {
-            val content = withContext(Dispatchers.IO) {
-                runCatching {
-                    file.readText().let { t ->
-                        if (t.length > 65536) t.take(65536) + "\n\n... (文件过长，仅显示前 64KB)"
-                        else t
-                    }
-                }.getOrElse { "无法读取：${it.message}" }
-            }
-            val info = "${formatSize(file.length())}  ·  ${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(file.lastModified())}\n${file.absolutePath}\n\n"
-            dialog.setMessage(info + content)
+    private fun isHtmlFile(file: File?): Boolean =
+        file?.name?.let { it.endsWith(".html", ignoreCase = true) || it.endsWith(".htm", ignoreCase = true) } ?: false
+
+    private fun isEnhancedFile(file: File?): Boolean {
+        if (file == null) return false
+        val ext = file.extension.lowercase()
+        return ext in setOf("md", "kt", "kts", "java", "js", "mjs", "ts", "py", "rs", "go", "sh", "bash", "cpp", "cc", "c", "h", "swift", "xml", "json", "yaml", "yml", "css", "scss", "sql", "gradle", "toml", "proto", "rb", "php", "pl", "lua", "r", "dart")
+    }
+
+    private fun getHighlightLanguage(file: File?): String {
+        val ext = file?.extension?.lowercase() ?: return ""
+        return when (ext) {
+            "kt", "kts" -> "kotlin"
+            "js", "mjs" -> "javascript"
+            "ts" -> "typescript"
+            "py" -> "python"
+            "sh", "bash" -> "bash"
+            "cpp", "cc" -> "cpp"
+            "md" -> "md"
+            "yml" -> "yaml"
+            "scss" -> "scss"
+            "gradle" -> "gradle"
+            "toml" -> "ini"
+            else -> ext
         }
     }
+
+    private fun loadEnhancedPreview(file: File, text: String, maxLen: Int = 512 * 1024) {
+        val lang = getHighlightLanguage(file)
+        val css = readAssetText("atom-one-dark.min.css")
+        val hljs = readAssetText("highlight.min.js")
+        val isMd = lang == "md"
+        val truncated = text.length > maxLen
+        val displayText = if (truncated) text.take(maxLen) + "\n\n… 文件过大，仅显示前 ${maxLen / 1024}KB" else text
+        val jsLibs = if (isMd) {
+            val marked = readAssetText("marked.min.js")
+            "$hljs\n$marked"
+        } else hljs
+        val bodyContent = if (isMd) {
+            val b64 = Base64.encodeToString(displayText.toByteArray(), Base64.NO_WRAP)
+            """<div id="content"></div>
+<script>
+var b64='$b64';var raw=atob(b64);var bytes=new Uint8Array(raw.length);
+for(var i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+var decoder=new TextDecoder('utf-8');
+document.getElementById('content').innerHTML=marked.parse(decoder.decode(bytes));
+document.querySelectorAll('pre code').forEach(function(b){hljs.highlightElement(b)});
+</script>"""
+        } else {
+            """<pre><code class="language-$lang">${
+                displayText.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            }</code></pre>
+<script>
+document.querySelectorAll('pre code').forEach(function(b){hljs.highlightElement(b)});
+(function(){document.querySelectorAll('pre code').forEach(function(block){
+  var lines=block.innerHTML.split('\n');
+  block.innerHTML=lines.map(function(l){return '<span class=ln>'+(l||'&nbsp;')+'</span>';}).join('\n');
+})})();
+</script>"""
+        }
+        val lnCss = if (!isMd) """
+pre code{counter-reset:ln}
+pre code .ln{display:block;padding-left:3.2em;position:relative;min-height:1.2em}
+pre code .ln::before{counter-increment:ln;content:counter(ln);position:absolute;left:0;width:2.6em;text-align:right;color:#636d83;user-select:none}
+""" else ""
+        val html = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=3">
+<style>$css</style>
+<style>body{background:#282c34;color:#abb2bf;padding:16px;font:14px/1.6 -apple-system,BlinkMacSystemFont,monospace;overflow-x:hidden;word-wrap:break-word}
+pre{background:transparent;white-space:pre-wrap;word-break:break-all;font-size:13px}
+code{font-family:'Fira Code','Cascadia Code','JetBrains Mono','Droid Sans Mono',monospace}
+pre code.hljs{padding:0;background:transparent}#content img{max-width:100%}
+#content table{border-collapse:collapse;width:100%;margin:8px 0}
+#content th,#content td{border:1px solid #4b5263;padding:6px 10px;text-align:left}
+#content th{background:#3b4252}
+#content blockquote{border-left:4px solid #7C3AED;padding-left:12px;color:#8f9aa8;margin:8px 0}
+#content h1,#content h2,#content h3{color:#e5e9f0;margin:16px 0 8px}
+#content a{color:#7C3AED}#content hr{border:0;border-top:1px solid #4b5263;margin:16px 0}
+#content ul,#content ol{padding-left:20px}#content p{margin:4px 0}
+$lnCss
+</style>
+<script>$jsLibs</script>
+</head><body>$bodyContent</body></html>"""
+        isPreviewViewMode = true
+        previewEdit.visibility = View.GONE
+        previewScroll.visibility = View.GONE
+        previewWeb.visibility = View.VISIBLE
+        previewWeb.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null)
+        updatePreviewButtons()
+    }
+
+    private fun readAssetText(name: String): String =
+        runCatching { activity.assets.open(name).bufferedReader().use { it.readText() } }.getOrDefault("")
 
     private fun isImageFile(file: File): Boolean =
         file.extension.lowercase() in setOf("png", "jpg", "jpeg", "webp", "gif", "bmp")
@@ -1625,29 +1801,35 @@ class EmbeddedFilesPage : ShellPage {
     private fun searchActiveDir() {
         inputAllowAny("搜索文件", "输入文件名关键词") { keyword ->
             val base = activeDir()
-            val matches = runCatching {
-                base.walkTopDown()
-                    .maxDepth(4)
-                    .filter { it.name.contains(keyword, ignoreCase = true) }
-                    .take(60)
-                    .toList()
-            }.getOrElse { emptyList() }
-            if (matches.isEmpty()) {
-                toast("没有找到匹配文件")
-                return@inputAllowAny
-            }
-            MaterialAlertDialogBuilder(activity)
-                .setTitle("搜索结果")
-                .setItems(matches.map { it.absolutePath.removePrefix(base.absolutePath).ifBlank { it.absolutePath } }.toTypedArray()) { _, which ->
-                    val file = matches[which]
-                    if (file.isDirectory) {
-                        if (activeLeft) leftDir = file else rightDir = file
-                    } else {
-                        selectedFile = file
-                    }
-                    loadPane(activeLeft)
+            scope.launch {
+                val matches = withContext(Dispatchers.IO) {
+                    runCatching {
+                        base.walkTopDown()
+                            .maxDepth(4)
+                            .filter { it.name.contains(keyword, ignoreCase = true) }
+                            .take(60)
+                            .toList()
+                    }.getOrDefault(emptyList())
                 }
-                .show()
+                withContext(Dispatchers.Main) {
+                    if (matches.isEmpty()) {
+                        toast("没有找到匹配文件")
+                        return@withContext
+                    }
+                    MaterialAlertDialogBuilder(activity)
+                        .setTitle("搜索结果")
+                        .setItems(matches.map { it.absolutePath.removePrefix(base.absolutePath).ifBlank { it.absolutePath } }.toTypedArray()) { _, which ->
+                            val file = matches[which]
+                            if (file.isDirectory) {
+                                if (activeLeft) leftDir = file else rightDir = file
+                            } else {
+                                selectedFile = file
+                            }
+                            loadPane(activeLeft)
+                        }
+                        .show()
+                }
+            }
         }
     }
 
@@ -1945,9 +2127,15 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
             setStroke(ui.dp(1), ui.palette.outline)
         }
 
-    private fun copyDir(src: File, dst: File) {
+    private fun copyDir(src: File, dst: File): Boolean = try {
         dst.mkdirs()
-        src.listFiles()?.forEach { if (it.isDirectory) copyDir(it, File(dst, it.name)) else it.copyTo(File(dst, it.name)) }
+        src.listFiles()?.all { child ->
+            if (child.isDirectory) copyDir(child, File(dst, child.name))
+            else child.copyTo(File(dst, child.name), overwrite = false).let { true }
+        } ?: true
+    } catch (e: Exception) {
+        dragLog("copyDir error: ${src.name} → ${dst.name}: ${e.message}")
+        false
     }
 
     private fun clearSelection() {
@@ -1961,12 +2149,14 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
         lastOpenTime = now
         lastOpenFile = file
         selectedFile = file
-        when {
-            file.name.endsWith(".apk", ignoreCase = true) -> showApkInfo(file)
-            isImageFile(file) -> showImageInfo(file)
-            isLikelyText(file) && file.length() <= 512 * 1024 && pm.fileLayoutMode != "split" -> loadEditor(file)
-            isLikelyText(file) && file.length() <= 512 * 1024 -> previewTextFile(file)
-            else -> showBinaryInfo(file)
+        if (file.name.endsWith(".apk", ignoreCase = true)) { showApkInfo(file); return }
+        if (isImageFile(file)) { showImageInfo(file); return }
+        if (file.length() > 5 * 1024 * 1024) { showBinaryInfo(file); return }
+        scope.launch {
+            val isText = withContext(Dispatchers.IO) { isLikelyText(file) }
+            withContext(Dispatchers.Main) {
+                if (isText) showFilePreview(file) else showBinaryInfo(file)
+            }
         }
     }
 

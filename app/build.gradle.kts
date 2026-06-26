@@ -1,3 +1,20 @@
+import java.io.File
+import java.net.URL
+import java.security.MessageDigest
+
+fun File.sha256(): String {
+    val md = MessageDigest.getInstance("SHA-256")
+    inputStream().use { input ->
+        val buf = ByteArray(8192)
+        while (true) {
+            val n = input.read(buf)
+            if (n < 0) break
+            md.update(buf, 0, n)
+        }
+    }
+    return md.digest().joinToString("") { b -> String.format("%02x", b.toInt() and 0xFF) }
+}
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -57,6 +74,60 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+}
+
+tasks.register("downloadCurlMusl") {
+    val targetDir = file("src/main/assets/tools")
+    val targetFile = file("$targetDir/curl")
+    val sha256File = file("$targetDir/curl.sha256")
+    val version = "8.21.0"
+    val archiveUrl = URL("https://github.com/stunnel/static-curl/releases/download/$version/curl-linux-aarch64-musl-$version.tar.xz")
+    val archiveFile = file("$temporaryDir/curl-musl.tar.xz")
+
+    doLast {
+        targetDir.mkdirs()
+
+        if (targetFile.exists() && sha256File.exists()) {
+            val expected = sha256File.readText().trim()
+            val actual = targetFile.sha256()
+            if (actual == expected) {
+                logger.lifecycle("✓ curl-musl 已存在，SHA256 匹配，跳过下载")
+                return@doLast
+            }
+            logger.lifecycle("→ curl 内容可能已变更，重新下载...")
+        }
+
+        logger.lifecycle("→ 下载 curl-musl v$version ...")
+        temporaryDir.mkdirs()
+        archiveUrl.openStream().use { input ->
+            archiveFile.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+        logger.lifecycle("→ 下载完成 (${archiveFile.length()} bytes)，解压中...")
+
+        val extractDir = File(temporaryDir, "extracted")
+        extractDir.mkdirs()
+        val pb = ProcessBuilder("tar", "-xJf", archiveFile.absolutePath, "-C", extractDir.absolutePath)
+        pb.inheritIO()
+        val proc = pb.start()
+        val exitCode = proc.waitFor()
+        if (exitCode != 0) {
+            throw RuntimeException("tar 解压失败，exit code=$exitCode")
+        }
+
+        val extractedCurl = extractDir.listFiles()?.firstOrNull { it.name == "curl" }
+            ?: throw RuntimeException("在 tar 归档中未找到 curl 二进制文件")
+        extractedCurl.copyTo(targetFile, overwrite = true)
+        targetFile.setExecutable(true)
+        val sha256 = targetFile.sha256()
+        sha256File.writeText(sha256)
+        logger.lifecycle("✓ curl-musl 部署完成: ${targetFile.length()} bytes, SHA256=$sha256")
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn("downloadCurlMusl")
 }
 
 dependencies {

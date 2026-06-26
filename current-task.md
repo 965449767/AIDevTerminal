@@ -1,94 +1,39 @@
-# Current Task: 文件浏览器交互重构（阶段二）
+# 当前任务: 全部 Phase A—D 已完成
 
-## 已完成（2026-06-25）
+## 本阶段完成
 
-### Phase 1: 点击交互改造
-- 点击文件 = 直接打开（文本→编辑器，图片/APK→信息，二进制→信息）
-- 点击目录 = 导航 + 通知终端 cd
-- 临时文件 → 快速搜索打开时自动选择
+### Phase A — Android 开发日常三件套
+- Android SDK 知识库（aapt2/adb/dumpsys/pm/am/wm/settings）
+- `aidev-apk-info` — APK 解析（自动找 aapt2，中文输出）
+- `aidev-build` — 智能构建（auto/full/test/compile 模式 + 错误诊断）
 
-### Phase 2: 编辑器开关
-- `editToggleBtn` 可空字段存储，打开文件后自动显示
+### Phase B — 脚手架 + 代码生成
+- `aidev-create-android-project` — 完整 Android 项目骨架
+- `aidev-gen activity|fragment|viewmodel` — 组件代码生成（自动检测包名）
 
-### Phase 3: 手势引擎（GestureDetector + OnTouchListener）
-- `onSingleTapUp` → 点选 + 打开
-- `onLongPress` → 进入多选模式 / 启动拖拽
-- `onScroll` → 水平滑动多选（dx > dy × 2 区分滑动）
-- `requestDisallowInterceptTouchEvent` 阻止 ScrollView 劫持拖拽
+### Phase C — 诊断引擎
+- `aidev-error-why` — 11 种常见错误模式的中文解决方案（AAPT2、Kotlin、Gradle、OOM、SDK 路径等）
+- `aidev-build` 失败时自动调用 `aidev-error-why`
+- `aidev-logcat` 增强: `--tags` 关键词过滤、`--watch-crash` 崩溃自动停止
 
-### Phase 4: 底部操作栏 `fileActionBar`（42dp HorizontalScrollView）
-- ✕取消 · 全选 · 反选 · 删除
+### Phase D — 代码索引
+- `aidev-index` — 扫描项目建立 `.aidev-index.json` 索引
+- 支持 `class` / `res` / `string` / `layout` / `function` / `component` 搜索
 
-### Phase 5: 滑动多选 + `rangeSelect`
-- `anchorFile` 记录起始项，滑动自动区间选择
+### 附加修复
+- 目录实时同步修复：`PwdFileObserver` 从 `FileObserver` 改为 coroutine 轮询（500ms）
 
-### Phase 6: 拖拽跨栏复制
-- `startDragAndDrop` + `ClipData` 多文件支持
-- `ACTION_DROP` → 目标栏写入后 `loadPane`
-- `ACTION_DRAG_ENDED` → `exitMultiMode`
-- `dragLog()` 输出到 `/storage/emulated/0/drag.log`
+## 全部新命令
 
-### 文件操作统一
-- `deleteSelected()` 统一单/多选（`multiMode` 内部判断）
-- `copyToOther(move)` 统一单/多选
-- `pasteClipboard()` 双阶段：应用剪贴板（文件路径优先）→ 系统文本剪切板
-- `newFolder()` 含 `.` 建文件，否则建目录
+| 命令 | 用途 |
+|---|---|
+| `aidev-apk-info <apk>` | APK 信息解析 |
+| `aidev-build [--full\|--test\|--compile]` | 智能 Android 构建 |
+| `aidev-create-android-project <name> <pkg>` | 新建 Android 项目 |
+| `aidev-gen activity\|fragment\|viewmodel <name>` | 生成组件骨架代码 |
+| `aidev-error-why [关键词]` | 构建错误诊断 |
+| `aidev-logcat --tags --watch-crash` | 增强版日志查看 |
+| `aidev-index class\|res\|layout\|string\|function <kw>` | 代码搜索索引 |
 
-### 工具栏重构
-- 右对齐 `HorizontalScrollView`：同步 · 复制 · 移动 · 新建 · 粘贴 · 搜索 · 更多
-- E/P 模式切换图标（紫色/绿色）
-
-### 焦点切换修复
-- 点击分页空白区域 ↔ 文件行 ACTION_DOWN 行为统一：立即切换焦点 + 更新路径栏 + 更新高亮
-- `updatePaneHighlight()` 紫色 2dp 边框标示活动 pane
-- `refreshHighlight()` 单刷背景避免 `ACTION_CANCEL`
-
-### 更好菜单 → 底部卡片
-- `showFileMoreMenu()` / `searchFileMoreMenu()` 改用 `MenuBottomSheet`（同终端风格）
-- 保留最近使用项 + 搜索功能
-
-### 系统返回键导航 (dispatchKeyEvent → OnBackInvokedDispatcher)
-- `ShellPage` 接口新增 `onBackPressed(): Boolean = false`
-- ShellActivity: API 33+ 使用 `OnBackInvokedDispatcher.registerOnBackInvokedCallback`；API < 33 回退 `onBackPressed()`
-- 全局 `handleBack()` 双击退出逻辑（2秒内再按 → finish）
-- EmbeddedFilesPage: 深层目录 → 向上导航；到达 SD 根目录 → `false` 交给全局双击退出
-
-### 路径栏样式
-- 格式：`/root/projects\n文件夹:38  文件:19  储存:293.91G/482.05G`
-- `PathBridge.androidToUbuntu()` 缩短路径显示
-- 底部增加 `ui.dp(8)` 间距
-
-### 触觉反馈补全
-- `ui.pulse()` 新增 4 处：pane 焦点切换 ×2、拖拽开始、跨栏放下 + 双击退出 Toast
-
-### 分页背景半透明
-- `paneBg` lazy 属性，80% 不透明度的 `palette.surface`，让渐变/壁纸透出
-- 替换 `pane()`、`updatePaneHighlight()`、拖拽还原中所有 `ui.surfaceBackground()` 引用
-
-## 改动文件
-
-| 文件 | 改动内容 |
-|------|---------|
-| `ShellActivity.kt` | `ShellPage` 接口 + `onBackPressed()`；`dispatchKeyEvent` → `OnBackInvokedDispatcher`；`handleBack()` 双击退出 |
-| `EmbeddedFilesPage.kt` | 全部手势/多选/拖拽/工具栏/文件操作/返回键/路径栏/分页背景/触觉反馈 |
-| `ProjectTreeView.kt` | 点击回调更新为 `openFile()` |
-
-## 验证
-
-- `compileDebugKotlin` ✅
-- `assembleDebug` ✅
-
-## 后续待办
-
-### 待改进
-- `deleteRecursively()` 返回值未处理（静默失败）
-- `copyDir()` 无错误报告
-- `runCatching` 在 `pasteClipboard()` / `copyToOther()` 中掩盖错误
-- `searchActiveDir()` 主线程文件树遍历 ANR 风险
-- `loadEditor()` 竞态条件
-- 多处主线程文件 IO（`isLikelyText` 等）
-- 树视图搜索/过滤、拖拽排序/移动
-
-### 潜在功能
-- 拖拽到目录上 → 进入该目录
-- 语法高亮、行号、大文件截断提示
+## 下一步
+- 无活跃计划。可选: 更多命令条目的知识库增补、Termux 能力补齐、Tree 搜索

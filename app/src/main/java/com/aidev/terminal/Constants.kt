@@ -32,7 +32,7 @@ object Constants {
     const val SYSTEM_BIN_PATH = "/system/bin"
 
     // 脚本版本标记
-    const val ASSET_VERSION = "0.12.35-dual-agent-scripts"
+    const val ASSET_VERSION = "0.13.00-no-opencode"
 
     // SharedPreferences 文件名
     const val PREFS_NAME = "aidev_ui"

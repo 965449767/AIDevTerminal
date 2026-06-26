@@ -30,6 +30,10 @@ import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlin.math.abs
 import java.io.File
 
@@ -76,6 +80,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
     private var inputBuffer = ""
     private var composingBuffer = ""
     private var pwdObserver: PwdFileObserver? = null
+    private var pwdScope: CoroutineScope? = null
     private val pendingRunnables = mutableListOf<Pair<View, Runnable>>()
     private var lastSyncedPwd = ""
     private var tuiIndicator: TextView? = null
@@ -214,8 +219,11 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
         keyboardView = keys(activity, ui)
         rootView.addView(keyboardView, LinearLayout.LayoutParams(-1, ui.dp(70)))
         ensureSession(activity)
+        pwdScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         initPwdObserver(activity)
         startShizukuBridge(activity)
+        startNotifyBridge(activity)
+        startCommandBridge(activity)
         trackPostDelayed(rootView, 250) { focusTerminalInput(activity) }
         terminalView?.postDelayed({
             consumePendingCommand()
@@ -293,6 +301,10 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
     override fun onSelected(activity: Activity, view: View) {
         this.activity = activity
         ensureSession(activity)
+        if (pwdScope == null) pwdScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        startShizukuBridge(activity)
+        startNotifyBridge(activity)
+        startCommandBridge(activity)
         initPwdObserver(activity)
         focusTerminalInput(activity)
         consumePendingCommand()
@@ -308,8 +320,12 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
         // 停止 pwd 观察者
         pwdObserver?.stop()
         pwdObserver = null
+        pwdScope?.cancel()
+        pwdScope = null
         // 停止 Shizuku 桥服务
         ShizukuBridgeService.stop()
+        NotifyBridgeService.stop()
+        CommandBridgeService.stop()
         // 清理追踪的延迟任务
         for ((view, runnable) in pendingRunnables) {
             view.removeCallbacks(runnable)
@@ -320,68 +336,55 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
     }
 
     private fun startShizukuBridge(activity: Activity) {
-        val home = homeDir ?: return
-        if (ShizukuLogcat.isAvailable()) {
-            ShizukuBridgeService.start(home)
-        }
-    }
-
-    private fun initPwdObserver(activity: Activity) {
-        if (this.activity == null) return
         val home = homeDir ?: run {
             val act = this.activity ?: return
             val contentView = act.findViewById<View>(android.R.id.content) ?: return
-            trackPostDelayed(contentView, 3000) { initPwdObserver(act) }
+            trackPostDelayed(contentView, 3000) { startShizukuBridge(act) }
             return
         }
-        val pwdFile = File(home, ".aidev-current-pwd")
-        pwdObserver?.stop()
-        if (!pwdFile.isFile) {
-            // Ubuntu 还没引导，延迟 3 秒后重试
+        if (ShizukuLogcat.isAvailable()) {
+            ShizukuBridgeService.start(activity, home)
+        }
+    }
+
+    private fun startNotifyBridge(activity: Activity) {
+        val home = homeDir ?: run {
             val act = this.activity ?: return
             val contentView = act.findViewById<View>(android.R.id.content) ?: return
-            trackPostDelayed(contentView, 3000) {
-                if (pwdFile.isFile) initPwdObserver(act)
-            }
+            trackPostDelayed(contentView, 3000) { startNotifyBridge(act) }
             return
         }
-        val syncLog = File(home, "aidev-sync.log")
-        pwdObserver = PwdFileObserver(pwdFile) { ubuntuPwd ->
+        NotifyBridgeService.start(activity, home)
+    }
+
+    private fun startCommandBridge(activity: Activity) {
+        val home = homeDir ?: run {
+            val act = this.activity ?: return
+            val contentView = act.findViewById<View>(android.R.id.content) ?: return
+            trackPostDelayed(contentView, 3000) { startCommandBridge(act) }
+            return
+        }
+        CommandBridgeService.start(activity, home)
+    }
+
+    private fun initPwdObserver(activity: Activity) {
+        val home = homeDir ?: return
+        if (this.activity == null) return
+        pwdObserver?.stop()
+        val pwdFile = File(home, ".aidev-current-pwd")
+        val scope = pwdScope ?: return
+        pwdObserver = PwdFileObserver(pwdFile, scope) { ubuntuPwd ->
             if (ubuntuPwd == lastSyncedPwd) return@PwdFileObserver
             lastSyncedPwd = ubuntuPwd
             cachedCompletionPwd = ubuntuPwd
             val act = this.activity ?: return@PwdFileObserver
-            val sb = StringBuilder()
-            sb.appendLine("[${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date())}] PWD: $ubuntuPwd")
-            sb.appendLine("  home: ${home.absolutePath}")
-            sb.appendLine("  home.exists: ${home.exists()}")
             val targetDir = SyncCoordinator.toAndroidDir(ubuntuPwd, home)
             if (targetDir != null) {
-                sb.appendLine("  target: ${targetDir.absolutePath}")
-                sb.appendLine("  target.exists: ${targetDir.exists()}")
-                sb.appendLine("  target.isDir: ${targetDir.isDirectory}")
-                sb.appendLine("  target.canRead: ${targetDir.canRead()}")
-                sb.appendLine("  target.listFiles: ${targetDir.listFiles()?.size}")
                 android.util.Log.d("AIDEV_SYNC", "terminal sync: $ubuntuPwd -> ${targetDir.absolutePath}")
                 try {
                     if (act is ShellActivity) act.syncBrowserToDir(targetDir)
-                    sb.appendLine("  -> syncBrowserToDir OK")
-                } catch (e: Exception) {
-                    sb.appendLine("  -> syncBrowserToDir ERROR: ${e.message}")
-                    android.util.Log.e("AIDEV_SYNC", "syncBrowserToDir error", e)
-                }
-            } else {
-                val mapped = PathBridge.ubuntuToAndroid(home, ubuntuPwd)
-                sb.appendLine("  ubuntuToAndroid: ${mapped?.absolutePath}")
-                sb.appendLine("  mapped.exists: ${mapped?.exists()}")
-                sb.appendLine("  mapped.isDir: ${mapped?.isDirectory}")
-                sb.appendLine("  isBrowsable: ${PathBridge.isBrowsable(ubuntuPwd)}")
-                sb.appendLine("  -> target is null, sync SKIPPED")
+                } catch (_: Exception) {}
             }
-            try {
-                syncLog.appendText(sb.toString())
-                android.util.Log.d("AIDEV_SYNC_DIAG", sb.toString())
-            } catch (_: Exception) {}
         }
         pwdObserver?.start()
     }
@@ -582,7 +585,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
         MaterialAlertDialogBuilder(activity)
             .setTitle("Shell 增强")
             .setView(view)
-            .setNegativeButton("关闭") { _, _ -> page.onSelected(activity, view) }
+            .setNegativeButton("关闭") { _, _ -> page.onDestroy(activity) }
             .show()
     }
 
@@ -1147,11 +1150,16 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
                 initPwdObserver(activity)
                 val entry = shellAssets.entry
                 if (current != null) {
-                    session = current?.session
-                    terminalView?.attachSession(session)
-                    terminalView?.requestFocus()
-                    refreshTabs(activity)
-                    return@post
+                    val existing = current?.session
+                    if (existing != null && !existing.isRunning()) {
+                        closeSessionItem(activity, current!!)
+                    } else {
+                        session = existing
+                        terminalView?.attachSession(session)
+                        terminalView?.requestFocus()
+                        refreshTabs(activity)
+                        return@post
+                    }
                 }
                 runCatching { newSession(activity) }.onFailure { e ->
                     Toast.makeText(activity, "会话创建失败：${e.message}", Toast.LENGTH_LONG).show()

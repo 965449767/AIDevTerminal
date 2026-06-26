@@ -33,6 +33,7 @@ object TerminalShellAssets {
         val rootfs = File(home, "ubuntu-rootfs")
         if (rootfs.isDirectory) {
             UbuntuBootstrapScripts.copyAssetScripts(activity, rootfs)
+            deployTools(activity, rootfs)
         }
         return TerminalShellAssetPaths(home, entry)
     }
@@ -63,11 +64,12 @@ object TerminalShellAssets {
             out.writeText("# AIDev command marker. Android 私有目录禁止直接执行脚本；实际入口由 .aidevrc 函数转发。\n")
             out.setReadable(true, false)
         }
-        // 系统控制脚本（通知、截图、音量、亮度、应用管理）
+        // 系统控制脚本（通知、截图、音量、亮度、剪贴板、应用管理）
         writeSystemScript(bin, "sysnotify", "send notification")
         writeSystemScript(bin, "screencap", "take screenshot")
         writeSystemScript(bin, "volume", "control volume")
         writeSystemScript(bin, "brightness", "control brightness")
+        writeSystemScript(bin, "sysclip", "clipboard get/set")
         writeSystemScript(bin, "startapp", "start app")
         writeSystemScript(bin, "stopapp", "stop app")
         writeSystemScript(bin, "installapk", "install apk")
@@ -89,6 +91,46 @@ object TerminalShellAssets {
         File(home, ".aidev_shell_fallback").delete()
     }
 
+    private fun deployTools(activity: Activity, rootfs: File) {
+        val targetDir = File(rootfs, "usr/local/bin").apply { mkdirs() }
+        val curlBin = File(targetDir, "curl")
+
+        if (!curlBin.exists()) {
+            runCatching {
+                activity.assets.open("tools/curl").use { input ->
+                    curlBin.outputStream().use { output -> input.copyTo(output) }
+                }
+                curlBin.setExecutable(true)
+            }
+        }
+
+        val caCertsDir = File(rootfs, "etc/ssl/certs").apply { mkdirs() }
+        val caCertFile = File(caCertsDir, "ca-certificates.crt")
+        if (!caCertFile.exists()) {
+            runCatching {
+                activity.assets.open("tools/ca-certificates.crt").use { input ->
+                    caCertFile.outputStream().use { output -> input.copyTo(output) }
+                }
+                caCertFile.setReadable(true)
+            }
+        }
+
+        val cmdsDir = File(rootfs, "root/.config/opencode/commands").apply { mkdirs() }
+        listOf(
+            "aidev-build", "aidev-apk-info", "aidev-create-project",
+            "aidev-gen", "aidev-error-why", "aidev-logcat", "aidev-index"
+        ).forEach { name ->
+            val out = File(cmdsDir, "$name.md")
+            if (!out.exists()) {
+                runCatching {
+                    activity.assets.open("config/opencode/commands/$name.md").use { input ->
+                        out.outputStream().use { output -> input.copyTo(output) }
+                    }
+                }
+            }
+        }
+    }
+
     private fun writeCanonicalRc(activity: Activity, home: File, rc: File) {
         val nativeDir = activity.applicationInfo.nativeLibraryDir
         rc.writeText(
@@ -106,7 +148,7 @@ object TerminalShellAssets {
             export AIDEV_VERSION AIDEV_HOME AIDEV_BIN AIDEV_ROOTFS AIDEV_NATIVE AIDEV_PROOT AIDEV_PROOT_LOADER PROOT_LOADER PROOT_TMP_DIR
             export LANG=C.UTF-8
             export LC_ALL=C.UTF-8
-            export PATH="${'$'}AIDEV_BIN:/system/bin:/system/xbin:${'$'}PATH"
+            export PATH="/usr/local/bin:${'$'}AIDEV_BIN:/system/bin:/system/xbin:${'$'}PATH"
             export PS1='aidev:${'$'}{PWD##*/}# '
             alias ll='ls -lah'
             android-sh() { /system/bin/sh -lc "${'$'}*"; }
@@ -120,12 +162,20 @@ object TerminalShellAssets {
             aidev-doctor() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-doctor "${'$'}@"; }
             setup-dev-env() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" setup-dev-env "${'$'}@"; }
             opencode-install() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" opencode-install "${'$'}@"; }
+            setup-opencode() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" setup-opencode "${'$'}@"; }
             aidev-current-project() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-current-project" "${'$'}@"; }
             aidev-agent-context() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-agent-context" "${'$'}@"; }
             aidev-agent-context-file() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-agent-context-file" "${'$'}@"; }
             aidev-agent-summary() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-agent-summary" "${'$'}@"; }
             aidev-agent-log() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-agent-log" "${'$'}@"; }
             aidev-agent-tail() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-agent-tail" "${'$'}@"; }
+            aidev-shizuku() { /system/bin/sh "${'$'}AIDEV_ROOTFS/usr/local/bin/aidev-shizuku" "${'$'}@"; }
+            aidev-apk-info() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-apk-info "${'$'}@"; }
+            aidev-build() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-build "${'$'}@"; }
+            aidev-create-android-project() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-create-android-project "${'$'}@"; }
+            aidev-gen() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-gen "${'$'}@"; }
+            aidev-error-why() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-error-why "${'$'}@"; }
+            aidev-index() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-index "${'$'}@"; }
             list-listen-ports() { /system/bin/sh "${'$'}AIDEV_BIN/list-listen-ports" "${'$'}@"; }
             task-list() { /system/bin/sh "${'$'}AIDEV_BIN/task-list" "${'$'}@"; }
             task-run() { /system/bin/sh "${'$'}AIDEV_BIN/task-run" "${'$'}@"; }
@@ -138,15 +188,30 @@ object TerminalShellAssets {
         val content = when (name) {
             "sysnotify" -> """#!/bin/sh
                 # AIDev system notification script
-                # Usage: sysnotify <title> <message>
-                if [ $# -lt 2 ]; then
-                    echo "Usage: sysnotify <title> <message>"
+                # Usage: sysnotify [--priority min|low|default|high|max] [--ongoing] [--alert-once] <title> <message>
+                PRIORITY=""
+                ONGOING="false"
+                ALERT_ONCE="false"
+                while [ ${'$'}# -gt 0 ]; do
+                    case "${'$'}1" in
+                        --priority) PRIORITY="${'$'}2"; shift 2 ;;
+                        --ongoing)  ONGOING="true"; shift ;;
+                        --alert-once) ALERT_ONCE="true"; shift ;;
+                        --help|-h)
+                            echo "Usage: sysnotify [--priority min|low|default|high|max] [--ongoing] [--alert-once] <title> <message>"
+                            exit 0 ;;
+                        *) break ;;
+                    esac
+                done
+                if [ ${'$'}# -lt 2 ]; then
+                    echo "Usage: sysnotify [options] <title> <message>"
                     exit 1
                 fi
                 TITLE="${'$'}1"; shift
                 MSG="${'$'}*"
-                am broadcast -p com.aidev.terminal -a com.aidev.terminal.internal.NOTIFY \
-                    --es title "${'$'}TITLE" --es msg "${'$'}MSG" >/dev/null
+                REQ_DIR="${'$'}{AIDEV_HOME}/.aidev-notify"
+                mkdir -p "${'$'}REQ_DIR"
+                echo "{\"title\":\"${'$'}TITLE\",\"message\":\"${'$'}MSG\",\"priority\":\"${'$'}PRIORITY\",\"ongoing\":${'$'}ONGOING,\"alert_only_once\":${'$'}ALERT_ONCE}" > "${'$'}REQ_DIR/req-$(date +%s%N).json"
                 echo '{"status":"success","action":"notification sent"}'
                 """.trimIndent()
 
@@ -154,13 +219,10 @@ object TerminalShellAssets {
                 # AIDev screenshot script
                 # Usage: screencap [output_path]
                 OUT="${'$'}{1:-/sdcard/screenshot_$(date +%Y%m%d_%H%M%S).png}"
-                screencap -p "${'$'}OUT"
-                if [ -f "${'$'}OUT" ]; then
-                    echo "{\"status\":\"success\",\"path\":\"${'$'}OUT\"}"
-                else
-                    echo '{"status":"error","error":"screenshot failed"}'
-                    exit 1
-                fi
+                REQ_DIR="${'$'}{AIDEV_HOME}/.aidev-cmd"
+                mkdir -p "${'$'}REQ_DIR"
+                echo "{\"action\":\"screencap\",\"path\":\"${'$'}OUT\"}" > "${'$'}REQ_DIR/req-$(date +%s%N).json"
+                echo "{\"status\":\"success\",\"action\":\"screencap requested\",\"path\":\"${'$'}OUT\"}"
                 """.trimIndent()
 
             "volume" -> """#!/bin/sh
@@ -176,15 +238,16 @@ object TerminalShellAssets {
                     *) echo '{"status":"error","error":"stream must be media|ring|alarm|call"}'; exit 1 ;;
                 esac
                 if [ -z "${'$'}VAL" ]; then
-                    CUR=$(service call audio 15 i32 ${'$'}CODE 2>/dev/null | grep -o '0x[0-9a-f]*' | head -1)
+                    CUR=$(/system/bin/dumpsys audio 2>/dev/null | grep -i "${'$'}STREAM" | head -1)
                     echo "{\"status\":\"success\",\"stream\":\"${'$'}STREAM\",\"volume\":\"${'$'}CUR\"}"
                 elif [ "${'$'}VAL" = "+" ] || [ "${'$'}VAL" = "-" ]; then
                     KEY=$(if [ "${'$'}VAL" = "+" ]; then echo 24; else echo 25; fi)
-                    input keyevent "${'$'}KEY"
+                    /system/bin/input keyevent "${'$'}KEY"
                     echo "{\"status\":\"success\",\"stream\":\"${'$'}STREAM\",\"action\":\"${'$'}VAL\"}"
                 else
-                    am broadcast -p com.aidev.terminal -a com.aidev.terminal.internal.VOLUME \
-                        --ei stream "${'$'}CODE" --ei volume "${'$'}VAL" >/dev/null
+                    REQ_DIR="${'$'}{AIDEV_HOME}/.aidev-cmd"
+                    mkdir -p "${'$'}REQ_DIR"
+                    echo "{\"action\":\"volume\",\"stream\":${'$'}CODE,\"volume\":${'$'}VAL}" > "${'$'}REQ_DIR/req-$(date +%s%N).json"
                     echo "{\"status\":\"success\",\"stream\":\"${'$'}STREAM\",\"volume\":${'$'}VAL}"
                 fi
                 """.trimIndent()
@@ -193,16 +256,16 @@ object TerminalShellAssets {
                 # AIDev brightness control script
                 # Usage: brightness [0-255|auto]
                 VAL="${'$'}1"
+                REQ_DIR="${'$'}{AIDEV_HOME}/.aidev-cmd"
+                mkdir -p "${'$'}REQ_DIR"
                 if [ -z "${'$'}VAL" ]; then
-                    CUR=$(settings get system screen_brightness 2>/dev/null || echo "unknown")
+                    CUR=$(/system/bin/settings get system screen_brightness 2>/dev/null || echo "unknown")
                     echo "{\"status\":\"success\",\"brightness\":${'$'}CUR}"
                 elif [ "${'$'}VAL" = "auto" ]; then
-                    am broadcast -p com.aidev.terminal -a com.aidev.terminal.internal.BRIGHTNESS \
-                        --ez auto true >/dev/null
+                    echo "{\"action\":\"brightness\",\"auto\":true}" > "${'$'}REQ_DIR/req-$(date +%s%N).json"
                     echo '{"status":"success","mode":"auto"}'
                 else
-                    am broadcast -p com.aidev.terminal -a com.aidev.terminal.internal.BRIGHTNESS \
-                        --ei brightness "${'$'}VAL" >/dev/null
+                    echo "{\"action\":\"brightness\",\"brightness\":${'$'}VAL}" > "${'$'}REQ_DIR/req-$(date +%s%N).json"
                     echo "{\"status\":\"success\",\"brightness\":${'$'}VAL}"
                 fi
                 """.trimIndent()
@@ -214,7 +277,9 @@ object TerminalShellAssets {
                     echo "Usage: startapp <package_name>"
                     exit 1
                 fi
-                monkey -p "${'$'}1" 1 >/dev/null 2>&1
+                REQ_DIR="${'$'}{AIDEV_HOME}/.aidev-cmd"
+                mkdir -p "${'$'}REQ_DIR"
+                echo "{\"action\":\"startapp\",\"package\":\"${'$'}1\"}" > "${'$'}REQ_DIR/req-$(date +%s%N).json"
                 echo "{\"status\":\"success\",\"action\":\"started\",\"package\":\"${'$'}1\"}"
                 """.trimIndent()
 
@@ -225,7 +290,9 @@ object TerminalShellAssets {
                     echo "Usage: stopapp <package_name>"
                     exit 1
                 fi
-                am force-stop "${'$'}1"
+                REQ_DIR="${'$'}{AIDEV_HOME}/.aidev-cmd"
+                mkdir -p "${'$'}REQ_DIR"
+                echo "{\"action\":\"stopapp\",\"package\":\"${'$'}1\"}" > "${'$'}REQ_DIR/req-$(date +%s%N).json"
                 echo "{\"status\":\"success\",\"action\":\"stopped\",\"package\":\"${'$'}1\"}"
                 """.trimIndent()
 
@@ -236,8 +303,15 @@ object TerminalShellAssets {
                     echo "Usage: installapk <apk_path>"
                     exit 1
                 fi
-                pm install -r "${'$'}1"
-                echo "{\"status\":\"success\",\"action\":\"installed\",\"path\":\"${'$'}1\"}"
+                # resolve /host-home/ to real Android path
+                APK="${'$'}1"
+                case "${'$'}APK" in /host-home/*)
+                    APK="${'$'}{AIDEV_HOME}${'$'}{APK#/host-home}"
+                esac
+                REQ_DIR="${'$'}{AIDEV_HOME}/.aidev-cmd"
+                mkdir -p "${'$'}REQ_DIR"
+                echo "{\"action\":\"installapk\",\"path\":\"${'$'}APK\"}" > "${'$'}REQ_DIR/req-$(date +%s%N).json"
+                echo "{\"status\":\"success\",\"action\":\"install launched\",\"path\":\"${'$'}1\"}"
                 """.trimIndent()
 
             "uninstallapp" -> """#!/bin/sh
@@ -247,8 +321,32 @@ object TerminalShellAssets {
                     echo "Usage: uninstallapp <package_name>"
                     exit 1
                 fi
-                pm uninstall "${'$'}1"
-                echo "{\"status\":\"success\",\"action\":\"uninstalled\",\"package\":\"${'$'}1\"}"
+                REQ_DIR="${'$'}{AIDEV_HOME}/.aidev-cmd"
+                mkdir -p "${'$'}REQ_DIR"
+                echo "{\"action\":\"uninstallapp\",\"package\":\"${'$'}1\"}" > "${'$'}REQ_DIR/req-$(date +%s%N).json"
+                echo "{\"status\":\"success\",\"action\":\"uninstall launched\",\"package\":\"${'$'}1\"}"
+                """.trimIndent()
+
+            "sysclip" -> """#!/bin/sh
+                # AIDev clipboard script
+                # Usage: sysclip set <text>
+                #        sysclip get
+                CMD="${'$'}{1:-}"
+                if [ "${'$'}CMD" = "get" ]; then
+                    /system/bin/service call clipboard 2 2>/dev/null || echo '{"status":"error","error":"clipboard read not supported"}'
+                    exit 0
+                fi
+                shift 2>/dev/null
+                TEXT="${'$'}*"
+                to_json() {
+                    python3 -c "import json,sys; print(json.dumps(sys.stdin.read()))" 2>/dev/null || \
+                    /system/bin/sh -c "printf '%s' \"${'$'}1\" | sed 's/\\\"/\\\\\"/g' | sed 's/^/\\\"/;s/$/\\\"/'"
+                }
+                REQ_DIR="${'$'}{AIDEV_HOME}/.aidev-cmd"
+                mkdir -p "${'$'}REQ_DIR"
+                ESCAPED=$(/system/bin/sh -c "printf '%s' \"${'$'}TEXT\" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'" 2>/dev/null || echo "\"${'$'}TEXT\"")
+                echo "{\"action\":\"clipboard\",\"text\":${'$'}ESCAPED}" > "${'$'}REQ_DIR/req-$(date +%s%N).json"
+                echo "{\"status\":\"success\",\"action\":\"clipboard set\"}"
                 """.trimIndent()
 
             else -> "#!/bin/sh\necho 'Unknown command: $name'\n"

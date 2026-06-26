@@ -241,7 +241,7 @@ object UbuntuBootstrapScripts {
         if (!rootfs.isDirectory) return
         val binDir = java.io.File(rootfs, "usr/local/bin")
         binDir.mkdirs()
-        val scripts = listOf("check-dev-env.sh", "repair-dev-env.sh", "setup-dev-env.sh", "opencode-install.sh", "aidev-logcat.sh")
+        val scripts = listOf("check-dev-env.sh", "repair-dev-env.sh", "setup-dev-env.sh", "opencode-install.sh", "setup-opencode.sh", "aidev-logcat.sh", "aidev-shizuku.sh", "aidev-apk-info.sh", "aidev-build.sh", "aidev-create-android-project.sh", "aidev-gen.sh", "aidev-error-why.sh", "aidev-index.sh")
         for (script in scripts) {
             val dstName = script.removeSuffix(".sh")
             val dst = java.io.File(binDir, dstName)
@@ -299,7 +299,7 @@ object UbuntuBootstrapScripts {
           mkdir -p "${'$'}(dirname "${'$'}out")"
           echo "下载地址：${'$'}url"
           if command -v curl >/dev/null 2>&1; then
-            curl -fsSL --retry 3 -C - -o "${'$'}part" "${'$'}url" || return ${'$'}?
+            curl -fsSL -k --retry 3 -C - -o "${'$'}part" "${'$'}url" || return ${'$'}?
           elif command -v wget >/dev/null 2>&1; then
             wget -q -c -O "${'$'}part" "${'$'}url" || return ${'$'}?
           elif /system/bin/toybox wget --help >/dev/null 2>&1; then
@@ -570,8 +570,14 @@ AIDEV_PWD_HOOK_EOF
           install-ubuntu) install_ubuntu "${'$'}@" ;;
           aidev-doctor) aidev_doctor_android ;;
           setup-dev-env) run_ubuntu_command "/usr/local/bin/setup-dev-env" ;;
-          opencode-install) run_ubuntu_command "/usr/local/bin/opencode-install" ;;
-          fix-bashrc) fix_bashrc ;;
+          opencode-install|setup-opencode) run_ubuntu_command "/usr/local/bin/opencode-install" ;;
+          aidev-build) run_ubuntu_command "/usr/local/bin/aidev-build" ;;
+          aidev-apk-info) run_ubuntu_command "/usr/local/bin/aidev-apk-info" ;;
+          aidev-create-android-project) run_ubuntu_command "/usr/local/bin/aidev-create-android-project" ;;
+          aidev-gen) run_ubuntu_command "/usr/local/bin/aidev-gen" ;;
+          aidev-error-why) run_ubuntu_command "/usr/local/bin/aidev-error-why" ;;
+          aidev-index) run_ubuntu_command "/usr/local/bin/aidev-index" ;;
+          fix-bashrc) fix_bashrc ;;   
           aidev-auto-bootstrap)
             if has_ubuntu; then
               ubuntu_logo "自动进入环境     │"

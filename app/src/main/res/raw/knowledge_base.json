@@ -16,7 +16,7 @@
         {"title": "查看文件头", "cmd": "head -n 20 file.txt", "desc": "查看前20行"},
         {"title": "查看文件尾", "cmd": "tail -f log.txt", "desc": "实时追踪日志文件"},
         {"title": "查找文件", "cmd": "find . -name '*.kt'", "desc": "在当前目录查找 .kt 文件"},
-        {"title": "文本搜索", "cmd": "grep -rn 'keyword' .", "desc": "递归搜索目录中的关键字"},
+        {"title": "文本搜索", "cmd": "grep [选项] 模式 [路径]", "desc": "强大的文本搜索工具，支持正则表达式和递归搜索", "tags": ["文本处理", "搜索", "过滤"], "usage": "grep 'keyword' file.txt                  # 基本搜索：在文件中查找关键字\ngrep -ri 'hello' .                       # -r 递归搜索，-i 忽略大小写\ngrep -rn 'function' src/                 # -n 显示行号，-r 递归\ngrep -v 'exclude' file.txt               # -v 反向匹配，显示不包含的行\ngrep -c 'error' log.txt                  # -c 计数匹配行数\ngrep -l 'TODO' *.kt                      # -l 仅显示包含匹配的文件名\ngrep -E 'foo|bar' file.txt               # -E 扩展正则，支持 | 或逻辑\ngrep -A3 -B2 'Exception' crash.log       # -A after / -B before 显示上下文行\ngrep -o '[0-9]+\\.[0-9]+' data.txt       # -o 仅输出匹配部分（提取版本号）\ngrep '^#' config.ini                     # 查找以 # 开头的行（注释行）\ngrep -rl 'class Main' .                  # -rl 递归显示含匹配的文件名，适合批量处理", "permissions": "无特殊权限要求", "notes": "grep 是搜索文本的核心工具，-r 递归、-i 忽略大小写、-n 行号是最常用的组合。多个选项可以合并使用，如 grep -rin 'hello' ."},
         {"title": "磁盘使用", "cmd": "du -sh *", "desc": "查看当前目录各文件大小"},
         {"title": "磁盘空间", "cmd": "df -h", "desc": "查看文件系统磁盘空间"}
       ]
@@ -76,7 +76,7 @@
     },
     {
       "id": "ubuntu",
-      "name": "Ubuntu/Termux",
+      "name": "系统管理",
       "items": [
         {"title": "更新包列表", "cmd": "apt update", "desc": "更新可用软件包列表"},
         {"title": "升级软件", "cmd": "apt upgrade -y", "desc": "升级所有已安装软件"},
@@ -118,32 +118,372 @@
       "id": "builtin",
       "name": "内置命令",
       "items": [
-        {"title": "进入 Ubuntu 环境", "cmd": "ubuntu", "desc": "进入 Ubuntu 容器环境（PRoot），与 Android 系统隔离运行"},
-        {"title": "安装 Ubuntu", "cmd": "install-ubuntu", "desc": "下载安装或重新安装 Ubuntu rootfs，重置环境"},
-        {"title": "一键安装开发环境", "cmd": "setup-dev-env", "desc": "一键安装 Node.js、Python3、Git、JDK 17、npm 等开发工具"},
-        {"title": "检测开发环境", "cmd": "check-dev-env", "desc": "终端内检测开发环境各组件的安装状态，显示缺失项"},
-        {"title": "修复开发环境", "cmd": "repair-dev-env", "desc": "尝试修复开发环境中缺失或损坏的组件"},
-        {"title": "安装 OpenCode", "cmd": "opencode-install", "desc": "安装 AI 编程助手 OpenCode（来自 opencode.ai 官方脚本）"},
-        {"title": "环境诊断", "cmd": "aidev-doctor", "desc": "全面诊断 AIDev 运行环境：PRoot 状态、Ubuntu 配置、资源占用"},
-        {"title": "查看日志", "cmd": "aidev-logcat", "desc": "查看 AIDev 系统运行日志，用于排查启动或连接问题"},
-        {"title": "查看项目信息", "cmd": "aidev-current-project", "desc": "查看当前项目的目录路径、Git 状态和项目类型（Gradle/npm/Python 等）"},
-        {"title": "AI 上下文", "cmd": "aidev-agent-context", "desc": "将当前项目和任务的上下文信息打包输出，供 AI 分析使用"},
-        {"title": "AI 上下文导出", "cmd": "aidev-agent-context-file", "desc": "将上下文信息导出到 aidev-agent-context.txt 文件"},
-        {"title": "AI 任务摘要", "cmd": "aidev-agent-summary", "desc": "查看最近一次后台任务的日志摘要：执行的命令、报错、文件变更"},
-        {"title": "AI 任务日志", "cmd": "aidev-agent-log", "desc": "列出所有 AI 代理的后台任务日志文件"},
-        {"title": "实时跟踪日志", "cmd": "aidev-agent-tail", "desc": "实时跟踪最新任务日志的输出（类似 tail -f）"},
-        {"title": "启动后台任务", "cmd": "task-run", "desc": "在后台启动一个任务并管理其生命周期，支持并发管理"},
-        {"title": "任务列表", "cmd": "task-list", "desc": "列出所有正在运行或已结束的后台任务及状态"},
-        {"title": "查看监听端口", "cmd": "list-listen-ports", "desc": "查看当前系统所有监听的 TCP/UDP 网络端口"},
-        {"title": "系统通知", "cmd": "sysnotify", "desc": "发送一条 Android 系统通知到状态栏"},
-        {"title": "截取屏幕", "cmd": "screencap", "desc": "截取当前 Android 屏幕并保存为 PNG 图片"},
-        {"title": "音量控制", "cmd": "volume", "desc": "调整 Android 系统音量（可指定媒体/通知/闹钟通道）"},
-        {"title": "亮度控制", "cmd": "brightness", "desc": "调整 Android 屏幕亮度（0-255）"},
-        {"title": "启动应用", "cmd": "startapp", "desc": "通过包名启动 Android 应用，如 startapp com.example.app"},
-        {"title": "停止应用", "cmd": "stopapp", "desc": "强制停止指定包名的 Android 应用"},
-        {"title": "安装 APK", "cmd": "installapk", "desc": "安装指定路径的 APK 文件到 Android 系统"},
-        {"title": "卸载应用", "cmd": "uninstallapp", "desc": "卸载指定包名的 Android 应用"},
-        {"title": "Android Shell", "cmd": "android-sh", "desc": "在 Android 宿主 shell 环境中执行命令（跨容器操作用）"}
+        {
+          "title": "进入 Ubuntu 环境",
+          "cmd": "ubuntu",
+          "desc": "进入 Ubuntu 容器环境（PRoot），与 Android 系统隔离运行",
+          "tags": ["内置命令", "Ubuntu 环境"],
+          "usage": "  ubuntu                                # 进入 Ubuntu 容器\n  exit                                  # 退出 Ubuntu 容器",
+          "permissions": "无特殊权限要求",
+          "notes": "PRoot 容器内无法运行 /system/bin/ 下的 Android 原生二进制文件。需 Android 交互的命令通过文件桥接在宿主侧执行。"
+        },
+        {
+          "title": "安装 Ubuntu",
+          "cmd": "install-ubuntu",
+          "desc": "下载安装或重新安装 Ubuntu rootfs，重置环境",
+          "tags": ["内置命令", "Ubuntu 环境", "环境配置"],
+          "usage": "  install-ubuntu                        # 下载并安装 Ubuntu rootfs（约 200MB）\n  install-ubuntu                        # 再次执行可重新安装，重置整个环境",
+          "permissions": "需要网络连接（推荐 Wi-Fi）。需足够存储空间（至少 1GB 可用）。",
+          "notes": "会从 GitHub Releases 下载 rootfs 压缩包。安装过程中请勿关闭应用。重新安装会清空所有已有数据。"
+        },
+        {
+          "title": "一键安装开发环境",
+          "cmd": "setup-dev-env",
+          "desc": "一键安装 Node.js、Python3、Git、JDK 17、npm 等开发工具",
+          "tags": ["内置命令", "开发环境", "环境配置"],
+          "usage": "  setup-dev-env                         # 安装/更新开发环境",
+          "permissions": "需要网络连接。需在 Ubuntu 容器内执行。",
+          "notes": "仅在 Ubuntu 容器内可用。安装后可用 check-dev-env 验证状态。"
+        },
+        {
+          "title": "检测开发环境",
+          "cmd": "check-dev-env",
+          "desc": "检测开发环境各组件的安装状态，显示缺失项",
+          "tags": ["内置命令", "开发环境", "信息查询"],
+          "usage": "  check-dev-env                        # 检测并报告开发环境状态",
+          "permissions": "无特殊权限要求",
+          "notes": "仅在 Ubuntu 容器内可用。不会修改任何文件。"
+        },
+        {
+          "title": "修复开发环境",
+          "cmd": "repair-dev-env",
+          "desc": "尝试修复开发环境中缺失或损坏的组件",
+          "tags": ["内置命令", "开发环境"],
+          "usage": "  repair-dev-env                       # 自动检测并修复开发环境",
+          "permissions": "需要网络连接。需在 Ubuntu 容器内执行。",
+          "notes": "会尝试重新安装缺失的组件。修复后建议重启 Ubuntu 容器。"
+        },
+        {
+          "title": "检查 OpenCode 环境",
+          "cmd": "opencode-install / setup-opencode",
+          "desc": "验证 OpenCode 安装状态 + AIDev Android 开发工具注册",
+          "tags": ["内置命令", "AI 工具", "环境配置"],
+          "usage": "  opencode-install 或 setup-opencode      # 检查 OpenCode 和 AIDev 命令注册状态",
+          "permissions": "无需网络。需在 Ubuntu 容器内执行。",
+          "notes": "opencode 不再内置到 APK 中，用户需自行安装：opencode upgrade。7 个 aidev-* 命令 .md 文件已预部署到 ~/.config/opencode/commands/，安装 opencode 后自动注册。本脚本仅为环境验证工具，不执行安装。"
+        },
+        {
+          "title": "环境诊断",
+          "cmd": "aidev-doctor",
+          "desc": "全面诊断 AIDev 运行环境：PRoot 状态、Ubuntu 配置、资源占用",
+          "tags": ["内置命令", "开发调试", "信息查询"],
+          "usage": "  aidev-doctor                         # 运行全面诊断",
+          "permissions": "无特殊权限要求",
+          "notes": "诊断结果包含可操作的建议。建议在遇到问题时首先运行此命令。"
+        },
+        {
+          "title": "查看日志",
+          "cmd": "aidev-logcat [选项] [包名]",
+          "desc": "通过 Shizuku 查看 Android 应用日志",
+          "tags": ["内置命令", "开发调试", "Shizuku"],
+          "usage": "  aidev-logcat                               # 查看本应用最新 200 行日志\n  aidev-logcat com.example.app                # 查看指定应用日志\n  aidev-logcat --lines 100                    # 指定行数\n  aidev-logcat --follow com.example.app       # 持续监听日志（Ctrl+C 停止）\n  aidev-logcat --level ERROR                  # 仅显示 ERROR 及以上级别\n  aidev-logcat --level ERROR --tag ActivityManager  # 按标签+级别过滤\n  aidev-logcat --tags Error,Exception         # 按关键词过滤（逗号分隔）\n  aidev-logcat --watch-crash                  # 持续监听，检测到崩溃后自动停止\n  aidev-logcat --clear                        # 清空缓冲区后抓取\n  aidev-logcat --help                         # 查看完整帮助",
+          "permissions": "需要 Shizuku 授权（在「任务」页授权）",
+          "notes": "基于 Shizuku API 运行，无需 root。如果超时，请检查 Shizuku 是否已授权。--level 可选值: VERBOSE / DEBUG / INFO / WARN / ERROR。--tag 按标签过滤日志（如 ActivityManager、SystemServer）。--tags 按关键词过滤（如 Error,Exception,NativeCrash）。--watch-crash 持续监听崩溃日志，检测到 FATAL EXCEPTION/CRASH/Native crash/ANR 等模式后自动停止。"
+        },
+        {
+          "title": "查看项目信息",
+          "cmd": "aidev-current-project",
+          "desc": "查看当前项目路径、Git 状态和项目类型（Gradle/npm/Python 等）",
+          "tags": ["内置命令", "信息查询"],
+          "usage": "  aidev-current-project                 # 显示当前项目信息",
+          "permissions": "无特殊权限要求",
+          "notes": "在项目目录下执行效果最佳。会自动检测项目类型。"
+        },
+        {
+          "title": "AI 上下文",
+          "cmd": "aidev-agent-context",
+          "desc": "将当前项目和任务上下文信息打包输出供 AI 使用",
+          "tags": ["内置命令", "AI 工具"],
+          "usage": "  aidev-agent-context                   # 输出上下文到终端",
+          "permissions": "无特殊权限要求",
+          "notes": "输出的内容量较大，建议用管道保存到文件。包含项目结构、最近 Git 变更、当前任务状态等。"
+        },
+        {
+          "title": "AI 上下文导出",
+          "cmd": "aidev-agent-context-file",
+          "desc": "将上下文信息导出到 aidev-agent-context.txt 文件",
+          "tags": ["内置命令", "AI 工具"],
+          "usage": "  aidev-agent-context-file              # 导出到 aidev-agent-context.txt",
+          "permissions": "无特殊权限要求",
+          "notes": "输出文件在当前工作目录。适合一次性拷贝给 AI 助手。"
+        },
+        {
+          "title": "AI 任务摘要",
+          "cmd": "aidev-agent-summary",
+          "desc": "查看最近一次后台任务日志摘要：命令、报错、文件变更",
+          "tags": ["内置命令", "AI 工具", "信息查询"],
+          "usage": "  aidev-agent-summary                   # 查看最新任务摘要",
+          "permissions": "无特殊权限要求",
+          "notes": "仅当有任务日志文件时可用。显示最近一次任务的执行摘要。"
+        },
+        {
+          "title": "AI 任务日志",
+          "cmd": "aidev-agent-log",
+          "desc": "列出所有 AI 代理的后台任务日志文件",
+          "tags": ["内置命令", "AI 工具"],
+          "usage": "  aidev-agent-log                       # 列出所有任务日志文件",
+          "permissions": "无特殊权限要求",
+          "notes": "日志文件位于 ~/.aidev/agent-logs/ 目录。"
+        },
+        {
+          "title": "实时跟踪日志",
+          "cmd": "aidev-agent-tail",
+          "desc": "实时跟踪最新任务日志的输出（类似 tail -f）",
+          "tags": ["内置命令", "AI 工具"],
+          "usage": "  aidev-agent-tail                      # 持续跟踪日志输出\n  Ctrl+C                                # 停止跟踪",
+          "permissions": "无特殊权限要求",
+          "notes": "会持续输出直到按 Ctrl+C 终止。如果没有任何输出，表示没有活跃的后台任务。"
+        },
+        {
+          "title": "启动后台任务",
+          "cmd": "task-run",
+          "desc": "在后台启动一个任务并管理其生命周期",
+          "tags": ["内置命令", "任务管理", "AI 工具"],
+          "usage": "  task-run <command>                     # 在后台运行命令\n  task-run 'npm run build'               # 示例：后台构建",
+          "permissions": "无特殊权限要求",
+          "notes": "后台任务与终端生命周期无关，即使关闭终端也会继续运行。用 task-list 查看状态。"
+        },
+        {
+          "title": "任务列表",
+          "cmd": "task-list",
+          "desc": "列出所有正在运行或已结束的后台任务及状态",
+          "tags": ["内置命令", "任务管理", "信息查询"],
+          "usage": "  task-list                             # 查看所有后台任务状态",
+          "permissions": "无特殊权限要求",
+          "notes": "显示每个任务的 PID、状态（运行中/已结束）、启动时间和命令。"
+        },
+        {
+          "title": "查看监听端口",
+          "cmd": "list-listen-ports",
+          "desc": "查看当前系统所有监听的 TCP/UDP 网络端口",
+          "tags": ["内置命令", "开发调试", "信息查询"],
+          "usage": "  list-listen-ports                     # 列出所有监听端口",
+          "permissions": "无特殊权限要求",
+          "notes": "基于 ss -tlnp 命令。仅显示 PRoot 容器内监听的端口。"
+        },
+        {
+          "title": "系统通知",
+          "cmd": "sysnotify [选项]",
+          "desc": "发送 Android 系统通知到状态栏",
+          "tags": ["内置命令", "系统控制", "通知"],
+          "usage": "  sysnotify --title \"标题\" --message \"内容\"           # 发送普通通知\n  sysnotify --title \"完成\" --message \"构建成功\" --priority high  # 高优先级\n  sysnotify --title \"警告\" --message \"内存不足\" --priority max   # 紧急级别\n  sysnotify --title \"信息\" --message \"下载完成\" --priority low   # 低优先级\n  sysnotify --title \"进行中\" --message \"同步中...\" --ongoing     # 持续通知（需手动清除）\n  sysnotify --title \"通知\" --message \"消息\" --alert-once        # 仅响一次不重复",
+          "permissions": "需要 POST_NOTIFICATIONS 权限（首次使用时会自动请求）",
+          "notes": "--priority 可选值: min / low / default / high / max。--ongoing 让通知不可滑动清除（适合后台任务状态）。--alert-once 让重要通知只响一次铃声/震动。通知通道按优先级别分，可在系统设置中微调。"
+        },
+        {
+          "title": "截取屏幕",
+          "cmd": "screencap [文件名]",
+          "desc": "截取当前 Android 屏幕并保存为 PNG 图片",
+          "tags": ["内置命令", "系统控制", "文件管理"],
+          "usage": "  screencap                             # 截图并保存到 ~/screenshots/\n  screencap myscreen.png                 # 指定文件名",
+          "permissions": "Android 系统允许应用截屏。在 Android 12+ 上可能需要额外确认。",
+          "notes": "截图保存在容器内的 ~/screenshots/ 目录。通过 Runtime.exec 在 Android 宿主侧执行 screencap 命令。"
+        },
+        {
+          "title": "音量控制",
+          "cmd": "volume [级别] [通道]",
+          "desc": "调整 Android 系统音量",
+          "tags": ["内置命令", "系统控制"],
+          "usage": "  volume                                # 查看当前音量\n  volume 10                             # 设置媒体音量为 10（范围 0-15）\n  volume 7 notification                 # 设置通知音量为 7\n  volume 12 alarm                       # 设置闹钟音量\n  volume 0                              # 静音媒体通道",
+          "permissions": "需要 WRITE_SETTINGS 权限（首次会自动引导授权）",
+          "notes": "通道可选值: music（默认，媒体）/ notification（通知）/ alarm（闹钟）/ ring（铃声）/ system（系统音）。音量范围 0-15，具体范围因设备和通道而异。"
+        },
+        {
+          "title": "亮度控制",
+          "cmd": "brightness [0-255]",
+          "desc": "调整 Android 屏幕亮度",
+          "tags": ["内置命令", "系统控制"],
+          "usage": "  brightness                            # 查看当前亮度值\n  brightness 200                        # 设置亮度为 200/255\n  brightness 0                          # 最暗\n  brightness 255                        # 最亮\n  brightness auto                       # 恢复自动亮度",
+          "permissions": "需要 WRITE_SETTINGS 权限（首次会自动引导授权）",
+          "notes": "值范围 0-255。部分设备在低亮度下可能闪烁。输入 auto 恢复自动亮度调节。"
+        },
+        {
+          "title": "启动应用",
+          "cmd": "startapp <包名>",
+          "desc": "通过包名启动 Android 应用",
+          "tags": ["内置命令", "应用管理"],
+          "usage": "  startapp com.android.settings          # 打开系统设置\n  startapp com.example.myapp             # 打开自定义应用\n  startapp com.android.chrome            # 打开 Chrome 浏览器",
+          "permissions": "无特殊权限要求",
+          "notes": "包名可以通过 aidev-logcat 查看或从应用信息中获得。启动方式为 AM start 命令。"
+        },
+        {
+          "title": "停止应用",
+          "cmd": "stopapp <包名>",
+          "desc": "强制停止指定包名的 Android 应用",
+          "tags": ["内置命令", "应用管理"],
+          "usage": "  stopapp com.example.myapp              # 强制停止应用\n  stopapp com.android.chrome             # 停止 Chrome",
+          "permissions": "无特殊权限要求",
+          "notes": "等同于系统的「强制停止」。应用下次启动时从头加载。"
+        },
+        {
+          "title": "安装 APK",
+          "cmd": "installapk <APK路径>",
+          "desc": "安装指定路径的 APK 文件到 Android 系统",
+          "tags": ["内置命令", "应用管理", "文件管理"],
+          "usage": "  installapk /sdcard/Download/app.apk    # 从下载目录安装\n  installapk ./app-release.apk           # 从当前目录安装\n  installapk ~/app.apk                   # 从主目录安装",
+          "permissions": "需要 REQUEST_INSTALL_PACKAGES 权限（允许安装未知来源应用）",
+          "notes": "通过 FileProvider 将 APK 暴露给 Android 安装器。路径支持 /sdcard/ 和 ~/（主目录）开头的路径。首次使用需授权「安装未知应用」。如需静默安装（无界面确认），可用 aidev-shizuku install <apk_path>。"
+        },
+        {
+          "title": "卸载应用",
+          "cmd": "uninstallapp <包名>",
+          "desc": "卸载指定包名的 Android 应用",
+          "tags": ["内置命令", "应用管理"],
+          "usage": "  uninstallapp com.example.myapp          # 卸载应用\n  uninstallapp com.android.chrome         # 卸载 Chrome",
+          "permissions": "无特殊权限要求",
+          "notes": "会弹出系统卸载确认对话框。无法卸载系统预装应用。"
+        },
+        {
+          "title": "Shizuku 命令",
+          "cmd": "aidev-shizuku <子命令> [参数]",
+          "desc": "通过 Shizuku 执行 Android 系统命令，需要已授权的 Shizuku 环境",
+          "tags": ["内置命令", "Shizuku", "系统控制", "开发调试", "应用管理"],
+          "usage": "  aidev-shizuku exec 'input keyevent 3'                    # 模拟 HOME 键\n  aidev-shizuku exec 'getprop ro.build.version.sdk'       # 查看 SDK 版本\n  aidev-shizuku install /sdcard/Download/app.apk          # 静默安装 APK\n  aidev-shizuku input keyevent KEYCODE_HOME               # 按 HOME 键\n  aidev-shizuku input tap 500 1000                        # 模拟点击 (x,y)\n  aidev-shizuku wifi on                                   # 开启 WiFi\n  aidev-shizuku wifi off                                  # 关闭 WiFi\n  aidev-shizuku data on                                   # 开启移动数据\n  aidev-shizuku data off                                  # 关闭移动数据\n  aidev-shizuku battery level 50                          # 模拟电池电量 50%\n  aidev-shizuku battery reset                             # 恢复真实电池状态\n  aidev-shizuku status                                    # 检查 Shizuku 状态",
+          "permissions": "需要 Shizuku 授权（在「任务」页授权）。执行的具体命令权限取决于 Android shell 用户。",
+          "notes": "所有命令在 Android 宿主环境执行（非 PRoot 容器）。支持 pm、input、svc、dumpsys、getprop 等系统工具。exec 子命令可执行任意 shell 命令。安装 APK 使用 pm install 静默安装，无需用户确认。input 模拟操作在部分设备上可能需要额外授权。"
+        },
+        {
+          "title": "Android Shell",
+          "cmd": "android-sh <命令>",
+          "desc": "在 Android 宿主 shell 环境中执行命令",
+          "tags": ["内置命令", "系统控制", "开发调试"],
+          "usage": "  android-sh 'getprop ro.build.version.sdk'  # 查看 Android SDK 版本\n  android-sh 'wm size'                        # 查看屏幕分辨率\n  android-sh 'dumpsys battery'                 # 查看电池状态\n  android-sh 'pm list packages | grep chrome'  # 查找已安装应用",
+          "permissions": "无特殊权限要求（命令权限取决于 Android shell 用户权限）",
+          "notes": "命令在 Android 宿主环境执行，而非 PRoot 容器内。此命令通过文件桥接将命令发送到 Android 侧执行并返回结果。支持 getprop、wm、pm、am、dumpsys 等系统工具。"
+        },
+        {
+          "title": "APK 信息解析",
+          "cmd": "aidev-apk-info <APK路径>",
+          "desc": "解析 APK 文件并以中文显示包名、版本、权限、组件等信息",
+          "tags": ["内置命令", "Android 开发", "APK 分析"],
+          "usage": "  aidev-apk-info app/build/outputs/apk/debug/app-debug.apk    # 查看构建的 APK\n  aidev-apk-info /sdcard/Download/some.apk                   # 查看下载的 APK\n  aidev-apk-info ./app-release.apk                           # 查看当前目录 APK",
+          "permissions": "无特殊权限要求。需要 aapt2 输出完整信息（Gradle 构建后自动缓存）。",
+          "notes": "优先使用 aapt2 解析（从 Gradle 缓存或 Android SDK 中查找），未找到时以基础模式运行（仅显示文件大小）。aapt2 在 Gradle 构建一次后就会缓存在 ~/.gradle/caches/ 中。"
+        },
+        {
+          "title": "智能构建",
+          "cmd": "aidev-build [--full|--test|--compile] [--clean]",
+          "desc": "智能 Android 构建包装：自动选择最轻验证方式、处理 AAPT2 死锁、诊断构建错误",
+          "tags": ["内置命令", "Android 开发", "构建工具"],
+          "usage": "  aidev-build                                     # 自动选择最轻方式\n  aidev-build --full                              # 全量编译 (assembleDebug)\n  aidev-build --test                              # 编译 + 单元测试\n  aidev-build --compile                           # 仅 Kotlin 编译\n  aidev-build --clean                             # clean 后增量编译\n  aidev-build --full --clean                      # 清理后全量编译",
+          "permissions": "无特殊权限要求。需要在 Ubuntu 容器内执行（需要 JDK 和 Gradle）。",
+          "notes": "自动处理 AAPT2 守护进程死锁（wrap-android-native.sh）。检测代理可用性，代理不可达时自动禁用。构建失败时自动诊断常见错误（AAPT2、Gradle 配置等）。"
+        },
+        {
+          "title": "新建 Android 项目",
+          "cmd": "aidev-create-android-project <应用名> <包名> [输出目录]",
+          "desc": "从模板创建 Android 项目，自动匹配当前环境的 AGP/Kotlin/Gradle 版本",
+          "tags": ["内置命令", "Android 开发", "脚手架"],
+          "usage": "  aidev-create-android-project MyApp com.example.myapp                     # 创建到 /root/projects/MyApp\n  aidev-create-android-project MyApp com.example.myapp /sdcard/projects  # 指定输出目录",
+          "permissions": "无特殊权限要求。需在 Ubuntu 容器内执行。",
+          "notes": "生成的项目包含: build.gradle.kts (AGP 8.7.3 + Kotlin 2.0.21)、单 Activity + layout、Material Design 主题。自动下载 Gradle Wrapper 并初始化 Git。创建后可直接 aidev-build --full 编译。"
+        },
+        {
+          "title": "生成组件代码",
+          "cmd": "aidev-gen <子命令> <名称> [选项]",
+          "desc": "生成 Android 组件骨架代码（Activity/Fragment/ViewModel），自动检测项目包名",
+          "tags": ["内置命令", "Android 开发", "代码生成"],
+          "usage": "  aidev-gen activity SettingsActivity                    # 生成 Activity + layout\n  aidev-gen fragment DetailFragment                     # 生成 Fragment + layout\n  aidev-gen viewmodel MainViewModel                     # 生成 ViewModel + StateFlow\n  aidev-gen activity Profile --dir /root/projects/MyApp # 指定项目目录\n  aidev-gen activity Profile --layout profile_content    # 自定义布局文件名",
+          "permissions": "无特殊权限要求。需在项目根目录或指定 --dir 运行。",
+          "notes": "代码风格遵循标准 Android 架构。Activity 继承 AppCompatActivity，Fragment 继承 Fragment，ViewModel 使用 viewModelScope + StateFlow。生成后需手动在 AndroidManifest.xml 注册 Activity。"
+        },
+        {
+          "title": "错误诊断",
+          "cmd": "aidev-error-why [关键词]",
+          "desc": "搜索常见构建/运行时错误并显示中文解决方案，aidev-build 失败时自动调用",
+          "tags": ["内置命令", "调试", "诊断"],
+          "usage": "  aidev-error-why AAPT2                               # 搜索 AAPT2 相关错误\n  aidev-error-why proxy                                 # 搜索代理相关错误\n  cat build.log | aidev-error-why                        # 从编译日志中自动匹配\n  aidev-build --full 2>&1 | aidev-error-why              # 构建失败后诊断\n  aidev-error-why --all                                  # 查看所有支持的错误模式",
+          "permissions": "无特殊权限要求",
+          "notes": "支持的模式: AAPT2 死锁/崩溃、Kotlin 编译错误、Gradle Daemon/配置问题、依赖冲突、资源未找到、NDK/ABI、Java 版本、代理、OOM、SDK 路径。aidev-build 构建失败时自动运行此命令。"
+        },
+        {
+          "title": "代码搜索索引",
+          "cmd": "aidev-index [class|res|string|layout|function] <关键词>",
+          "desc": "为 Android 项目建立可搜索索引，快速查找类和资源定义位置",
+          "tags": ["内置命令", "Android 开发", "搜索"],
+          "usage": "  aidev-index                                    # 构建/刷新索引\n  aidev-index class MainActivity              # 搜索类定义\n  aidev-index res layout                      # 搜索布局资源\n  aidev-index string app_name                 # 搜索字符串资源\n  aidev-index layout activity                 # 搜索布局文件\n  aidev-index function loadData               # 搜索方法名\n  aidev-index component MainActivity          # 搜索 Android 组件",
+          "permissions": "无特殊权限要求。需要在项目根目录运行。",
+          "notes": "首次运行会扫描 java/ 目录和 res/ 资源文件，建立 .aidev-index.json 索引。后续搜索秒级返回。索引包含: 类名、资源、方法签名、AndroidManifest 组件。"
+        }
+      ]
+    },
+    {
+      "id": "android-sdk",
+      "name": "Android SDK 工具",
+      "items": [
+        {
+          "title": "资源打包工具",
+          "cmd": "aapt2 [子命令] [选项]",
+          "desc": "Android Asset Packaging Tool 2 — 编译和打包应用资源",
+          "tags": ["Android SDK", "构建工具", "资源管理"],
+          "usage": "  aapt2 compile res/layout/main.xml -o build/                    # 编译单个资源文件\n  aapt2 link build/ -o app.apk --manifest AndroidManifest.xml     # 链接资源并打包\n  aapt2 dump badging app.apk                                     # 查看 APK 完整信息\n  aapt2 dump permissions app.apk                                  # 查看 APK 声明的权限\n  aapt2 dump configurations app.apk                               # 查看 APK 支持的配置\n  aapt2 dump resources app.apk                                    # 查看 APK 包含的资源列表\n  aapt2 version                                                   # 查看 aapt2 版本",
+          "permissions": "直接从 SDK build-tools 调用，无额外权限",
+          "notes": "aapt2 是 Gradle 构建过程中自动调用的底层工具。dump 子命令对分析 APK 内容非常有用。compile + link 两步替代了旧版 aapt 的一步打包。"
+        },
+        {
+          "title": "调试桥",
+          "cmd": "adb [选项] <子命令> [参数]",
+          "desc": "Android Debug Bridge — 管理和调试 Android 设备 (本环境通过 Shizuku 替代)",
+          "tags": ["Android SDK", "调试", "设备管理"],
+          "usage": "  adb devices                               # 列出已连接的设备\n  adb install app.apk                       # 安装 APK 到设备\n  adb uninstall com.example.app             # 卸载应用\n  adb shell <command>                       # 在设备上执行 shell 命令\n  adb logcat                                # 查看设备日志\n  adb pull /sdcard/file.txt ./              # 从设备拉取文件\n  adb push ./file.txt /sdcard/              # 推送文件到设备\n  adb reboot                                # 重启设备\n  adb forward tcp:8080 tcp:8080             # 端口转发\n  adb shell am start -n com.example/.Main   # 启动 Activity\n  adb shell dumpsys battery                 # 查看电池状态",
+          "permissions": "需要 USB 调试授权或网络调试连接",
+          "notes": "本环境无 USB 连接，adb 功能通过 Shizuku 和内置命令替代（aidev-shizuku、aidev-logcat）。此条作为参考用。adb shell 内可运行 pm、am、dumpsys、wm、settings 等系统工具。"
+        },
+        {
+          "title": "系统服务诊断",
+          "cmd": "dumpsys <服务名> [选项]",
+          "desc": "转储 Android 系统服务的当前状态信息",
+          "tags": ["Android SDK", "调试", "系统诊断"],
+          "usage": "  dumpsys battery                           # 查看电池状态\n  dumpsys meminfo com.example.app           # 查看应用内存使用\n  dumpsys cpuinfo                           # 查看 CPU 使用情况\n  dumpsys diskstats                         # 查看磁盘存储统计\n  dumpsys window displays                   # 查看屏幕信息\n  dumpsys activity activities               # 查看 Activity 栈\n  dumpsys package com.example.app           # 查看应用包信息\n  dumpsys power                             # 查看电源管理状态\n  dumpsys wifi                              # 查看 WiFi 状态\n  dumpsys | grep 'DUMP OF SERVICE'          # 列出所有可 dump 的服务",
+          "permissions": "部分服务需要 shell 权限或 root",
+          "notes": "dumpsys 是诊断 Android 系统状态的利器。不带参数列出所有服务名。在 Shizuku 环境下通过 aidev-shizuku exec 'dumpsys ...' 运行。"
+        },
+        {
+          "title": "包管理工具",
+          "cmd": "pm <子命令> [选项]",
+          "desc": "Package Manager — 管理 Android 应用包",
+          "tags": ["Android SDK", "应用管理"],
+          "usage": "  pm list packages                           # 列出所有已安装应用\n  pm list packages -3                        # 仅列出第三方应用\n  pm list packages -s                        # 仅列出系统应用\n  pm list packages | grep chrome             # 搜索特定应用\n  pm path com.example.app                    # 查看 APK 安装路径\n  pm install /sdcard/app.apk                 # 安装 APK\n  pm uninstall -k com.example.app            # 卸载但保留数据\n  pm clear com.example.app                   # 清除应用数据\n  pm enable com.example.app/.MainActivity    # 启用组件\n  pm disable com.example.app/.MainActivity   # 禁用组件\n  pm grant com.example.app android.permission.CAMERA  # 授予权限\n  pm revoke com.example.app android.permission.CAMERA  # 撤销权限",
+          "permissions": "需要 shell 权限。install/uninstall 需要额外权限",
+          "notes": "通过 aidev-shizuku exec 'pm ...' 或 android-sh 'pm ...' 运行。pm grant/revoke 用于 Android 6+ 的运行时权限管理。"
+        },
+        {
+          "title": "活动管理器",
+          "cmd": "am <子命令> [选项]",
+          "desc": "Activity Manager — 启动/停止/管理 Android 应用组件",
+          "tags": ["Android SDK", "应用管理", "调试"],
+          "usage": "  am start -n com.example/.MainActivity                    # 启动指定 Activity\n  am start -a android.intent.action.VIEW -d https://example.com  # 启动 URL\n  am start -t image/png -a android.intent.action.VIEW             # 启动图片查看器\n  am force-stop com.example.app                                   # 强制停止应用\n  am kill com.example.app                                         # 杀死应用进程\n  am broadcast -a android.intent.action.BOOT_COMPLETED            # 发送广播\n  am startservice -n com.example/.MyService                       # 启动服务\n  am monitor                                                      # 监控应用启动\n  am profile com.example.app start /sdcard/profile                # 开始性能分析\n  am profile com.example.app stop                                 # 停止性能分析",
+          "permissions": "需要 shell 权限",
+          "notes": "通过 aidev-shizuku exec 'am ...' 或 android-sh 'am ...' 运行。am start 支持 Intent 的各种参数（-a action, -d data, -t type, -e extra 等）。"
+        },
+        {
+          "title": "窗口管理",
+          "cmd": "wm [子命令] [参数]",
+          "desc": "Window Manager — 查看和修改屏幕显示参数",
+          "tags": ["Android SDK", "系统控制", "显示"],
+          "usage": "  wm size                                   # 查看当前屏幕分辨率\n  wm size 1080x1920                         # 修改屏幕分辨率\n  wm size reset                             # 恢复原始分辨率\n  wm density                                # 查看当前屏幕密度 (dpi)\n  wm density 320                            # 修改屏幕密度\n  wm density reset                          # 恢复原始密度\n  wm overscan 0,0,0,0                       # 设置屏幕过扫描区域\n  wm scaling                                # 查看缩放比例",
+          "permissions": "需要 shell 权限（修改需要 WRITE_SECURE_SETTINGS 或 root）",
+          "notes": "通过 aidev-shizuku exec 'wm ...' 运行。修改分辨率和密度在部分设备上可能无效。修改分辨率的应用在重启后通常需要重新设置。"
+        },
+        {
+          "title": "系统设置管理",
+          "cmd": "settings [子命令] [参数]",
+          "desc": "读取和修改 Android 系统设置",
+          "tags": ["Android SDK", "系统控制", "配置"],
+          "usage": "  settings list system                       # 列出所有 system 表设置\n  settings list global                      # 列出所有 global 表设置\n  settings list secure                      # 列出所有 secure 表设置\n  settings get system screen_brightness     # 获取屏幕亮度值\n  settings put system screen_brightness 200 # 设置屏幕亮度\n  settings put global airplane_mode_on 1    # 开启飞行模式\n  settings put global wifi_on 1             # 开启 WiFi\n  settings get secure android_id            # 获取 Android ID\n  settings put secure notification_badge_count 1  # 开启通知角标",
+          "permissions": "读不需要权限。写 system 表需要 WRITE_SETTINGS，写 global/secure 需要 WRITE_SECURE_SETTINGS 或 root",
+          "notes": "设置分为三个命名空间：system（普通设置）、global（全局设置）、secure（安全设置，仅 root 可写部分）。通过 wm/settings 修改的参数在重启后恢复。"
+        }
       ]
     }
   ]

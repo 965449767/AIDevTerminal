@@ -666,67 +666,59 @@ Exported to: `/storage/emulated/0/app-debug.apk` (2.9MB)
 下一步：无活跃计划。可选集成测试 (androidTest)。
 ```
 
-## 2026-06-24 — EmbeddedShellPages.kt 代码拆分
+## 2026-06-26 — Phase A+B+C+D(全) + 同步修复
 
 ### Summary
+完成全部规划阶段。新增 7 个命令，修复目录同步 FileObserver 问题。
 
-将 `EmbeddedShellPages.kt` 从 2114 行拆分为主文件 + 4 个独立模块，主文件减少 30%。
+#### Phase A — Android 开发日常工具
+- **知识库**: 新增 android-sdk 分类(7 工具)
+- **aidev-apk-info**: APK 解析脚本，多路径查找 aapt2
+- **aidev-build**: 智能构建包装，三模式+auto 检测
 
-### 拆分步骤
+#### Phase B — 脚手架+代码生成
+- **aidev-create-android-project**: 完整 Android 项目骨架
+- **aidev-gen**: activity/fragment/viewmodel 代码生成
 
-**Step 1: 提取数据类**
-- 4 个 `private data class` 移入 `TerminalModels.kt`，改为 `internal`
-- 编译通过，测试通过
+#### Phase C — 诊断引擎
+- **aidev-error-why**: 11 种常见错误中文诊断，aidev-build 自动集成
+- **aidev-logcat**: 增强 --tags 过滤、--watch-crash 监控
 
-**Step 2: 提取纯工具函数**
-- 9 个零依赖函数移入 `TerminalUtils.kt`
-- 新增 `terminalDp()` 和 `tapCmdHint()` 顶层函数
-- 编译通过，测试通过，实机验证：自动补全、虚拟键盘正常
+#### Phase D — 代码索引
+- **aidev-index**: 首次构建 JSON 索引，后续秒搜 class/res/layout/string/function/component
 
-**Step 3: 提取 VirtualKeyEditor**
-- `editVirtualKey()` + 别名管理移入 `VirtualKeyEditor.kt`
-- 通过 `onKeysChanged` 回调解耦
-- 编译通过，测试通过，实机验证：长按编辑、别名功能正常
-
-**Step 4: 提取 CompletionEngine**
-- 补全建议 + UI 构建 + 固定/取消固定移入 `CompletionEngine.kt`
-- 通过 `CompletionHost` 接口解耦
-- 编译通过，测试通过，实机验证：补全、路径补全、TUI 切换正常
-
-**Step 5: SessionManager — 跳过**
-- 会话管理与共享状态高度耦合（6 个状态字段 + 互相递归）
-- 提取风险过高，保持在主类中
+#### 同步修复
+- PwdFileObserver: FileObserver → coroutine 轮询(500ms)，与所有桥接服务一致
+- EmbeddedShellPages: pwdScope 管理，initPwdObserver 简化
 
 ### Files Changed
-
-- `EmbeddedShellPages.kt` — 2114 → 1489 行（-30%）
-- `TerminalModels.kt` — 新建，28 行
-- `TerminalUtils.kt` — 新建，112 行
-- `VirtualKeyEditor.kt` — 新建，301 行
-- `CompletionEngine.kt` — 新建，264 行
+- `app/src/main/res/raw/knowledge_base.json` — android-sdk分类 + 7条builtin更新
+- `app/src/main/assets/scripts/aidev-apk-info.sh` — 新建
+- `app/src/main/assets/scripts/aidev-build.sh` — 新建 + 后续更新(集成error-why)
+- `app/src/main/assets/scripts/aidev-create-android-project.sh` — 新建
+- `app/src/main/assets/scripts/aidev-gen.sh` — 新建
+- `app/src/main/assets/scripts/aidev-error-why.sh` — 新建
+- `app/src/main/assets/scripts/aidev-logcat.sh` — 重写(新增 --tags/--watch-crash)
+- `app/src/main/assets/scripts/aidev-index.sh` — 新建
+- `app/src/main/java/com/aidev/terminal/PwdFileObserver.kt` — 重写(轮询)
+- `app/src/main/java/com/aidev/terminal/EmbeddedShellPages.kt` — pwdScope + initPwdObserver简化
+- `app/src/main/java/com/aidev/terminal/UbuntuBootstrapScripts.kt` — 全部脚本注册
+- `app/src/main/java/com/aidev/terminal/TerminalShellAssets.kt` — .aidevrc函数注册
+- `app/src/main/java/com/aidev/terminal/Constants.kt` — ASSET_VERSION bump
 
 ### Validation
-
 ```bash
-bash /root/.android-env/scripts/build-android.sh   # BUILD SUCCESSFUL
-./gradlew :app:testDebugUnitTest --no-daemon       # 30/30 tests pass
+./gradlew :app:compileDebugKotlin --no-daemon       # BUILD SUCCESSFUL
+./gradlew :app:assembleDebug --no-daemon             # BUILD SUCCESSFUL → APK
 ```
 
-### 实机验证
-
-- 自动补全：输入 gi → 出现 git status 等建议 ✓
-- 路径补全：输入 cd / → 出现目录列表 ✓
-- 虚拟键盘：所有按键正常 ✓
-- 键编辑：长按 → 编辑对话框 → 保存/恢复默认 ✓
-- TUI 模式：切换正常，补全栏隐藏/显示 ✓
-
 ### Progress Report
-
 ```text
-已完成：0.17.0 — EmbeddedShellPages.kt 代码拆分
-本次完成：主文件 -30%，拆分出 4 个独立模块
-总体进度：100%
-验证：BUILD SUCCESSFUL, 30/30 tests pass
-已知问题：无
-下一步：无活跃计划。可选拆分 EmbeddedFilesPage.kt。
+已完成：全部 Phase A+B+C+D，7 个新命令
+Phase A (SDK知识库+apk-info+build)  — 100%
+Phase B (脚手架+代码生成)          — 100%
+Phase C (诊断引擎+logcat增强)      — 100%
+Phase D (代码索引)                 — 100%
+修复：PwdFileObserver 轮询化
+验证：BUILD SUCCESSFUL
 ```

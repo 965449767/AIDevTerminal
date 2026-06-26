@@ -1,37 +1,40 @@
 {
-  "task_id": "file-browser-selection-fix",
-  "status": "awaiting-verification",
-  "current_phase": "file-browser-selection-fix",
-  "last_updated": "2026-06-25",
-  "overall_progress_percent": 100,
-  "active_plan": [
-    "File browser dual-pane selection logic fix"
+  "phase": "all-phases-complete",
+  "current_step": "所有 Phase A—D 已完成",
+  "completed_phases": [
+    "Phase 1-5b: all bridge commands",
+    "Knowledge base enhancement (tags/usage/permissions/notes)",
+    "Lifecycle fix (bridge restart + scope.cancelChildren + dialog cleanup)",
+    "aidev-shizuku unified command",
+    "Knowledge base category chips + layout fix",
+    "Knowledge base Chinese usage display + grep entry",
+    "Plain text fling scrolling (NestedScrollView + TextView)",
+    "Phase A: Android SDK 知识库 + aidev-apk-info + aidev-build",
+    "Phase B1: aidev-create-android-project 脚手架",
+    "Phase B2: aidev-gen 代码生成器",
+    "Phase C1: error_db.json + aidev-error-why + build 集成",
+    "Phase C2: logcat 增强 (watch-crash, tag presets)",
+    "Phase D: aidev-index 代码搜索索引",
+    "PwdFileObserver fix: FileObserver → coroutine polling",
+    "OpenCode setup integration: install + command registration"
   ],
-  "next_3_steps": [
-    "User installs APK and verifies 5 test cases",
-    "Prioritize audit Critical items (ANR, Timer leak, race conditions)",
-    "Performance optimization: refreshSelection instead of full loadPane"
+  "completed_steps": [
+    "knowledge_base.json: 新增 android-sdk 分类 + builtin 条目 × 7",
+    "assets/scripts/aidev-apk-info.sh: APK 解析 (aapt2 dump badging + 中文格式化)",
+    "assets/scripts/aidev-build.sh: 智能构建 (auto/full/test/compile + 错误诊断)",
+    "assets/scripts/aidev-create-android-project.sh: 项目骨架生成",
+    "assets/scripts/aidev-gen.sh: 代码生成 (activity/fragment/viewmodel)",
+    "assets/scripts/aidev-error-why.sh: 错误诊断引擎 (11 种模式)",
+    "assets/scripts/aidev-logcat.sh: 增强 (--tags, --watch-crash)",
+    "assets/scripts/aidev-index.sh: 代码搜索索引 (class/res/string/layout/function)",
+    "UbuntuBootstrapScripts.kt: copyAssetScripts + ubuntu-core case 全部注册",
+    "TerminalShellAssets.kt: .aidevrc 函数注册",
+    "Constants.kt: ASSET_VERSION → 0.12.44-android-devtools",
+    "PwdFileObserver.kt: 重写为 coroutine 轮询 (500ms)",
+    "EmbeddedShellPages.kt: pwdScope 管理 + initPwdObserver 简化",
+    "opencode-install.sh: 重写为两阶段（安装 + 配置），7 个 command 文件内嵌",
+    "AGENTS.md: 添加 Android Development Tools 节，指导 OpenCode 使用 aidev 工具",
+    "knowledge_base.json: 更新 opencode-install 条目"
   ],
-  "changed_files": [
-    "app/src/main/java/com/aidev/terminal/EmbeddedFilesPage.kt"
-  ],
-  "validation": {
-    "last_commands": [
-      "./gradlew :app:compileDebugKotlin --no-daemon",
-      "./gradlew :app:testDebugUnitTest --no-daemon",
-      "bash /root/.android-env/scripts/build-android.sh"
-    ],
-    "last_result": "BUILD SUCCESSFUL",
-    "known_failures": []
-  },
-  "cognitive_state": {
-    "failure_count": 0,
-    "current_mode": "awaiting-user-confirmation",
-    "tried_approaches": [],
-    "blocked_on": "User APK install and test"
-  },
-  "handoff": {
-    "last_summary": "Fixed dual-pane selection logic in EmbeddedFilesPage.kt. Merged leftSelected/rightSelected into single selectedFile. Replaced dual path labels with unified pathBar. Cross-pane multi-mode click now exits multi-mode. exitMultiMode clears single selection. Directory navigation reloads both panes. All compile/test/build pass.",
-    "resume_from": "Awaiting user APK install and test confirmation."
-  }
+  "pending_steps": []
 }

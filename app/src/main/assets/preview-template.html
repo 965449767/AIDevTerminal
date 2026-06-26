@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=3">
+<link rel="stylesheet" href="atom-one-dark.min.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#282c34;color:#abb2bf;padding:16px;font:14px/1.6 -apple-system,BlinkMacSystemFont,monospace;overflow-x:hidden;word-wrap:break-word}
+pre{background:transparent;white-space:pre-wrap;word-break:break-all;font-size:13px}
+code{font-family:'Fira Code','Cascadia Code','JetBrains Mono','Droid Sans Mono',monospace}
+pre code.hljs{padding:0;background:transparent}
+#content img{max-width:100%}
+#content table{border-collapse:collapse;width:100%;margin:8px 0}
+#content th,#content td{border:1px solid #4b5263;padding:6px 10px;text-align:left}
+#content th{background:#3b4252}
+#content blockquote{border-left:4px solid #7C3AED;padding-left:12px;color:#8f9aa8;margin:8px 0}
+#content h1,#content h2,#content h3{color:#e5e9f0;margin:16px 0 8px}
+#content a{color:#7C3AED}
+#content hr{border:0;border-top:1px solid #4b5263;margin:16px 0}
+#content ul,#content ol{padding-left:20px}
+#content p{margin:4px 0}
+</style>
+</head>
+<body><div id="content"></div>
+<script src="marked.min.js"></script>
+<script src="highlight.min.js"></script>
+<script>
+var type='__TYPE__',content='__CONTENT__';
+if(type==='md'){
+  content=content.replace(/\\n/g,'\n');
+  document.getElementById('content').innerHTML=marked.parse(content);
+}else{
+  document.getElementById('content').innerHTML='<pre><code class="language-'+type+'">'+content+'</code></pre>';
+  document.querySelectorAll('pre code').forEach(function(b){hljs.highlightElement(b)});
+}
+</script>
+</body>
+</html>

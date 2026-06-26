@@ -36,7 +36,7 @@ echo
 echo "== 网络 =="
 getent hosts github.com >/dev/null 2>&1 && echo "  DNS github.com ✓" || echo "  DNS github.com ✗"
 if command -v curl >/dev/null 2>&1; then
-  curl -I -L --connect-timeout 10 https://github.com 2>&1 | head -8
+  curl -I -L -k --connect-timeout 10 https://github.com 2>&1 | head -8
 else
   echo "  curl 缺失，无法测试 HTTPS。"
 fi

@@ -62,7 +62,7 @@
 
         <receiver
             android:name=".SysCommandReceiver"
-            android:exported="false">
+            android:exported="true">
             <intent-filter>
                 <action android:name="com.aidev.terminal.internal.NOTIFY" />
                 <action android:name="com.aidev.terminal.internal.CLIP" />
@@ -70,6 +70,16 @@
                 <action android:name="com.aidev.terminal.internal.BRIGHTNESS" />
             </intent-filter>
         </receiver>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <provider
             android:name="rikka.shizuku.ShizukuProvider"

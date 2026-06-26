@@ -1,163 +1,137 @@
 package com.aidev.terminal
 
-import android.os.FileObserver
-import android.util.Log
-import com.aidev.terminal.ErrorHandler
+import android.content.Context
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.io.File
-import java.lang.ref.WeakReference
+import java.util.concurrent.CountDownLatch
 
-/**
- * Shizuku 文件桥服务。
- * 监听 Ubuntu 环境写入的日志请求，通过 Shizuku 获取 logcat 后写回结果文件。
- *
- * 通信协议：
- * - Ubuntu 写入: /home/.aidev-shizuku-bridge/request/log_<timestamp>_<pid>
- * - Android 写入: /home/.aidev-shizuku-bridge/result/log_<timestamp>_<pid>
- *
- * 请求文件格式：
- *   PACKAGE=com.aidev.terminal
- *   LINES=200
- *   FOLLOW=
- */
 object ShizukuBridgeService {
 
-    private const val TAG = "ShizukuBridge"
     private const val BRIDGE_DIR = ".aidev-shizuku-bridge"
     private const val REQUEST_DIR = "request"
     private const val RESULT_DIR = "result"
 
-    private var observer: FileObserver? = null
-    @PublishedApi internal var isRunning = false
+    private var job: Job? = null
+    private var appCtx: Context? = null
 
-    /** 启动桥服务 */
-    fun start(homeDir: File) {
-        if (isRunning) {
-            AIDevLogger.w(TAG, "Bridge service already running, skipping start")
-            return
-        }
+    val isRunning: Boolean get() = job != null
 
-        val requestDir = File(File(homeDir, BRIDGE_DIR), REQUEST_DIR)
+    fun start(context: Context, homeDir: File) {
+        if (job != null) return
+        appCtx = context.applicationContext
+        val bridgeDir = File(homeDir, BRIDGE_DIR)
+        val requestDir = File(bridgeDir, REQUEST_DIR)
+        val resultDir = File(bridgeDir, RESULT_DIR)
         requestDir.mkdirs()
-        File(File(homeDir, BRIDGE_DIR), RESULT_DIR).mkdirs()
-
-        observer = object : FileObserver(requestDir, FileObserver.CREATE or FileObserver.MODIFY) {
-            override fun onEvent(event: Int, path: String?) {
-                if (path == null) return
-                when {
-                    path.startsWith("log_") -> handleRequest(requestDir, File(homeDir, BRIDGE_DIR), path)
-                    path.startsWith("camera_") -> handleCameraRequest(requestDir, File(homeDir, BRIDGE_DIR), path)
+        resultDir.mkdirs()
+        AIDevLogger.i("ShizukuBridge", "start polling $requestDir")
+        job = CoroutineScope(Dispatchers.IO).launch {
+            while (isActive) {
+                runCatching {
+                    requestDir.listFiles()?.filter { it.name.startsWith("log_") || it.name.startsWith("camera_") || it.name.startsWith("exec_") }?.forEach { file ->
+                        handleRequest(requestDir, resultDir, file)
+                    }
                 }
+                delay(500)
             }
         }
-        observer?.startWatching()
-        isRunning = true
-        AIDevLogger.d(TAG, "Bridge service started, watching $requestDir")
     }
 
-    /** 停止桥服务 */
     fun stop() {
-        try {
-            observer?.stopWatching()
-        } finally {
-            observer = null
-            isRunning = false
-            AIDevLogger.d(TAG, "Bridge service stopped")
-        }
+        job?.cancel()
+        job = null
     }
 
-    private fun handleRequest(requestDir: File, bridgeDir: File, fileName: String) {
-        val reqFile = File(requestDir, fileName)
-        if (!reqFile.exists()) return
-
-        // 防止重复处理
-        val resFile = File(File(bridgeDir, RESULT_DIR), fileName)
+    private fun handleRequest(requestDir: File, resultDir: File, reqFile: File) {
+        val resFile = File(resultDir, reqFile.name)
         if (resFile.exists()) return
 
-        Thread {
-            ErrorHandler.execute {
-                Thread.sleep(100) // 等待写入完成
-
-                val content = reqFile.readText()
-                val lines = content.lines().associate {
-                    val parts = it.split("=", limit = 2)
-                    parts[0] to if (parts.size > 1) parts[1] else ""
-                }
-
-                val packageName = lines["PACKAGE"] ?: "com.aidev.terminal"
-                val lineCount = lines["LINES"]?.toIntOrNull() ?: 200
-                val follow = lines["FOLLOW"]?.isNotEmpty() == true
-
-                AIDevLogger.d(TAG, "Processing request: pkg=$packageName, lines=$lineCount, follow=$follow")
-
-                if (follow) {
-                    // 流式模式：写入 header 后持续追加
-                    atomicWriteText(resFile, "[持续监听中... 按 Ctrl+C 停止]\n")
-                    val process = ShizukuLogcat.startLogStream(
-                        packageName = packageName,
-                        onLine = { line ->
-                            try {
-                                resFile.appendText("$line\n")
-                            } catch (e: Exception) {
-                                AIDevLogger.w(TAG, "Failed to append log line", e)
-                            }
-                        },
-                        onError = { err ->
-                            resFile.appendText("\nERROR: $err\n")
-                        }
-                    )
-                    // 流式模式下不删除请求文件，让用户 Ctrl+C 后手动清理
-                } else {
-                    // 批量模式
-                    val done = java.util.concurrent.CountDownLatch(1)
-                    ShizukuLogcat.fetchLog(
-                        packageName = packageName,
-                        lines = lineCount
-                    ) { result ->
-                        result.onSuccess { logs ->
-                            atomicWriteText(resFile, logs)
-                        }.onFailure { e ->
-                            AIDevLogger.e(TAG, "Failed to fetch log", e)
-                            atomicWriteText(resFile, "ERROR: ${e.message}\n")
-                        }
-                        done.countDown()
-                    }
-                    done.await(30, java.util.concurrent.TimeUnit.SECONDS)
-                    if (done.count > 0) {
-                        atomicWriteText(resFile, "ERROR: 请求超时\n")
-                    }
-                    // 清理请求文件
-                    reqFile.delete()
-                }
-            }.getOrElse { e ->
-                AIDevLogger.e(TAG, "Failed to handle request: $fileName", e)
-                atomicWriteText(resFile, "ERROR: ${e.message}\n")
-                reqFile.delete()
-            }
-        }.apply { isDaemon = true }.start()
-    }
-
-    private fun handleCameraRequest(requestDir: File, bridgeDir: File, fileName: String) {
-        val reqFile = File(requestDir, fileName)
-        if (!reqFile.exists()) return
-
-        val resFile = File(File(bridgeDir, RESULT_DIR), fileName)
-        if (resFile.exists()) return
-
-        // 获取当前前台 Activity（保留供后续 IPC 使用）
-        val activity = AIDevApp.getCurrentActivity() ?: run {
-            resFile.writeText("""{"status":"error","error":"No foreground activity available","timestamp":${System.currentTimeMillis()}}""")
-            reqFile.delete()
-            return
+        val content = runCatching { reqFile.readText() }.getOrNull() ?: return
+        val fields = content.lines().associate {
+            val parts = it.split("=", limit = 2)
+            parts[0] to if (parts.size > 1) parts[1] else ""
         }
 
-        resFile.writeText("""{"status":"error","error":"Camera bridge removed","timestamp":${System.currentTimeMillis()}}""")
+        val type = fields["TYPE"] ?: ""
+        AIDevLogger.i("ShizukuBridge", "Processing: type=$type, file=${reqFile.name}")
+
+        when (type) {
+            "exec" -> handleExecRequest(resFile, fields["COMMAND"] ?: "")
+            else -> handleLogRequest(resFile, fields)
+        }
         reqFile.delete()
     }
 
-    /** 原子写入：先写 .tmp 再 rename，避免进程被杀导致文件损坏 */
+    private fun handleExecRequest(resFile: File, command: String) {
+        AIDevLogger.i("ShizukuBridge", "Executing: $command")
+        val result = runBlocking { ShizukuLogcat.executeCommand(command) }
+        val output = if (result.exitCode == 0) {
+            result.stdout.ifBlank { "命令执行成功（无输出）" }
+        } else {
+            "ERROR: exit=${result.exitCode}\n${result.stderr.ifBlank { result.stdout }}"
+        }
+        atomicWriteText(resFile, output)
+    }
+
+    private fun handleLogRequest(resFile: File, fields: Map<String, String>) {
+        val packageName = fields["PACKAGE"] ?: "com.aidev.terminal"
+        val lineCount = fields["LINES"]?.toIntOrNull() ?: 200
+        val follow = fields["FOLLOW"]?.isNotEmpty() == true
+        val level = fields["LEVEL"] ?: ""
+        val tag = fields["TAG"] ?: ""
+        val clear = fields["CLEAR"]?.isNotEmpty() == true
+
+        if (clear) {
+            ShizukuLogcat.clearLogBuffer()
+        }
+
+        if (follow) {
+            atomicWriteText(resFile, "[持续监听中... 按 Ctrl+C 停止]\n")
+            ShizukuLogcat.startLogStream(
+                packageName = packageName,
+                level = level,
+                tag = tag,
+                onLine = { line ->
+                    runCatching { resFile.appendText("$line\n") }
+                },
+                onError = { err ->
+                    runCatching { resFile.appendText("\nERROR: $err\n") }
+                }
+            )
+        } else {
+            val done = CountDownLatch(1)
+            ShizukuLogcat.fetchLog(
+                packageName = packageName,
+                lines = lineCount,
+                level = level,
+                tag = tag
+            ) { result ->
+                result.onSuccess { logs ->
+                    atomicWriteText(resFile, logs)
+                }.onFailure { e ->
+                    AIDevLogger.e("ShizukuBridge", "fetchLog failed", e)
+                    atomicWriteText(resFile, "ERROR: ${e.message}\n")
+                }
+                done.countDown()
+            }
+            runCatching { done.await(30, java.util.concurrent.TimeUnit.SECONDS) }
+            if (done.count > 0) {
+                atomicWriteText(resFile, "ERROR: 请求超时\n")
+            }
+        }
+    }
+
     private fun atomicWriteText(file: File, text: String) {
         val tmp = File(file.parentFile, "${file.name}.tmp")
-        tmp.writeText(text)
-        tmp.renameTo(file)
+        runCatching {
+            tmp.writeText(text)
+            tmp.renameTo(file)
+        }
     }
 }

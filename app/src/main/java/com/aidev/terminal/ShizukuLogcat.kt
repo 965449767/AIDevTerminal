@@ -61,12 +61,16 @@ object ShizukuLogcat {
      * @param packageName 应用包名，为空则获取所有日志
      * @param lines 获取最近多少行，默认 500
      * @param filters 额外的过滤标签，如 "AIDEV:*"
+     * @param level 日志级别过滤，如 "ERROR", "WARN", "INFO", "DEBUG", "VERBOSE"
+     * @param tag 按标签过滤，如 "ActivityManager"
      * @param callback 结果回调（在主线程）
      */
     fun fetchLog(
         packageName: String = "",
         lines: Int = 500,
         filters: List<String> = emptyList(),
+        level: String = "",
+        tag: String = "",
         callback: (Result<String>) -> Unit
     ) {
         if (!isAvailable()) {
@@ -76,7 +80,7 @@ object ShizukuLogcat {
 
         Thread {
             try {
-                val cmd = buildLogcatCommand(packageName, lines, filters)
+                val cmd = buildLogcatCommand(packageName, lines, filters, follow = false, level = level, tag = tag)
                 Log.d(TAG, "Executing: $cmd")
 
                 val process = newProcessMethod!!.invoke(
@@ -115,6 +119,8 @@ object ShizukuLogcat {
     fun startLogStream(
         packageName: String = "",
         filters: List<String> = emptyList(),
+        level: String = "",
+        tag: String = "",
         onLine: (String) -> Unit,
         onError: (String) -> Unit
     ): java.lang.Process? {
@@ -124,7 +130,7 @@ object ShizukuLogcat {
         }
 
         return try {
-            val cmd = buildLogcatCommand(packageName, 0, filters, follow = true)
+            val cmd = buildLogcatCommand(packageName, 0, filters, follow = true, level = level, tag = tag)
             Log.d(TAG, "Starting stream: $cmd")
 
             val process = newProcessMethod!!.invoke(
@@ -166,31 +172,47 @@ object ShizukuLogcat {
         packageName: String,
         lines: Int,
         filters: List<String>,
-        follow: Boolean = false
+        follow: Boolean = false,
+        level: String = "",
+        tag: String = ""
     ): String {
         val sb = StringBuilder("logcat")
 
-        // 按包名过滤（通过 PID 映射）
         if (packageName.isNotBlank()) {
             sb.append(" --pid=\$(pidof $packageName 2>/dev/null || echo 0)")
         }
-
-        // 行数限制
         if (lines > 0) {
             sb.append(" -t $lines")
         }
-
-        // 额外过滤标签
-        filters.forEach { sb.append(" $it") }
-
-        // 持续监听模式
-        if (follow) {
-            sb.append(" -v threadtime")
-        } else {
-            sb.append(" -d -v threadtime")
+        if (level.isNotEmpty()) {
+            if (tag.isNotEmpty()) {
+                sb.append(" $tag:$level *:S")
+            } else {
+                sb.append(" *:$level")
+            }
+        } else if (tag.isNotEmpty()) {
+            sb.append(" $tag:V *:S")
         }
+        filters.forEach { sb.append(" $it") }
+        sb.append(if (follow) " -v threadtime" else " -d -v threadtime")
 
         return sb.toString()
+    }
+
+    /** 清空 logcat 缓冲区 */
+    fun clearLogBuffer() {
+        if (!isAvailable()) return
+        Thread {
+            try {
+                val process = newProcessMethod!!.invoke(
+                    null, arrayOf("sh", "-c", "logcat -c"), null, null
+                ) as? java.lang.Process
+                process?.waitFor()
+                Log.d(TAG, "Log buffer cleared")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to clear log buffer", e)
+            }
+        }.apply { isDaemon = true }.start()
     }
 
     fun checkState(context: android.content.Context): ShizukuState {
