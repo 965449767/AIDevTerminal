@@ -44,7 +44,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class EmbeddedFilesPage : ShellPage, ProjectToolsHost, FileOperationsHost {
+class EmbeddedFilesPage : ShellPage, ProjectToolsHost, FileOperationsHost, NavigationHost {
     private lateinit var activity: Activity
     private lateinit var ui: AIDevUi
     private lateinit var leftList: LinearLayout
@@ -104,6 +104,7 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost, FileOperationsHost {
     private val pm by lazy { PreferencesManager(activity) }
     private val projectTools = ProjectToolsHelper(this)
     private val fileOps = FileOperationsHelper(this)
+    private val navHelper = NavigationHelper(this)
     private val paneBg: GradientDrawable by lazy {
         val c = (ui.palette.surface and 0x00FFFFFF) or (0xCC000000.toInt())
         GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(c, c)).apply {
@@ -192,7 +193,7 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost, FileOperationsHost {
                     addView(action("移动") { fileOps.copyToOther(true) })
                     addView(action("新建") { fileOps.newFolder() })
                     addView(action("粘贴") { fileOps.pasteClipboard() })
-                    addView(action("搜索") { searchActiveDir() })
+                    addView(action("搜索") { navHelper.searchActiveDir() })
                     addView(action("更多") { showFileMoreMenu(host) })
                 }.also { toolbarActions = it })
             }
@@ -206,10 +207,10 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost, FileOperationsHost {
             "文件 · 重命名" to { fileOps.renameSelected() },
             "文件 · 另存" to { fileOps.saveSelectedAs() },
             "文件 · 复制路径" to { copySelectedPath() },
-            "位置 · 收藏当前目录" to { addFavorite() },
-            "位置 · 收藏/跳转" to { showFavorites() },
-            "位置 · 常用目录" to { showQuickDirs() },
-            "位置 · 最近项目" to { showRecentProjects() },
+            "位置 · 收藏当前目录" to { navHelper.addFavorite() },
+            "位置 · 收藏/跳转" to { navHelper.showFavorites() },
+            "位置 · 常用目录" to { navHelper.showQuickDirs() },
+            "位置 · 最近项目" to { navHelper.showRecentProjects() },
             "系统 · 安装 APK" to { installSelectedApk(host) }
         )
         val recent = recentFileMenuLabels().filter { label -> actions.any { it.first == label } }
@@ -1292,116 +1293,6 @@ $lnCss
         toast("已复制路径")
     }
 
-    private fun searchActiveDir() {
-        inputAllowAny("搜索文件", "输入文件名关键词") { keyword ->
-            val base = activeDir()
-            scope.launch {
-                val matches = withContext(Dispatchers.IO) {
-                    runCatching {
-                        base.walkTopDown()
-                            .maxDepth(4)
-                            .filter { it.name.contains(keyword, ignoreCase = true) }
-                            .take(60)
-                            .toList()
-                    }.getOrDefault(emptyList())
-                }
-                withContext(Dispatchers.Main) {
-                    if (matches.isEmpty()) {
-                        toast("没有找到匹配文件")
-                        return@withContext
-                    }
-                    MaterialAlertDialogBuilder(activity)
-                        .setTitle("搜索结果")
-                        .setItems(matches.map { it.absolutePath.removePrefix(base.absolutePath).ifBlank { it.absolutePath } }.toTypedArray()) { _, which ->
-                            val file = matches[which]
-                            if (file.isDirectory) {
-                                if (activeLeft) leftDir = file else rightDir = file
-                            } else {
-                                selectedFile = file
-                            }
-                            loadPane(activeLeft)
-                        }
-                        .show()
-                }
-            }
-        }
-    }
-
-    private fun addFavorite() {
-        val set = pm.fileFavorites.toMutableSet()
-        set.add(activeDir().absolutePath)
-        pm.fileFavorites = set
-        toast("已收藏当前路径")
-    }
-
-    private fun showFavorites() {
-        val favorites = pm.fileFavorites.toList().sorted()
-        if (favorites.isEmpty()) {
-            toast("暂无收藏路径")
-            return
-        }
-        MaterialAlertDialogBuilder(activity)
-            .setTitle("路径收藏")
-            .setItems(favorites.toTypedArray()) { _, which ->
-                val dir = File(favorites[which])
-                if (!dir.isDirectory) {
-                    toast("路径不可用")
-                    return@setItems
-                }
-                if (activeLeft) leftDir = dir else rightDir = dir
-                loadPane(activeLeft)
-            }
-            .setNegativeButton("清空收藏") { _, _ ->
-                pm.fileFavorites = emptySet()
-                toast("已清空收藏")
-            }
-            .show()
-    }
-
-    private fun showQuickDirs() {
-        val dirs = listOf(
-            "内部存储" to Environment.getExternalStorageDirectory(),
-            "下载目录" to File(Environment.getExternalStorageDirectory(), "Download"),
-            "AIDev Home" to File(activity.filesDir, "home"),
-            "Ubuntu Root" to File(activity.filesDir, "home/ubuntu-rootfs"),
-            "项目目录" to File(activity.filesDir, "home/ubuntu-rootfs/root/projects"),
-            "任务日志" to File(activity.filesDir, "home/tasks")
-        ).filter { it.second.exists() }
-        if (dirs.isEmpty()) return toast("暂无可用常用目录")
-        MaterialAlertDialogBuilder(activity)
-            .setTitle("常用目录")
-            .setItems(dirs.map { "${it.first}\n${it.second.absolutePath}" }.toTypedArray()) { _, which ->
-                val dir = dirs[which].second
-                if (activeLeft) leftDir = dir else rightDir = dir
-                rememberRecentDir(dir)
-                loadPane(activeLeft)
-            }
-            .show()
-    }
-
-    private fun showRecentProjects() {
-        val recent = pm.fileRecentDirs.toMutableSet()
-        val roots = listOf(
-            File(activity.filesDir, "home/ubuntu-rootfs/root/projects"),
-            File(activity.filesDir, "home/projects"),
-            File(Environment.getExternalStorageDirectory(), "Download")
-        )
-        roots.filter { it.isDirectory }.flatMap { root ->
-            root.listFiles()?.filter { it.isDirectory }?.take(20).orEmpty()
-        }.forEach { recent.add(it.absolutePath) }
-        val dirs = recent.map { File(it) }.filter { it.isDirectory }.sortedBy { it.name.lowercase() }.take(60)
-        if (dirs.isEmpty()) return toast("暂无最近项目")
-        MaterialAlertDialogBuilder(activity)
-            .setTitle("最近项目")
-            .setItems(dirs.map { "${it.name}\n${it.absolutePath}" }.toTypedArray()) { _, which ->
-                val dir = dirs[which]
-                if (activeLeft) leftDir = dir else rightDir = dir
-                rememberRecentDir(dir)
-                loadPane(activeLeft)
-            }
-            .show()
-    }
-
     private fun installSelectedApk(host: ShellHost) {
         val file = selected() ?: return toast("请先选择 APK 文件")
         if (!file.isFile || !file.name.endsWith(".apk", ignoreCase = true)) {
@@ -1693,4 +1584,7 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
     override fun hostExitMultiMode() { exitMultiMode() }
     override fun hostUpdateMultiInfo() { updateMultiInfo() }
     override fun hostInputAllowAny(title: String, hint: String, cb: (String) -> Unit) { inputAllowAny(title, hint, cb) }
+
+    override val hostScope: CoroutineScope get() = scope
+    override fun hostGetSelectedFile(): File? = selectedFile
 }
