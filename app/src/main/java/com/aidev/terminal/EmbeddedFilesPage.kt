@@ -44,7 +44,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class EmbeddedFilesPage : ShellPage, ProjectToolsHost {
+class EmbeddedFilesPage : ShellPage, ProjectToolsHost, FileOperationsHost {
     private lateinit var activity: Activity
     private lateinit var ui: AIDevUi
     private lateinit var leftList: LinearLayout
@@ -103,6 +103,7 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val pm by lazy { PreferencesManager(activity) }
     private val projectTools = ProjectToolsHelper(this)
+    private val fileOps = FileOperationsHelper(this)
     private val paneBg: GradientDrawable by lazy {
         val c = (ui.palette.surface and 0x00FFFFFF) or (0xCC000000.toInt())
         GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(c, c)).apply {
@@ -133,7 +134,8 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost {
         }
         projectTree = ProjectTreeView(activity, ui).apply {
             setCallbacks(
-                dirClick = { file -> notifyTerminalCd(file) },
+                dirClick = { file -> fileOps.notifyTerminalCd(file)
+                    },
                 fileClick = { file -> openFile(file) },
                 fileAction = { file ->
                     selectedFile = file
@@ -186,10 +188,10 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost {
                 addView(LinearLayout(activity).apply {
                     orientation = LinearLayout.HORIZONTAL
                     addView(action("同步") { syncPanes() })
-                    addView(action("复制") { copyToOther(false) })
-                    addView(action("移动") { copyToOther(true) })
-                    addView(action("新建") { newFolder() })
-                    addView(action("粘贴") { pasteClipboard() })
+                    addView(action("复制") { fileOps.copyToOther(false) })
+                    addView(action("移动") { fileOps.copyToOther(true) })
+                    addView(action("新建") { fileOps.newFolder() })
+                    addView(action("粘贴") { fileOps.pasteClipboard() })
                     addView(action("搜索") { searchActiveDir() })
                     addView(action("更多") { showFileMoreMenu(host) })
                 }.also { toolbarActions = it })
@@ -201,8 +203,8 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost {
         val actions = listOf(
             "文件 · 信息" to { previewSelected() },
             "文件 · 编辑" to { editSelected() },
-            "文件 · 重命名" to { renameSelected() },
-            "文件 · 另存" to { saveSelectedAs() },
+            "文件 · 重命名" to { fileOps.renameSelected() },
+            "文件 · 另存" to { fileOps.saveSelectedAs() },
             "文件 · 复制路径" to { copySelectedPath() },
             "位置 · 收藏当前目录" to { addFavorite() },
             "位置 · 收藏/跳转" to { showFavorites() },
@@ -288,7 +290,7 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost {
                                 val src = File(path)
                                 val dst = File(if (isLeft) leftDir else rightDir, src.name)
                                 src.exists() && !dst.exists() && runCatching {
-                                    if (src.isDirectory) copyDir(src, dst) else src.copyTo(dst)
+                                        if (src.isDirectory) fileOps.copyDir(src, dst) else src.copyTo(dst)
                                     true
                                 }.getOrDefault(false)
                             }
@@ -443,7 +445,7 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost {
                         if (isLeft) leftDir = file else rightDir = file
                         selectedFile = null
                         rememberRecentDir(file)
-                        notifyTerminalCd(file)
+                        fileOps.notifyTerminalCd(file)
                         loadPane(true); loadPane(false)
                     } else if (!parent) {
                         openFile(file)
@@ -573,7 +575,7 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost {
                                     if (isLeft) leftDir = file else rightDir = file
                                     selectedFile = null
                                     rememberRecentDir(file)
-                                    notifyTerminalCd(file)
+                                    fileOps.notifyTerminalCd(file)
                                     loadPane(true); loadPane(false)
                                 }
                             }, 500)
@@ -594,7 +596,7 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost {
                                     val src = File(path)
                                     val dst = File(file, src.name)
                                     try {
-                                        if (src.isDirectory) copyDir(src, dst) else src.copyTo(dst)
+                                    if (src.isDirectory) fileOps.copyDir(src, dst) else src.copyTo(dst)
                                         ok++
                                     } catch (e: Exception) {
                                         fail++; dragLog("drop to dir failed: ${src.name}: ${e.message}")
@@ -830,7 +832,7 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost {
                 addView(fileActionInfo, LinearLayout.LayoutParams(0, -1, 1f))
                 addView(action("\u5168\u9009") { toggleSelectAll() })
                 addView(action("\u53CD\u9009") { invertSelection() })
-                addView(action("\u5220\u9664") { deleteSelected() })
+                addView(action("\u5220\u9664") { fileOps.deleteSelected() })
             })
         }
     }
@@ -1134,150 +1136,6 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost {
         }
     }
 
-    private fun deleteSelected() {
-        val targets = if (multiMode) {
-            if (multiSelected.isEmpty()) return toast("\u8BF7\u5148\u9009\u62E9\u6587\u4EF6")
-            multiSelected.toList()
-        } else {
-            val src = selected() ?: return toast("\u8BF7\u5148\u9009\u62E9\u6587\u4EF6\u6216\u76EE\u5F55")
-            listOf(src.absolutePath)
-        }
-        MaterialAlertDialogBuilder(activity)
-            .setTitle("\u786E\u8BA4\u5220\u9664")
-            .setMessage("\u786E\u5B9A\u5220\u9664\u8FD9 ${targets.size} \u4E2A\u6587\u4EF6/\u76EE\u5F55\uFF1F")
-            .setPositiveButton("\u5220\u9664") { _, _ ->
-                var fail = 0
-                targets.forEach { if (!File(it).deleteRecursively()) { fail++; dragLog("delete failed: $it") } }
-                if (multiMode) exitMultiMode() else clearSelection()
-                reloadAll()
-                toast("\u5DF2\u5220\u9664 ${targets.size} \u9879${if (fail > 0) "（${fail} 项失败）" else ""}")
-            }
-            .setNegativeButton("\u53D6\u6D88", null)
-            .show()
-    }
-
-    private fun copyToClipbook(paths: List<String>, move: Boolean) {
-        val serialized = paths.joinToString("\n")
-        val label = if (move) "aidiv_move" else "aidiv_copy"
-        pm.sharedPreferences.edit().putString(label, serialized).apply()
-    }
-
-    private fun hasClipboardItems(): Boolean {
-        val copy = pm.sharedPreferences.getString("aidiv_copy", null)
-        val move = pm.sharedPreferences.getString("aidiv_move", null)
-        return !copy.isNullOrBlank() || !move.isNullOrBlank()
-    }
-
-    private fun pasteClipboard() {
-        val dir = activeDir()
-        val prefs = pm.sharedPreferences
-        val movePaths = prefs.getString("aidiv_move", null)
-        val copyPaths = prefs.getString("aidiv_copy", null)
-
-        if (!movePaths.isNullOrBlank()) {
-            val files = movePaths.lines().map { File(it) }.filter { it.exists() }
-            if (files.isEmpty()) return toast("剪切板中的文件已不存在")
-            var moveFail = 0
-            files.forEach { src ->
-                val dst = File(dir, src.name)
-                runCatching { src.renameTo(dst) }.onFailure { moveFail++; dragLog("move failed: ${src.name}: ${it.message}") }
-            }
-            prefs.edit().remove("aidiv_move").apply()
-            toast(if (moveFail > 0) "已移动 ${files.size - moveFail} 项（${moveFail} 项失败）" else "已移动 ${files.size} 项")
-            reloadAll()
-            return
-        }
-        if (!copyPaths.isNullOrBlank()) {
-            val files = copyPaths.lines().map { File(it) }.filter { it.exists() }
-            if (files.isEmpty()) return toast("剪贴板中的文件已不存在")
-            var copyFail = 0
-            files.forEach { src ->
-                val dst = File(dir, src.name)
-                try {
-                    if (src.isDirectory) src.copyRecursively(dst, overwrite = false)
-                    else src.copyTo(dst, overwrite = false)
-                } catch (e: Exception) {
-                    copyFail++; dragLog("copy failed: ${src.name}: ${e.message}")
-                }
-            }
-            prefs.edit().remove("aidiv_copy").apply()
-            toast(if (copyFail > 0) "已复制 ${files.size - copyFail} 项（${copyFail} 项失败）" else "已复制 ${files.size} 项")
-            reloadAll()
-            return
-        }
-
-        val clipMgr = activity.getSystemService(Activity.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = clipMgr.primaryClip
-        val clipText = clip?.getItemAt(0)?.text?.toString()
-        if (!clipText.isNullOrBlank()) {
-            input("粘贴为文件", "clipboard.txt") { name ->
-                if (name.isBlank()) return@input toast("名称不能为空")
-                runCatching {
-                    File(dir, name).writeText(clipText)
-                    reloadAll()
-                    toast("已粘贴为 $name")
-                }.onFailure { toast("粘贴失败：${it.message}") }
-            }
-            return
-        }
-
-        toast("没有可粘贴的内容")
-    }
-
-    private fun notifyTerminalCd(dir: File) {
-        val act = activity
-        val home = File(act.filesDir, "home")
-        val ubuntuPath = SyncCoordinator.toUbuntuPath(dir, home) ?: return
-        if (act is ShellActivity) act.syncTerminalCd(ubuntuPath)
-    }
-
-    private fun copyToOther(move: Boolean) {
-        val sources = if (multiMode) {
-            if (multiSelected.isEmpty()) return toast("请先选择文件")
-            multiSelected.toList()
-        } else {
-            val src = selected() ?: return toast("请先选择文件或目录")
-            listOf(src.absolutePath)
-        }
-        val fromSide = if (multiMode) multiPaneSide else activeLeft
-        val dstDir = if (fromSide) rightDir else leftDir
-        val ok = sources.count { path ->
-            val src = File(path)
-            val dst = File(dstDir, src.name)
-            if (dst.exists()) return@count false
-            val ok = try {
-                if (src.isDirectory) copyDir(src, dst) else src.copyTo(dst).let { true }
-            } catch (e: Exception) {
-                dragLog("copy error: ${src.name}: ${e.message}"); false
-            }
-            if (ok && move && !src.deleteRecursively()) dragLog("delete after move failed: ${src.name}")
-            ok
-        }
-        if (multiMode) exitMultiMode() else clearSelection()
-        reloadAll()
-        val fail = sources.size - ok
-        toast(if (fail > 0) "已完成 ${ok}/${sources.size} 项（${fail} 项失败）"
-              else if (move) "已移动 ${ok} 项" else "已复制 ${ok} 项")
-        copyToClipbook(sources, move)
-    }
-
-    private fun newFolder() = input("新建", "") { name ->
-        if (name.isBlank()) return@input toast("名称不能为空")
-        val target = File(activeDir(), name)
-        val ok = if (name.contains(".")) target.createNewFile() else target.mkdir()
-        toast(if (ok) "已创建" else "创建失败")
-        reloadAll()
-    }
-
-    private fun renameSelected() {
-        val src = selected() ?: return toast("请先选择文件或目录")
-        input("重命名", src.name) { name ->
-            toast(if (src.renameTo(File(src.parentFile, name))) "已重命名" else "重命名失败")
-            clearSelection()
-            reloadAll()
-        }
-    }
-
     private fun previewSelected() {
         val src = selected() ?: return toast("请先选择文件")
         if (!src.isFile) return toast("目录不能预览")
@@ -1295,20 +1153,6 @@ class EmbeddedFilesPage : ShellPage, ProjectToolsHost {
         if (!isLikelyText(src)) return toast("该文件不像文本文件")
         if (src.length() > 1024 * 1024) return toast("文件过大，请用终端编辑")
         showFilePreview(src, editMode = true)
-    }
-
-    private fun saveSelectedAs() {
-        val src = selected() ?: return toast("请先选择文件或目录")
-        inputAllowAny("另存为", src.name) { name ->
-            val dst = File(activeDir(), name)
-            if (dst.exists()) return@inputAllowAny toast("目标已存在")
-            runCatching {
-                if (src.isDirectory) copyDir(src, dst) else src.copyTo(dst)
-            }.onSuccess {
-                reloadAll()
-                toast("已另存为 $name")
-            }.onFailure { toast("另存失败：${it.message}") }
-        }
     }
 
     private fun showImageInfo(file: File) {
@@ -1687,7 +1531,7 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
             .setTitle(file.name)
             .setItems(items.toTypedArray()) { _, which ->
                 when (items[which]) {
-                    "cd 到终端" -> notifyTerminalCd(file)
+                    "cd 到终端" -> fileOps.notifyTerminalCd(file)
                     "新建文件" -> input("新建文件", "file.txt") { name ->
                         if (!name.contains("/") && File(file, name).createNewFile()) {
                             if (::projectTree.isInitialized) projectTree.refresh()
@@ -1706,16 +1550,16 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
                     }
                     "预览" -> previewSelected()
                     "编辑" -> editSelected()
-                    "另存为" -> saveSelectedAs()
+                    "另存为" -> fileOps.saveSelectedAs()
                     "标记当前项目" -> projectTools.markCurrentProject()
                     "跳到当前项目" -> projectTools.jumpCurrentProject()
                     "项目识别" -> projectTools.inspectProject()
                     "项目工作区" -> projectTools.projectWorkspace()
                     "复制路径" -> copySelectedPath()
-                    "复制到对侧" -> copyToOther(false)
-                    "移动到对侧" -> copyToOther(true)
-                    "重命名" -> renameSelected()
-                    "删除" -> deleteSelected()
+                    "复制到对侧" -> fileOps.copyToOther(false)
+                    "移动到对侧" -> fileOps.copyToOther(true)
+                    "重命名" -> fileOps.renameSelected()
+                    "删除" -> fileOps.deleteSelected()
                 }
             }.show()
     }
@@ -1777,17 +1621,6 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
             setStroke(ui.dp(1), ui.palette.outline)
         }
 
-    private fun copyDir(src: File, dst: File): Boolean = try {
-        dst.mkdirs()
-        src.listFiles()?.all { child ->
-            if (child.isDirectory) copyDir(child, File(dst, child.name))
-            else child.copyTo(File(dst, child.name), overwrite = false).let { true }
-        } ?: true
-    } catch (e: Exception) {
-        dragLog("copyDir error: ${src.name} → ${dst.name}: ${e.message}")
-        false
-    }
-
     private fun clearSelection() {
         selectedFile = null
     }
@@ -1847,4 +1680,17 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
     override fun hostCopySelectedPath() { copySelectedPath() }
     override fun hostRememberRecentDir(dir: File) { rememberRecentDir(dir) }
     override fun hostFormatSize(n: Long): String = formatSize(n)
+
+    override var hostMultiMode: Boolean
+        get() = multiMode
+        set(v) { multiMode = v }
+    override var hostMultiPaneSide: Boolean
+        get() = multiPaneSide
+        set(v) { multiPaneSide = v }
+    override val hostMultiSelected: MutableSet<String>
+        get() = multiSelected
+    override fun hostDragLog(msg: String) { dragLog(msg) }
+    override fun hostExitMultiMode() { exitMultiMode() }
+    override fun hostUpdateMultiInfo() { updateMultiInfo() }
+    override fun hostInputAllowAny(title: String, hint: String, cb: (String) -> Unit) { inputAllowAny(title, hint, cb) }
 }
