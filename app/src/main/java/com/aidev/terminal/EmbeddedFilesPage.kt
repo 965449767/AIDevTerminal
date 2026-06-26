@@ -42,6 +42,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 
 class EmbeddedFilesPage : ShellPage, FilePageHost {
@@ -88,19 +90,40 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
     private var lastOpenTime = 0L
     private var lastOpenFile: File? = null
     private var pendingSyncPath: String? = null
-    private var multiMode = false
-    private var multiPaneSide = true
     private val multiSelected = mutableSetOf<String>()
     private var anchorFile: String? = null
     private lateinit var fileActionBar: HorizontalScrollView
     private lateinit var fileActionInfo: TextView
-    private var leftDir: File = Environment.getExternalStorageDirectory()
-    private var rightDir: File = File("/")
-    private var activeLeft = true
-    private var selectedFile: File? = null
     private var leftPane: View? = null
     private var rightPane: View? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val _state = MutableStateFlow(FilePageState(
+        activeLeft = true,
+        leftDir = Environment.getExternalStorageDirectory(),
+        rightDir = File("/"),
+        selectedFile = null,
+        multiMode = false,
+        multiPaneSide = true
+    ))
+    private val state get() = _state.value
+    private var activeLeft: Boolean
+        get() = state.activeLeft
+        set(v) { _state.update { it.copy(activeLeft = v) } }
+    private var leftDir: File
+        get() = state.leftDir
+        set(v) { _state.update { it.copy(leftDir = v) } }
+    private var rightDir: File
+        get() = state.rightDir
+        set(v) { _state.update { it.copy(rightDir = v) } }
+    private var selectedFile: File?
+        get() = state.selectedFile
+        set(v) { _state.update { it.copy(selectedFile = v) } }
+    private var multiMode: Boolean
+        get() = state.multiMode
+        set(v) { _state.update { it.copy(multiMode = v) } }
+    private var multiPaneSide: Boolean
+        get() = state.multiPaneSide
+        set(v) { _state.update { it.copy(multiPaneSide = v) } }
     private val pm by lazy { PreferencesManager(activity) }
     private val projectTools = ProjectToolsHelper(this)
     private val fileOps = FileOperationsHelper(this)
@@ -1614,6 +1637,7 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
     override fun hostCopySelectedPath() { copySelectedPath() }
     override fun hostRememberRecentDir(dir: File) { rememberRecentDir(dir) }
     override fun hostFormatSize(n: Long): String = formatSize(n)
+    override fun hostGetSelectedFile(): File? = selectedFile
 
     override var hostMultiMode: Boolean
         get() = multiMode
@@ -1621,7 +1645,7 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
     override var hostMultiPaneSide: Boolean
         get() = multiPaneSide
         set(v) { multiPaneSide = v }
-    override val hostMultiSelected: MutableSet<String>
+    override val hostMultiSelected: Set<String>
         get() = multiSelected
     override fun hostDragLog(msg: String) { dragLog(msg) }
     override fun hostExitMultiMode() { exitMultiMode() }
@@ -1630,5 +1654,4 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
     override fun hostNavigateTo(dir: File) { navigateTo(dir) }
 
     override val hostScope: CoroutineScope get() = scope
-    override fun hostGetSelectedFile(): File? = selectedFile
 }

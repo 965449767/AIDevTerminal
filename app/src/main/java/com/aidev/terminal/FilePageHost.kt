@@ -18,7 +18,7 @@ internal interface FilePageHost {
     var hostRightDir: File
     var hostMultiMode: Boolean
     var hostMultiPaneSide: Boolean
-    val hostMultiSelected: MutableSet<String>
+    val hostMultiSelected: Set<String>
     fun hostClearSelection()
     fun hostReloadAll()
     fun hostLoadPane(left: Boolean)
