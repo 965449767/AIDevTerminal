@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <permission
+        android:name="com.aidev.terminal.permission.IPC"
+        android:protectionLevel="signature" />
+
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -62,7 +66,8 @@
 
         <receiver
             android:name=".SysCommandReceiver"
-            android:exported="true">
+            android:exported="true"
+            android:permission="com.aidev.terminal.permission.IPC">
             <intent-filter>
                 <action android:name="com.aidev.terminal.internal.NOTIFY" />
                 <action android:name="com.aidev.terminal.internal.CLIP" />

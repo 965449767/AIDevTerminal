@@ -321,7 +321,7 @@ class EmbeddedFilesPage : ShellPage {
         if (isLeft) leftPane = outer else rightPane = outer
         val list = if (isLeft) leftList else rightList
         outer.addView(ScrollView(activity).apply {
-            setOnTouchListener { _, event ->
+            setOnTouchListener { v, event ->
                 if (!multiMode && event.action == MotionEvent.ACTION_DOWN && activeLeft != isLeft) {
                     activeLeft = isLeft
                     selectedFile = null
@@ -330,6 +330,7 @@ class EmbeddedFilesPage : ShellPage {
                     updatePaneHighlight()
                     refreshHighlight(true); refreshHighlight(false)
                 }
+                if (event.action == MotionEvent.ACTION_UP) v.performClick()
                 false
             }
             isFillViewport = true
@@ -776,6 +777,7 @@ class EmbeddedFilesPage : ShellPage {
         previewContent.addView(previewScroll)
         previewWeb = WebView(activity).apply {
             settings.javaScriptEnabled = true
+            settings.allowContentAccess = false
             settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             settings.allowFileAccess = true
             settings.domStorageEnabled = true

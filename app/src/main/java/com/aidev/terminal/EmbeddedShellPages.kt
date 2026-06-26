@@ -986,6 +986,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
                     (v.tag as? Runnable)?.let { sharedHandler.removeCallbacks(it) }
                     v.tag = null
                     val dy = event.rawY - startY
+                    v.performClick()
                     if (dy >= threshold) {
                         onClose()
                     } else {

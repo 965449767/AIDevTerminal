@@ -8,6 +8,7 @@ data class TerminalShellAssetPaths(
     val entry: File
 )
 
+@Suppress("SetWorldReadable")
 object TerminalShellAssets {
     private const val ASSET_VERSION = Constants.ASSET_VERSION
 

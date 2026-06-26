@@ -286,6 +286,7 @@ class AIDevUi(private val activity: Activity, private val prefs: SharedPreferenc
                     false
                 }
                 MotionEvent.ACTION_UP -> {
+                    target.performClick()
                     val dx = event.rawX - downX
                     val dy = event.rawY - downY
                     if (abs(dx) > dp(DesignTokens.SWIPE_TRIGGER_DP) && abs(dy) < dp(DesignTokens.SWIPE_SLOP_DP)) {
