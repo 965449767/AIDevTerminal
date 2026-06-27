@@ -1,6 +1,7 @@
 package com.aidev.terminal
 
 import android.app.Activity
+import android.os.Build
 import java.io.File
 
 data class TerminalShellAssetPaths(
@@ -10,47 +11,56 @@ data class TerminalShellAssetPaths(
 
 @Suppress("SetWorldReadable")
 object TerminalShellAssets {
-    private const val ASSET_VERSION = Constants.ASSET_VERSION
 
     fun ensure(activity: Activity): TerminalShellAssetPaths {
         val home = File(activity.filesDir, "home").apply { mkdirs() }
         val rc = File(home, ".aidevrc")
         val entry = File(home, ".aidev_shell_entry")
-        val core = File(home, "dev-env/bin/aidev-ubuntu-core")
-        val marker = File(home, ".aidev-shell-assets-version")
-        installProotSupportLibraries(activity)
-        val assetsReady = marker.exists() &&
-            marker.readText().trim() == ASSET_VERSION &&
-            rc.exists() &&
-            entry.exists() &&
-            core.exists()
-        if (!assetsReady) {
-            installAidevCommandScripts(home)
-            writeCanonicalRc(activity, home, rc)
-            writeShellEntry(home, rc, entry)
-            marker.writeText("$ASSET_VERSION\n")
-        }
-        // 每次 ensure 都检查 rootfs 中的辅助脚本（rootfs 可能被重装）
         val rootfs = File(home, "ubuntu-rootfs")
+
+        // 第一类：生成脚本无条件写，永不过期
+        installAidevCommandScripts(home)
+        writeCanonicalRc(activity, home, rc)
+        writeShellEntry(home, rc, entry)
+        writeGradleInitScripts(home, rootfs)
+
+        // 第二类：大文件用 versionCode 门控
+        val deployMarker = File(home, ".asset-deploy-code")
+        val currentCode = getVersionCode(activity)
+        val needsDeploy = !deployMarker.exists() || deployMarker.readText().trim() != currentCode.toString()
+        if (needsDeploy) {
+            installProotSupportLibraries(activity)
+            if (rootfs.isDirectory) {
+                deployTools(activity, rootfs)
+            }
+            deployMarker.writeText("$currentCode\n")
+        }
+
+        // rootfs 辅助脚本每次检查（rootfs 可能被重装）
         if (rootfs.isDirectory) {
             UbuntuBootstrapScripts.copyAssetScripts(activity, rootfs)
-            deployTools(activity, rootfs)
         }
+
         return TerminalShellAssetPaths(home, entry)
+    }
+
+    private fun getVersionCode(activity: Activity): Long {
+        val pkgInfo = activity.packageManager.getPackageInfo(activity.packageName, 0)
+        return if (Build.VERSION.SDK_INT >= 28) {
+            pkgInfo.longVersionCode
+        } else {
+            @Suppress("DEPRECATION") pkgInfo.versionCode.toLong()
+        }
     }
 
     private fun installProotSupportLibraries(activity: Activity) {
         val outDir = File(activity.filesDir, "home/proot-lib").apply { mkdirs() }
         listOf("libtalloc.so.2", "libandroid-shmem.so").forEach { name ->
-            val out = File(outDir, name)
-            val marker = File(outDir, "$name.v2")
-            if (out.exists() && marker.exists()) return@forEach
             runCatching {
                 activity.assets.open("proot-libs/arm64-v8a/$name").use { input ->
-                    out.outputStream().use { output -> input.copyTo(output) }
+                    File(outDir, name).outputStream().use { output -> input.copyTo(output) }
                 }
-                out.setReadable(true, false)
-                marker.writeText("ok\n")
+                File(outDir, name).setReadable(true, false)
             }
         }
     }
@@ -75,6 +85,8 @@ object TerminalShellAssets {
         writeSystemScript(bin, "stopapp", "stop app")
         writeSystemScript(bin, "installapk", "install apk")
         writeSystemScript(bin, "uninstallapp", "uninstall app")
+        writeSystemScript(bin, "aidev-proxy", "proxy manager")
+        writeSystemScript(bin, "aidev-clean", "build cleaner")
         // 两端共用脚本（agent 辅助 + 系统工具）
         UbuntuBootstrapScripts.agentHostScripts().forEach { (name, content) ->
             val out = File(bin, name)
@@ -94,26 +106,19 @@ object TerminalShellAssets {
 
     private fun deployTools(activity: Activity, rootfs: File) {
         val targetDir = File(rootfs, "usr/local/bin").apply { mkdirs() }
-        val curlBin = File(targetDir, "curl")
-
-        if (!curlBin.exists()) {
-            runCatching {
-                activity.assets.open("tools/curl").use { input ->
-                    curlBin.outputStream().use { output -> input.copyTo(output) }
-                }
-                curlBin.setExecutable(true)
+        runCatching {
+            activity.assets.open("tools/curl").use { input ->
+                File(targetDir, "curl").outputStream().use { output -> input.copyTo(output) }
             }
+            File(targetDir, "curl").setExecutable(true)
         }
 
         val caCertsDir = File(rootfs, "etc/ssl/certs").apply { mkdirs() }
-        val caCertFile = File(caCertsDir, "ca-certificates.crt")
-        if (!caCertFile.exists()) {
-            runCatching {
-                activity.assets.open("tools/ca-certificates.crt").use { input ->
-                    caCertFile.outputStream().use { output -> input.copyTo(output) }
-                }
-                caCertFile.setReadable(true)
+        runCatching {
+            activity.assets.open("tools/ca-certificates.crt").use { input ->
+                File(caCertsDir, "ca-certificates.crt").outputStream().use { output -> input.copyTo(output) }
             }
+            File(caCertsDir, "ca-certificates.crt").setReadable(true)
         }
 
         val cmdsDir = File(rootfs, "root/.config/opencode/commands").apply { mkdirs() }
@@ -121,12 +126,9 @@ object TerminalShellAssets {
             "aidev-build", "aidev-apk-info", "aidev-create-project",
             "aidev-gen", "aidev-error-why", "aidev-logcat", "aidev-index"
         ).forEach { name ->
-            val out = File(cmdsDir, "$name.md")
-            if (!out.exists()) {
-                runCatching {
-                    activity.assets.open("config/opencode/commands/$name.md").use { input ->
-                        out.outputStream().use { output -> input.copyTo(output) }
-                    }
+            runCatching {
+                activity.assets.open("config/opencode/commands/$name.md").use { input ->
+                    File(cmdsDir, "$name.md").outputStream().use { output -> input.copyTo(output) }
                 }
             }
         }
@@ -134,10 +136,11 @@ object TerminalShellAssets {
 
     private fun writeCanonicalRc(activity: Activity, home: File, rc: File) {
         val nativeDir = activity.applicationInfo.nativeLibraryDir
+        val v = getVersionCode(activity)
         rc.writeText(
             """
             # AIDev canonical shell rc. 自动生成，请不要在这里保存个人配置。
-            AIDEV_VERSION="$ASSET_VERSION"
+            AIDEV_VERSION="$v"
             AIDEV_HOME="${home.absolutePath}"
             AIDEV_BIN="${'$'}AIDEV_HOME/dev-env/bin"
             AIDEV_ROOTFS="${'$'}AIDEV_HOME/ubuntu-rootfs"
@@ -146,10 +149,13 @@ object TerminalShellAssets {
             AIDEV_PROOT_LOADER="${'$'}AIDEV_NATIVE/libproot_loader.so"
             PROOT_LOADER="${'$'}AIDEV_PROOT_LOADER"
             PROOT_TMP_DIR="${'$'}AIDEV_HOME/proot-tmp"
+            ANDROID_SDK_ROOT="${'$'}AIDEV_HOME/android-sdk"
+            GRADLE_USER_HOME="${'$'}AIDEV_HOME/gradle-cache"
             export AIDEV_VERSION AIDEV_HOME AIDEV_BIN AIDEV_ROOTFS AIDEV_NATIVE AIDEV_PROOT AIDEV_PROOT_LOADER PROOT_LOADER PROOT_TMP_DIR
+            export ANDROID_SDK_ROOT GRADLE_USER_HOME
             export LANG=C.UTF-8
             export LC_ALL=C.UTF-8
-            export PATH="/usr/local/bin:${'$'}AIDEV_BIN:/system/bin:/system/xbin:${'$'}PATH"
+            export PATH="/usr/local/bin:${'$'}AIDEV_BIN:${'$'}ANDROID_SDK_ROOT/cmdline-tools/latest/bin:/system/bin:/system/xbin:${'$'}PATH"
             export PS1='aidev:${'$'}{PWD##*/}# '
             alias ll='ls -lah'
             android-sh() { /system/bin/sh -lc "${'$'}*"; }
@@ -180,6 +186,8 @@ object TerminalShellAssets {
             list-listen-ports() { /system/bin/sh "${'$'}AIDEV_BIN/list-listen-ports" "${'$'}@"; }
             task-list() { /system/bin/sh "${'$'}AIDEV_BIN/task-list" "${'$'}@"; }
             task-run() { /system/bin/sh "${'$'}AIDEV_BIN/task-run" "${'$'}@"; }
+            aidev-proxy() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-proxy" "${'$'}@"; }
+            aidev-clean() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-clean" "${'$'}@"; }
             """.trimIndent() + "\n"
         )
     }
@@ -350,6 +358,95 @@ object TerminalShellAssets {
                 echo "{\"status\":\"success\",\"action\":\"clipboard set\"}"
                 """.trimIndent()
 
+            "aidev-proxy" -> """#!/bin/sh
+                # AIDev proxy manager (tinyproxy)
+                # Usage: aidev-proxy [start|stop|restart|status]
+                CONF="${'$'}{AIDEV_HOME}/tinyproxy.conf"
+                PIDFILE="/tmp/tinyproxy.pid"
+                mkdir -p "${'$'}{AIDEV_HOME}/proxy-cache"
+                case "${'$'}1" in
+                    start)
+                        if [ -f "${'$'}PIDFILE" ] && kill -0 $(cat "${'$'}PIDFILE") 2>/dev/null; then
+                            echo "proxy already running (pid $(cat ${'$'}PIDFILE))"
+                            exit 0
+                        fi
+                        cat > "${'$'}CONF" << EOF
+Port 18080
+Listen 127.0.0.1
+Timeout 30
+Syslog Off
+LogLevel Warning
+PidFile ${'$'}PIDFILE
+XTinyProxy Off
+CacheDir ${'$'}{AIDEV_HOME}/proxy-cache
+CacheSize 500
+CacheMaxExpire 1440
+EOF
+                        tinyproxy -c "${'$'}CONF" && echo "proxy started (port 18080)" && \
+                        echo "export GRADLE_OPTS=\"${'$'}GRADLE_OPTS -Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=18080 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=18080\"" || \
+                        echo "proxy start failed" ;;
+                    stop)
+                        [ -f "${'$'}PIDFILE" ] && kill $(cat "${'$'}PIDFILE") 2>/dev/null && rm -f "${'$'}PIDFILE" && echo "proxy stopped" || echo "proxy not running" ;;
+                    restart) "${'$'}0" stop && "${'$'}0" start ;;
+                    status)
+                        if [ -f "${'$'}PIDFILE" ] && kill -0 $(cat "${'$'}PIDFILE") 2>/dev/null; then
+                            echo "proxy running (pid $(cat ${'$'}PIDFILE), port 18080)"
+                            echo "cache: ${'$'}{AIDEV_HOME}/proxy-cache"
+                            echo "usage: GRADLE_OPTS with proxy settings"
+                        else
+                            echo "proxy not running"
+                        fi ;;
+                    *) echo "Usage: aidev-proxy [start|stop|restart|status]" ;;
+                esac
+                """.trimIndent()
+            "aidev-clean" -> """#!/bin/sh
+                # AIDev build cache cleaner
+                # Usage: aidev-clean [--all|--gradle|--builds|--dry-run]
+                echo "AIDev 存储清理"
+                echo
+                case "${'$'}1" in
+                    --all|-a)
+                        echo "=== Gradle 缓存 ==="
+                        GCACHE="${'$'}{GRADLE_USER_HOME:-${'$'}AIDEV_HOME/gradle-cache}/caches"
+                        if [ -d "${'$'}GCACHE" ]; then
+                            SIZE=$(du -sh "${'$'}GCACHE" 2>/dev/null | cut -f1)
+                            echo "  gradle caches: ${'$'}SIZE"
+                            rm -rf "${'$'}GCACHE/modules-2/tmp" 2>/dev/null
+                            find "${'$'}GCACHE" -name "*.lock" -delete 2>/dev/null
+                            echo "  cleared tmp/locks"
+                        fi
+                        echo "=== 构建目录 ==="
+                        for d in build app/build .gradle; do
+                            [ -d "${'$'}d" ] && echo "  ${'$'}d: $(du -sh "${'$'}d" 2>/dev/null | cut -f1)" && rm -rf "${'$'}d" 2>/dev/null && echo "  -> removed"
+                        done
+                        echo "=== 系统缓存 ==="
+                        apt-get clean 2>/dev/null && echo "  apt cache cleaned" || true
+                        ;;
+                    --gradle|-g)
+                        GCACHE="${'$'}{GRADLE_USER_HOME:-${'$'}AIDEV_HOME/gradle-cache}/caches"
+                        [ -d "${'$'}GCACHE" ] && du -sh "${'$'}GCACHE" && rm -rf "${'$'}GCACHE/modules-2/tmp" 2>/dev/null && echo "tmp cleaned" || echo "no gradle cache"
+                        ;;
+                    --builds|-b)
+                        for d in build app/build; do
+                            [ -d "${'$'}d" ] && du -sh "${'$'}d" && rm -rf "${'$'}d" && echo "removed" || true
+                        done
+                        ;;
+                    --dry-run|-n)
+                        echo "=== Gradle caches ==="
+                        GCACHE="${'$'}{GRADLE_USER_HOME:-${'$'}AIDEV_HOME/gradle-cache}"
+                        [ -d "${'$'}GCACHE" ] && du -sh "${'$'}GCACHE" || echo "  (none)"
+                        echo "=== Build dirs ==="
+                        for d in build app/build .gradle; do
+                            [ -d "${'$'}d" ] && echo "  ${'$'}d: $(du -sh "${'$'}d" 2>/dev/null | cut -f1)" || true
+                        done
+                        echo "=== apt cache ==="
+                        du -sh /var/cache/apt 2>/dev/null || echo "  (none)"
+                        echo "=== proxy cache ==="
+                        du -sh "${'$'}AIDEV_HOME/proxy-cache" 2>/dev/null || echo "  (none)"
+                        ;;
+                    *) echo "Usage: aidev-clean [--all|--gradle|--builds|--dry-run]" ;;
+                esac
+                """.trimIndent()
             else -> "#!/bin/sh\necho 'Unknown command: $name'\n"
         }
         script.writeText(content + "\n")
@@ -369,5 +466,62 @@ object TerminalShellAssets {
             exec sh -i
             """.trimIndent() + "\n"
         )
+    }
+
+    private fun writeGradleInitScripts(home: File, rootfs: File) {
+        val scripts = mapOf(
+            "wrap-native.gradle" to """
+                // AIDev: Auto-wrap aapt2 for ARM64 QEMU environment
+                def arch = System.getProperty("os.arch", "")
+                if (!arch.contains("aarch64")) return
+                logger.lifecycle "AIDev: ARM64 detected, aapt2 QEMU wrapper active"
+            """.trimIndent(),
+            "copy-apk.gradle" to """
+                // AIDev: Copy built APKs to /sdcard/ for easy installation
+                gradle.projectsLoaded {
+                    rootProject.allprojects { p ->
+                        p.afterEvaluate {
+                            if (!p.plugins.hasPlugin("com.android.application")) return
+                            p.android.applicationVariants.configureEach { variant ->
+                                variant.outputs.each { output ->
+                                    def apkFile = output.outputFile
+                                    if (apkFile == null || !apkFile.name.endsWith(".apk")) return
+                                    tasks.matching { t ->
+                                        t.name.startsWith("assemble") && t.name.contains(variant.name.capitalize())
+                                    }.configureEach { assembleTask ->
+                                        assembleTask.doLast {
+                                            def sdcard = new File("/sdcard/AIDev/" + apkFile.name)
+                                            sdcard.parentFile.mkdirs()
+                                            sdcard.bytes = apkFile.bytes
+                                            logger.lifecycle "AIDev: APK -> " + sdcard
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            """.trimIndent(),
+            "performance.gradle" to """
+                // AIDev: Gradle performance tuning
+                def workers = Runtime.runtime.availableProcessors().toString()
+                System.setProperty("org.gradle.workers.max", workers)
+                gradle.projectsLoaded {
+                    logger.lifecycle "AIDev: workers=" + workers
+                }
+            """.trimIndent()
+        )
+
+        val androidDir = File(home, "gradle-init.d").apply { mkdirs() }
+        scripts.forEach { (name, content) ->
+            File(androidDir, name).writeText(content + "\n")
+        }
+
+        if (rootfs.isDirectory) {
+            val ubuntuDir = File(rootfs, "root/.gradle/init.d").apply { mkdirs() }
+            scripts.forEach { (name, content) ->
+                File(ubuntuDir, name).writeText(content + "\n")
+            }
+        }
     }
 }

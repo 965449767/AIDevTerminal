@@ -511,7 +511,7 @@ AIDEV_PWD_HOOK_EOF
         }
 
         proot_common_env() {
-          echo "HOME=/root AIDEV_HOME=/host-home AIDEV_VERSION=${'$'}{AIDEV_VERSION:-unknown} PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/system/bin:/system/xbin:/host-home/dev-env/bin TERM=${'$'}{TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8"
+          echo "HOME=/root AIDEV_HOME=/host-home AIDEV_VERSION=${'$'}{AIDEV_VERSION:-unknown} ANDROID_SDK_ROOT=/host-home/android-sdk GRADLE_USER_HOME=/host-home/gradle-cache PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/system/bin:/system/xbin:/host-home/dev-env/bin:/host-home/android-sdk/cmdline-tools/latest/bin TERM=${'$'}{TERM:-xterm-256color} LANG=C.UTF-8 LC_ALL=C.UTF-8"
         }
 
         enter_ubuntu() {

@@ -1,34 +1,18 @@
-# 当前任务: B/C 轮完成
+# 当前任务: 开发环境增强 — 全部完成
 
 ## 已完成
+- Phase 0: apt 工具补齐（12 个包）
+- Phase 1: Gradle init.d 脚本 x3
+- Phase 2: NDK + sdkmanager 下载逻辑
+- Phase 3: Rust 工具链安装
+- Phase 6: tinyproxy 依赖缓存代理
+- Phase 7: apkanalyzer 集成
+- Phase 8: 构建缓存优化
+- Phase 9: 存储清理命令
+- 部署保护重构: versionCode 统一门控
 
-### B-Phase 1 — 状态集中化
-- 创建 `FilePageState` 数据类，初始 6 字段 → 扩展至 18 字段
-- 全部字段通过 delegated var 读写 StateFlow，自动同步
-- `multiSelected` 从 `MutableSet` 改为不可变 `Set`
+## 已取消
+- Phase 5: adb 桥接（本机开发无价值）
 
-### B-Phase 2 — 提取纯 Kotlin 逻辑类
-- `MultiSelectHandler`（~90 行）— 多选状态管理，依赖 FilePageHost
-- `NavigationHandler`（~53 行）— 导航逻辑，依赖 FilePageHost
-- `FileUtils`（~60 行）— 纯函数工具集，零依赖
-
-### Round C — 单元测试（全部通过 ✓）
-- `FileUtilsTest` 14 tests（纯函数边界覆盖）
-- `MultiSelectHandlerTest` 15 tests（含 TestFilePageHost fake）
-- `NavigationHandlerTest` 10 tests（含 TestFilePageHost fake）
-
-### 清理
-- 删除 `FilePageHost` 中未使用的 `hostUi()`、`hostGetSelectedFile()`
-
-## 总览
-
-| 指标 | 值 |
-|---|---|
-| EmbeddedFilesPage 行数 | ~1657 → ~1360 行（-300 行） |
-| 新增文件 | FilePageState + 3 Handler + 3 Test = 7 文件 |
-| 单元测试总计 | 39 新测试（78 总计） |
-| 编译验证 | BUILD SUCCESSFUL |
-| 测试验证 | 78/78 PASS |
-
-## 下一步
-无活跃计划。
+## 待办
+无

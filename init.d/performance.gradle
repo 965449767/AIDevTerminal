@@ -1,0 +1,12 @@
+// AIDev: Gradle performance tuning for AIDev terminal environment
+def maxWorkers = Runtime.runtime.availableProcessors().toString()
+def maxHeap = "2048m"
+
+System.setProperty("org.gradle.workers.max", maxWorkers)
+System.setProperty("org.gradle.jvmargs", "-Xmx${maxHeap} -XX:MaxMetaspaceSize=512m")
+System.setProperty("org.gradle.caching", "true")
+System.setProperty("org.gradle.parallel", "true")
+
+gradle.projectsLoaded {
+    logger.lifecycle "AIDev: workers=${maxWorkers} heap=${maxHeap} caching=true parallel=true"
+}

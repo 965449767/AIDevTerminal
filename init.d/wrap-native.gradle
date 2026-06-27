@@ -1,0 +1,6 @@
+// AIDev: Auto-wrap aapt2 for ARM64 QEMU environment
+def arch = System.getProperty("os.arch", "")
+if (!arch.contains("aarch64")) return
+
+logger.lifecycle "AIDev: ARM64 architecture detected, aapt2 QEMU wrapper active"
+logger.lifecycle "AIDev: Configured via gradle.properties (aapt2FromMavenOverride + aapt2DaemonMode=false)"

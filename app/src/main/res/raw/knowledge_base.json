@@ -89,8 +89,23 @@
         {"title": "查看系统信息", "cmd": "uname -a", "desc": "显示内核和系统信息"},
         {"title": "查看内存", "cmd": "free -h", "desc": "以人类可读格式显示内存使用"},
         {"title": "查看CPU", "cmd": "lscpu", "desc": "显示CPU详细信息"},
-        {"title": "查看进程", "cmd": "htop", "desc": "交互式进程查看器"},
+        {"title": "查看进程", "cmd": "htop", "desc": "交互式进程查看器", "tags": ["系统管理", "监控"], "usage": "  htop                                 # 启动交互式进程查看器\n  F5                                   # 树状视图\n  F6                                   # 排序选择\n  F9                                   # 杀死进程\n  F10                                  # 退出", "permissions": "无特殊权限要求", "notes": "htop 是 top 的增强替代品，支持鼠标操作、彩色显示、进程树视图。在 PRoot 内仅能看到容器内的进程。"},
+        {"title": "查看进程树", "cmd": "ps aux --forest", "desc": "以树状格式显示进程关系"},
         {"title": "用户管理", "cmd": "whoami && id", "desc": "查看当前用户信息"}
+      ]
+    },
+    {
+      "id": "devtools",
+      "name": "开发工具",
+      "items": [
+        {"title": "CMake 构建", "cmd": "cmake -B build && cmake --build build", "desc": "跨平台构建系统，用于 C/C++/NDK 项目", "tags": ["构建工具", "编译", "C/C++"], "usage": "  cmake -B build                          # 配置项目（生成构建系统）\n  cmake --build build                     # 编译项目\n  cmake -B build -DCMAKE_BUILD_TYPE=Debug # Debug 模式配置\n  cmake --build build -j4                 # 并行编译（4 线程）\n  cmake --install build                   # 安装到系统路径", "permissions": "无特殊权限要求", "notes": "NDK 项目通过 Android Gradle Plugin 自动调用 CMake，无需手动运行。手动 cmake 适合独立 C/C++ 项目或测试。CMake 3.28+ 支持 presets 简化配置。"},
+        {"title": "Ninja 构建", "cmd": "ninja -C build", "desc": "轻量级高速构建系统，常用于 CMake 生成器", "tags": ["构建工具", "编译", "性能"], "usage": "  ninja -C build                          # 在 build 目录执行构建\n  ninja -C build -j$(nproc)               # 用所有 CPU 核心并行编译\n  ninja -C build -t clean                 # 清理构建产物\n  ninja -C build -t targets all           # 列出所有构建目标", "permissions": "无特殊权限要求", "notes": "Ninja 比 Make 更快，尤其在增量编译场景。Android NDK 的 CMake 默认使用 Ninja 作为生成器。"},
+        {"title": "Go 语言编译", "cmd": "go build", "desc": "Go 语言编译器，支持 Android 交叉编译", "tags": ["语言", "编译", "交叉编译"], "usage": "  go build                                # 编译当前包\n  go run main.go                          # 直接运行\n  go test ./...                           # 运行所有测试\n  GOOS=android GOARCH=arm64 go build      # 交叉编译 Android ARM64\n  go mod init example.com/myapp           # 初始化 Go 模块\n  go get github.com/example/pkg           # 添加依赖", "permissions": "无特殊权限要求", "notes": "Go 交叉编译 Android 不需要 NDK，只需设置 GOOS=android GOARCH=arm64。生成的二进制需通过 adb push 或打包进 APK 部署。"},
+        {"title": "JSON 处理", "cmd": "jq '.key' file.json", "desc": "轻量级命令行 JSON 处理器", "tags": ["文本处理", "数据格式", "JSON"], "usage": "  jq '.' file.json                        # 格式化 JSON 输出\n  jq '.key' file.json                     # 提取指定 key 的值\n  jq '.[] | .name' file.json             # 遍历数组提取字段\n  jq -r '.version' file.json             # 输出原始字符串（无引号）\n  jq '. | {name, version}' package.json  # 选择指定字段\n  echo '{\"a\":1}' | jq '.a'             # 管道输入", "permissions": "无特殊权限要求", "notes": "jq 是处理 JSON 输出（API 响应、配置文件）的标准工具。常用组合：curl API | jq '.' 格式化输出。"},
+        {"title": "OpenSSL", "cmd": "openssl [子命令] [选项]", "desc": "SSL/TLS 加密工具包，用于证书、哈希、加密解密", "tags": ["加密", "证书", "安全"], "usage": "  openssl version                         # 查看版本\n  openssl rand -base64 16                 # 生成 16 字节随机密码\n  openssl enc -aes-256-cbc -in file -out file.enc  # AES 加密\n  openssl enc -d -aes-256-cbc -in file.enc -out file  # AES 解密\n  openssl req -new -key key.pem -out csr.pem  # 生成证书签名请求\n  openssl x509 -in cert.pem -text -noout  # 查看证书详情\n  openssl s_client -connect example.com:443  # 测试 TLS 连接", "permissions": "无特殊权限要求", "notes": "openssl 是加密工具箱，涵盖了 SSL/TLS、哈希（sha256）、Base64、随机数等功能。"},
+        {"title": "Android SDK 管理器", "cmd": "sdkmanager [选项] <包名>", "desc": "Android SDK 命令行工具，管理 SDK 平台、构建工具、NDK 等组件", "tags": ["Android SDK", "包管理", "NDK"], "usage": "  sdkmanager --list                       # 列出所有可安装的包\n  sdkmanager 'ndk;27.0.12077973'         # 安装 NDK\n  sdkmanager 'platforms;android-35'      # 安装 SDK 平台\n  sdkmanager 'build-tools;36.0.0'        # 安装构建工具\n  sdkmanager --update                    # 更新所有已安装的包\n  sdkmanager --uninstall 'ndk;27.0.12077973'  # 卸载 NDK", "permissions": "无需特殊权限。需要网络连接下载组件。", "notes": "sdkmanager 位于 installed at `{AIDEV_HOME}/android-sdk/cmdline-tools/latest/bin/sdkmanager`。首次使用需接受许可证（yes | sdkmanager --licenses）。"},
+        {"title": "Android NDK", "cmd": "ndk-build [选项]", "desc": "Android Native Development Kit — 编译 C/C++ 原生代码为 Android .so 库", "tags": ["Android SDK", "NDK", "原生开发", "C/C++"], "usage": "  ndk-build                               # 编译项目的 jni/ 目录\n  ndk-build NDK_PROJECT_PATH=.            # 指定项目路径\n  ndk-build V=1                           # 详细日志输出\n  ndk-build clean                         # 清理构建产物\n  ndk-build NDK_DEBUG=1                   # Debug 模式编译", "permissions": "无需特殊权限。由 AGP 自动调用或手动执行。", "notes": "NDK 安装在 `{AIDEV_HOME}/android-sdk/ndk/27.0.12077973/`。Gradle 项目在 build.gradle.kts 中配置 externalNativeBuild { cmake { ... } } 自动调用。手动 ndk-build 适合传统 Android.mk 项目。当前环境只支持 arm64-v8a ABI。"},
+        {"title": "Rust 编译器", "cmd": "rustc [选项] <源文件>", "desc": "Rust 语言编译器，支持 Android 交叉编译", "tags": ["语言", "编译", "交叉编译", "Rust"], "usage": "  rustc main.rs                          # 编译单个文件\n  cargo new myapp && cd myapp && cargo build  # 创建并编译新项目\n  cargo build --target aarch64-linux-android   # 编译 Android ARM64\n  cargo ndk -t arm64-v8a build             # 使用 cargo-ndk 编译 Android 库\n  cargo ndk -t arm64-v8a -o ../jniLibs/ build  # 输出 .so 到 jniLibs 目录", "permissions": "无特殊权限要求。需网络下载 crate 依赖。", "notes": "通过 rustup 安装，支持 aarch64/armv7/x86_64/i686 Android targets。cargo-ndk 自动处理 NDK 工具链路径，是编译 Android 原生 Rust 库的标准方式。"}
       ]
     },
     {
@@ -263,6 +278,24 @@
           "notes": "显示每个任务的 PID、状态（运行中/已结束）、启动时间和命令。"
         },
         {
+          "title": "代理管理器",
+          "cmd": "aidev-proxy [start|stop|restart|status]",
+          "desc": "管理本地 Gradle 依赖缓存代理（tinyproxy），加速重复构建",
+          "tags": ["内置命令", "网络", "构建优化"],
+          "usage": "  aidev-proxy start                    # 启动代理（端口 18080）\n  aidev-proxy status                   # 查看代理状态和缓存大小\n  aidev-proxy stop                     # 停止代理\n  aidev-proxy restart                  # 重启代理",
+          "permissions": "无特殊权限要求。",
+          "notes": "代理启动后 Gradle 自动通过 127.0.0.1:18080 下载依赖，重复下载走本地缓存加速。缓存目录在 {AIDEV_HOME}/proxy-cache/（最大 500MB）。同一次会话中 start 后可直接 aidev-build，无需额外配置。"
+        },
+        {
+          "title": "存储清理",
+          "cmd": "aidev-clean [选项]",
+          "desc": "清理构建缓存和临时文件，释放手机存储空间",
+          "tags": ["内置命令", "存储管理", "构建优化"],
+          "usage": "  aidev-clean                          # 查看帮助\n  aidev-clean --dry-run                # 预览可清理的空间（不删除）\n  aidev-clean --all                    # 清理 Gradle 缓存 + build 目录 + apt 缓存\n  aidev-clean --gradle                 # 仅清理 Gradle 临时缓存\n  aidev-clean --builds                 # 仅删除 build/ 和 app/build/ 目录",
+          "permissions": "无特殊权限要求。",
+          "notes": "--dry-run 安全预览，不删任何文件。--all 会删除 .gradle/ 和 build/ 目录，下次构建需重新下载依赖。清理 apt cache 使用 apt-get clean。"
+        },
+        {
           "title": "查看监听端口",
           "cmd": "list-listen-ports",
           "desc": "查看当前系统所有监听的 TCP/UDP 网络端口",
@@ -421,6 +454,15 @@
       "id": "android-sdk",
       "name": "Android SDK 工具",
       "items": [
+        {
+          "title": "APK 深度分析",
+          "cmd": "apkanalyzer [子命令] <APK路径>",
+          "desc": "Android APK 分析器 — 查看 DEX/资源/证书/签名/Manifest 等详细信息",
+          "tags": ["Android SDK", "APK 分析", "调试"],
+          "usage": "  apkanalyzer apk summary app.apk                    # APK 概要（包名、版本、大小）\n  apkanalyzer apk file-size app.apk                   # APK 各组成部分大小\n  apkanalyzer apk download-size app.apk                # 预估下载大小\n  apkanalyzer apk manifest permissions app.apk         # 列出所有权限\n  apkanalyzer apk dex list app.apk                     # 列出 DEX 文件\n  apkanalyzer apk dex-packages app.apk                 # DEX 中的包列表\n  apkanalyzer apk dex references app.apk               # DEX 方法/字段引用统计\n  apkanalyzer manifest print app.apk                   # 打印完整 AndroidManifest.xml\n  apkanalyzer apk certificates app.apk                 # 查看签名证书\n  apkanalyzer files list app.apk                       # 列出 APK 内部文件结构",
+          "permissions": "无需特殊权限。需要 APK 文件可读。",
+          "notes": "Google 官方工具，比 aapt2 dump 更强大。SDK 安装后位于 cmdline-tools/latest/bin/，已自动加入 PATH。比较两个 APK：apkanalyzer apk file-size app-v1.apk app-v2.apk。子命令支持: apk/manifest/dex/resources/files。"
+        },
         {
           "title": "资源打包工具",
           "cmd": "aapt2 [子命令] [选项]",

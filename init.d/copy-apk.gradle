@@ -1,0 +1,24 @@
+// AIDev: Copy built APKs to /sdcard/ for easy installation
+gradle.projectsLoaded {
+    rootProject.allprojects { p ->
+        p.afterEvaluate {
+            if (!p.plugins.hasPlugin("com.android.application")) return
+            p.android.applicationVariants.configureEach { variant ->
+                variant.outputs.each { output ->
+                    def apk = output.outputFile
+                    if (apk == null || !apk.name.endsWith(".apk")) return
+                    tasks.matching { t ->
+                        t.name.startsWith("assemble") && t.name.contains(variant.name.capitalize())
+                    }.configureEach { assembleTask ->
+                        assembleTask.doLast {
+                            def sdcard = new File("/sdcard/AIDev/${apk.name}")
+                            sdcard.parentFile.mkdirs()
+                            sdcard.bytes = apk.bytes
+                            logger.lifecycle "AIDev: APK -> ${sdcard}"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

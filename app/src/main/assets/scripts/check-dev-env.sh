@@ -7,7 +7,7 @@ grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2- | tr -d '"' || true
 uname -m
 echo
 echo "== 命令检测 =="
-for c in curl wget git unzip zip tar xz node npm python3 pip3 java gcc g++ make opencode; do
+for c in curl wget git unzip zip tar xz node npm python3 pip3 java gcc g++ make cmake ninja openssl ssh htop lsof watch jq nc ip dig go rustc cargo cargo-ndk ndk-build sdkmanager apkanalyzer tinyproxy aidev-clean aidev-proxy opencode; do
   if command -v "$c" >/dev/null 2>&1; then
     v="$($c --version 2>/dev/null | head -1)"
     [ -z "$v" ] && v="$(command -v "$c")"
@@ -18,7 +18,7 @@ for c in curl wget git unzip zip tar xz node npm python3 pip3 java gcc g++ make 
 done
 echo
 echo "== dpkg 包检测 =="
-for p in ca-certificates curl wget git unzip zip tar xz-utils nano vim less procps coreutils findutils build-essential python3 python3-pip openjdk-17-jdk nodejs npm; do
+for p in ca-certificates curl wget git unzip zip tar xz-utils nano vim less procps coreutils findutils build-essential python3 python3-pip openjdk-17-jdk nodejs npm cmake ninja-build openssl openssh-client htop lsof watch jq netcat-openbsd golang iproute2 dnsutils tinyproxy; do
   if dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q "install ok installed"; then
     printf "  %-22s ✓ 已安装\n" "$p"
   else

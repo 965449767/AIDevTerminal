@@ -31,9 +31,6 @@ object Constants {
     const val STORAGE_PATH = "/storage"
     const val SYSTEM_BIN_PATH = "/system/bin"
 
-    // 脚本版本标记
-    const val ASSET_VERSION = "0.13.00-no-opencode"
-
     // SharedPreferences 文件名
     const val PREFS_NAME = "aidev_ui"
     const val PREFS_SHELL = "aidev_shell"
