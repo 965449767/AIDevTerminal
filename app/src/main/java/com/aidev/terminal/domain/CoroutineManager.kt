@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -29,5 +30,9 @@ class CoroutineManager {
 
     fun cancelAll() {
         scope.coroutineContext.cancelChildren()
+    }
+
+    fun destroy() {
+        scope.cancel()
     }
 }

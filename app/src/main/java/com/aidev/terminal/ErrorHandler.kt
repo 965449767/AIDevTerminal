@@ -1,6 +1,7 @@
 package com.aidev.terminal
 
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 
 /**
  * 统一错误处理工具类
@@ -20,6 +21,8 @@ object ErrorHandler {
     fun <T> execute(block: () -> T): Result<T> {
         return try {
             Result.success(block())
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logError(e)
             Result.failure(e)

@@ -38,7 +38,7 @@ class KeepAliveService : Service() {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AIDevTerminal:server-wakelock").apply {
                 setReferenceCounted(false)
-                acquire(10_000)
+                acquire()
             }
         }
         if (wifiLock?.isHeld != true) {

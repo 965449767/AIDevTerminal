@@ -1,18 +1,22 @@
-# 当前任务: 开发环境增强 — 全部完成
+# 当前任务: OpenCode 通知包装
+
+## 说明
+实现 `aidev-opencode` 包装脚本，利用 OpenCode 的 SSE 事件流监听 `session.status: busy→idle` 来检测每轮对话完成，通过 sysnotify 发送 Android 通知。
 
 ## 已完成
-- Phase 0: apt 工具补齐（12 个包）
-- Phase 1: Gradle init.d 脚本 x3
-- Phase 2: NDK + sdkmanager 下载逻辑
-- Phase 3: Rust 工具链安装
-- Phase 6: tinyproxy 依赖缓存代理
-- Phase 7: apkanalyzer 集成
-- Phase 8: 构建缓存优化
-- Phase 9: 存储清理命令
-- 部署保护重构: versionCode 统一门控
-
-## 已取消
-- Phase 5: adb 桥接（本机开发无价值）
+- OpenCode 架构参考文档 `docs/opencode-architecture.md`
+- AGENTS.md 引用更新
+- `UbuntuBootstrapScripts.kt` 三处改动：
+  1. agentPrivotScripts() + aidev-opencode 脚本（SSE 监听 + 存活提醒 + 退出通知）
+  2. ensure_ubuntu_helpers() 复制列表添加 aidev-opencode
+  3. aidev-ubuntu-core case 路由添加 aidev-opencode
+- knowledge_base.json 添加 aidev-opencode 条目
 
 ## 待办
-无
+- 编译验证 compileDebugKotlin + testDebugUnitTest
+
+## 用户验证
+- 安装 APK 后，在 Ubuntu 内运行 `aidev-opencode`，验证：
+  - OpenCode 正常启动（全屏 TUI）
+  - 每轮对话完成时手机通知栏弹出"对话完成"
+  - 退出时弹出退出通知（含耗时）

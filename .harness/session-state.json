@@ -1,11 +1,17 @@
 {
-  "phase": "environment-enhancement",
-  "current_step": "全部完成",
+  "phase": "opencode-notification-wrapper",
+  "current_step": "编译验证",
   "completed_phases": [
-    "Phase 0-3: apt packages, Gradle init.d, NDK, Rust",
-    "Phase 6-9: proxy, apkanalyzer, build cache, storage clean",
-    "Deployment guard refactor: versionCode-based single marker"
+    "Environment enhancement (Phase 0-3, 6-9)",
+    "Deployment guard refactor",
+    "OpenCode architecture research + docs",
+    "aidev-opencode script implementation"
   ],
-  "cancelled_phases": ["Phase 5: adb bridge"],
-  "pending_phases": []
+  "cancelled_phases": [
+    "Approval-wait notification (unreliable, dropped)",
+    "Host-side wrapper (user enters PRoot first)"
+  ],
+  "pending_phases": [
+    "Compile + test verification"
+  ]
 }

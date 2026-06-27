@@ -55,6 +55,15 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <service
+            android:name=".OpenCodeMonitorService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <receiver
+            android:name=".OpenCodeActionReceiver"
+            android:exported="false" />
+
         <receiver
             android:name=".KeepAliveBootReceiver"
             android:exported="false">

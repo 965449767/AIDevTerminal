@@ -47,6 +47,7 @@ object ShizukuBridgeService {
     fun stop() {
         job?.cancel()
         job = null
+        appCtx = null
     }
 
     private fun handleRequest(requestDir: File, resultDir: File, reqFile: File) {

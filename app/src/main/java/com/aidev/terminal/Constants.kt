@@ -63,11 +63,16 @@ object Constants {
         const val FILE_RECENT_DIRS = "file_recent_dirs"
         const val ONELINERS = "oneliners"
         const val SSH_CONNECTIONS = "connections"
+        const val FILE_LAYOUT_MODE = "file_layout_mode"
+        const val TREE_EXPANDED_PATHS = "tree_expanded_paths"
     }
 
     // 终端环境变量
     const val ENV_TERM = "xterm-256color"
     const val ENV_LANG = "C.UTF-8"
+
+    // OpenCode HTTP API
+    const val OPENCODE_BASE_URL = "http://127.0.0.1:4096"
 
     // 超时配置（秒）
     const val CAMERA_TIMEOUT_SECONDS = 60

@@ -229,6 +229,53 @@ object UbuntuBootstrapScripts {
             echo "pid=${'$'}{pid}" >> "${'$'}{dir}/${'$'}{id}.meta"
             echo "任务已启动: ${'$'}{name} (PID ${'$'}{pid})"
         """.trimIndent(),
+        "aidev-opencode" to """#!/bin/sh
+            PORT=4096
+            START=$(date +%s)
+
+            # Parse --port flag
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --port) PORT="$2"; shift 2 ;;
+                    *) break ;;
+                esac
+            done
+
+            # Find opencode
+            OC=$(command -v opencode 2>/dev/null)
+            if [ -z "${'$'}OC" ]; then
+                sysnotify --priority high "OpenCode" "找不到 opencode 命令，请先运行 opencode-install" >/dev/null 2>&1
+                exit 127
+            fi
+
+            # Run opencode with fixed port (SSE event handling via OpenCodeMonitorService on Kotlin side)
+            "${'$'}OC" --port "${'$'}PORT" --hostname 127.0.0.1 "$@"
+            EC=$?
+
+            # Exit notification (debounce < 5s, clock-skew guard)
+            END=$(date +%s); DUR=${'$'}((END - START))
+            [ ${'$'}DUR -lt 0 ] && DUR=0
+            [ ${'$'}DUR -lt 5 ] && exit ${'$'}EC
+
+            # Format duration
+            if [ ${'$'}DUR -lt 60 ]; then
+                DUR_STR="${'$'}{DUR}s"
+            elif [ ${'$'}DUR -lt 3600 ]; then
+                DUR_STR="${'$'}((DUR / 60))min ${'$'}((DUR % 60))s"
+            else
+                DUR_STR="${'$'}((DUR / 3600))h ${'$'}((DUR % 3600 / 60))min"
+            fi
+
+            case ${'$'}EC in
+                0)   MSG="任务完成（耗时 ${'$'}{DUR_STR}）" ;;
+                130) MSG="已取消（Ctrl+C，耗时 ${'$'}{DUR_STR}）" ;;
+                127) MSG="找不到 opencode 命令" ;;
+                *)   MSG="异常退出（code ${'$'}EC，耗时 ${'$'}{DUR_STR}）" ;;
+            esac
+
+            sysnotify --priority high "OpenCode" "${'$'}MSG" >/dev/null 2>&1
+            exit ${'$'}EC
+        """.trimIndent(),
     )
 
 
@@ -479,7 +526,7 @@ AIDEV_BOOTSTRAP_EOF
           chmod 755 "${'$'}AIDEV_ROOTFS/usr/local/bin/aidev-auto-bootstrap" 2>/dev/null || true
 
           # 将 dev-env/bin 中的两端共用脚本复制到 rootfs（单来源 → 双端可用）
-          for script in aidev-current-project aidev-agent-context aidev-agent-context-file aidev-agent-summary aidev-agent-log aidev-agent-tail list-listen-ports task-list task-run; do
+          for script in aidev-current-project aidev-agent-context aidev-agent-context-file aidev-agent-summary aidev-agent-log aidev-agent-tail list-listen-ports task-list task-run aidev-opencode; do
             if [ -f "${'$'}AIDEV_BIN/.privot/${'$'}script" ]; then
               cp "${'$'}AIDEV_BIN/.privot/${'$'}script" "${'$'}AIDEV_ROOTFS/usr/local/bin/${'$'}script"
               chmod 755 "${'$'}AIDEV_ROOTFS/usr/local/bin/${'$'}script" 2>/dev/null || true
@@ -577,6 +624,7 @@ AIDEV_PWD_HOOK_EOF
           aidev-gen) run_ubuntu_command "/usr/local/bin/aidev-gen" ;;
           aidev-error-why) run_ubuntu_command "/usr/local/bin/aidev-error-why" ;;
           aidev-index) run_ubuntu_command "/usr/local/bin/aidev-index" ;;
+          aidev-opencode) run_ubuntu_command "/usr/local/bin/aidev-opencode" ;;
           fix-bashrc) fix_bashrc ;;   
           aidev-auto-bootstrap)
             if has_ubuntu; then

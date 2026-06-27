@@ -45,6 +45,7 @@ class BackupRepositoryImpl(private val context: Context? = null) : BackupReposit
         items.forEachIndexed { index, itemId ->
             emit(BackupResult(BackupResult.ResultType.PROGRESS, "正在打包... (${(index + 1) * 100 / items.size}%)", (index + 1) * 100 / items.size))
 
+            // TODO: 实现实际备份逻辑，当前为占位实现
             delay(500)
 
             emit(BackupResult(BackupResult.ResultType.SUCCESS, "备份完成"))

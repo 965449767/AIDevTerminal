@@ -55,6 +55,17 @@ JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64 ./gradlew assembleDebug --no-daemon
 
 ## Critical Rules
 
+## OpenCode 架构参考
+
+开发 OpenCode 相关功能前，必须阅读 `docs/opencode-architecture.md`，其中记录了：
+- OpenCode 运行架构（TUI + 服务端双进程模型）
+- SSE 事件流（`session.status` 等关键事件）
+- HTTP API 端点
+- AIDev 集成点（agentPrivotScripts、aidev-ubuntu-core 路由）
+- 已确认/已取消的方案决策
+
+不要重复搜索已在文档中确认的信息。
+
 ## Android Development Tools
 
 This terminal environment provides custom aidev commands for Android development.

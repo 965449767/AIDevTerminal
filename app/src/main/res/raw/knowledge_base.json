@@ -188,6 +188,15 @@
           "notes": "opencode 不再内置到 APK 中，用户需自行安装：opencode upgrade。7 个 aidev-* 命令 .md 文件已预部署到 ~/.config/opencode/commands/，安装 opencode 后自动注册。本脚本仅为环境验证工具，不执行安装。"
         },
         {
+          "title": "OpenCode 通知包装",
+          "cmd": "aidev-opencode [--port N]",
+          "desc": "包装 opencode 命令，添加每轮对话完成通知和退出通知",
+          "tags": ["内置命令", "AI 工具", "通知"],
+          "usage": "  aidev-opencode                        # 启动 opencode 并添加通知\n  aidev-opencode --port 4096              # 指定服务端口\n  aidev-opencode -- <opencode参数>        # 传递额外参数给 opencode",
+          "permissions": "需 POST_NOTIFICATIONS 权限（sysnotify）。需在 Ubuntu 容器内执行。",
+          "notes": "功能：1) 每轮对话完成时发 Android 通知（通过 SSE session.status 监听） 2) 运行超过 5/15/30 分钟时发存活提醒 3) 退出时发完成/异常通知。需要 curl（由 deployTools 部署）。openode 内部服务固定端口 4096，可通过 --port 覆盖。"
+        },
+        {
           "title": "环境诊断",
           "cmd": "aidev-doctor",
           "desc": "全面诊断 AIDev 运行环境：PRoot 状态、Ubuntu 配置、资源占用",

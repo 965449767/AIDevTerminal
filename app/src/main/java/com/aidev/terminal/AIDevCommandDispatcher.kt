@@ -10,6 +10,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import java.io.File
@@ -52,8 +53,19 @@ object AIDevCommandDispatcher {
                 return
             }
         }
-        val chId = channelId(priority)
-        ensureChannel(nm, chId, priority)
+        val isForeground = AIDevApp.getCurrentActivity() != null
+
+        val chId: String
+        val channelPriority: String?
+        if (isForeground) {
+            chId = "${CHANNEL_ID}_foreground"
+            channelPriority = "low"
+        } else {
+            chId = channelId(priority)
+            channelPriority = priority
+        }
+        ensureChannel(nm, chId, channelPriority)
+
         val builder = if (Build.VERSION.SDK_INT >= 26) {
             android.app.Notification.Builder(context, chId)
         } else {
@@ -61,7 +73,7 @@ object AIDevCommandDispatcher {
             android.app.Notification.Builder(context)
         }
         if (ongoing) builder.setOngoing(true)
-        if (Build.VERSION.SDK_INT >= 26 && alertOnlyOnce) {
+        if (Build.VERSION.SDK_INT >= 26 && (alertOnlyOnce || isForeground)) {
             builder.setOnlyAlertOnce(true)
         }
         val notification = builder
@@ -180,6 +192,6 @@ object AIDevCommandDispatcher {
     }
 
     private fun dragLog(msg: String) {
-        runCatching { File("/storage/emulated/0/drag.log").appendText("$msg\n") }
+        runCatching { Log.d("DragLog", msg) }
     }
 }

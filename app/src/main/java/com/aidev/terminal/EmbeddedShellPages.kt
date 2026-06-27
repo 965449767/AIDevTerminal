@@ -230,6 +230,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
         startShizukuBridge(activity)
         startNotifyBridge(activity)
         startCommandBridge(activity)
+        startOpenCodeMonitor(activity)
         keyboardBuilder.trackPostDelayed(rootView, 250) { focusTerminalInput(activity) }
         terminalView?.postDelayed({
             consumePendingCommand()
@@ -311,6 +312,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
         startShizukuBridge(activity)
         startNotifyBridge(activity)
         startCommandBridge(activity)
+        startOpenCodeMonitor(activity)
         initPwdObserver(activity)
         focusTerminalInput(activity)
         consumePendingCommand()
@@ -332,6 +334,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
         ShizukuBridgeService.stop()
         NotifyBridgeService.stop()
         CommandBridgeService.stop()
+        OpenCodeMonitorService.stop(activity)
         // 清理追踪的延迟任务
         for ((view, runnable) in pendingRunnables) {
             view.removeCallbacks(runnable)
@@ -371,6 +374,10 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
             return
         }
         CommandBridgeService.start(activity, home)
+    }
+
+    private fun startOpenCodeMonitor(activity: Activity) {
+        OpenCodeMonitorService.start(activity)
     }
 
     private fun initPwdObserver(activity: Activity) {
@@ -1103,7 +1110,7 @@ class EmbeddedTerminalPage : ShellPage, CompletionHost {
                         val current = currentFontSp(activity)
                         if (kotlin.math.abs(next - current) >= 0.2f) {
                             pm.fontSp = next
-                            terminalView?.setTextSize(activity?.spToPx(next) ?: 0)
+                            terminalView?.setTextSize(fontPx(activity))
                             terminalView?.onScreenUpdated()
                             refreshStatus(activity)
                         }

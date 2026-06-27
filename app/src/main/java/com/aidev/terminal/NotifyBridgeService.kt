@@ -39,6 +39,7 @@ object NotifyBridgeService {
     fun stop() {
         job?.cancel()
         job = null
+        appCtx = null
     }
 
     private fun dispatch(json: String) {

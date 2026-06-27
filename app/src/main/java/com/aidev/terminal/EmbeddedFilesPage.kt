@@ -40,7 +40,7 @@ import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
@@ -222,7 +222,7 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
     }
 
     override fun onDestroy(activity: Activity) {
-        scope.coroutineContext[Job]?.children?.forEach { it.cancel() }
+        scope.cancel()
     }
 
     private fun toolbar(host: ShellHost): View =
@@ -694,7 +694,7 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
         }
 
     private fun dragLog(msg: String) {
-        runCatching { File("/storage/emulated/0/drag.log").appendText("$msg\n") }
+        Log.d("DragLog", msg)
     }
 
     private fun selected(): File? = selectedFile
