@@ -19,7 +19,7 @@ import com.aidev.terminal.presentation.BackupRestorePage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class EmbeddedSettingsPage : ShellPage {
@@ -48,7 +48,7 @@ class EmbeddedSettingsPage : ShellPage {
     }
 
     override fun onDestroy(activity: Activity) {
-        scope.cancel()
+        scope.coroutineContext[Job]?.children?.forEach { it.cancel() }
     }
 
     private fun row(title: String, desc: String, click: () -> Unit): View =

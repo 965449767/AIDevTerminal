@@ -40,7 +40,7 @@ import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
@@ -222,7 +222,7 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
     }
 
     override fun onDestroy(activity: Activity) {
-        scope.cancel()
+        scope.coroutineContext[Job]?.children?.forEach { it.cancel() }
     }
 
     private fun toolbar(host: ShellHost): View =
