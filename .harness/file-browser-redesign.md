@@ -138,8 +138,23 @@ bash /root/.android-env/scripts/build-android.sh    # 构建 APK
 
 ---
 
-## 已完成的工作（不在本次方案内）
+## 已完成
 
-- Phase 0: GestureFeedbackManager (Phase 1 of original gesture plan) ✓
-- Phase 0: Swipe-to-reveal buttons (Phase 2) ✓
-- Phase 0: Drag-drop pill bar + arc progress + bounce-back (Phase 3, bugs fixed) ✓
+- Phase 0: GestureFeedbackManager ✓
+- Phase 0: Swipe-to-reveal buttons ✓
+- Phase 0: Drag-drop pill bar + arc progress + bounce-back ✓
+- Phase 1: 视觉刷新（分割线 / 选中高亮 / 图标 / 空态 / 面包屑 / 加载指示器）✓
+- Phase 2: 搜索 + 筛选（搜索栏 / 全部/文件夹/文件 筛选标签）✓
+- Phase 3: 交互提升（浮动 pill / 滑动阈值 / 下拉刷新 / 回收站+撤销 / 长按区分）✓
+- Phase 4: 预览升级（滑动抽屉 / 导航 / 图片预览 / 信息 tab）✓
+- Phase 5: 架构清理（PreviewManager 提取 / RowHandler inner class / AIDevUi 统一 / 死代码移除）✓
+- Bugfix: elevation/translationZ 移除（HyperOS 硬件层 bug）
+- Bugfix: 选择指示器改用纯色背景 + 文字/图标变色（绕开 HyperOS GPU 渲染 bug）
+
+## 后续可选
+
+| 事项 | 说明 | 优先级 |
+|---|---|---|
+| RowHandler 提取独立文件 | 目前是 inner class，可通过 FilePageHost 接口提取到单独文件 | 低 |
+| 更多预览格式 | 视频/音频/PDF 预览支持 | 低 |
+| 文件操作批处理进度 | 复制/移动文件时显示进度条 | 低 |

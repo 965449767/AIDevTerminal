@@ -1,19 +1,13 @@
 {
-  "phase": "full-chain-audit-fix",
-  "current_step": "用户验证待办",
+  "phase": "file-browser-redesign",
+  "current_step": "全部完成",
   "completed_phases": [
-    "Environment enhancement (Phase 0-3, 6-9)",
-    "Deployment guard refactor",
-    "OpenCode architecture research + docs",
-    "aidev-opencode script implementation",
-    "Compile + test verification (opencode-notification-wrapper)",
-    "Full-chain audit + all P0-P4 fixes"
+    "Phase 0-5: 文件浏览器重设计（手势/视觉/搜索/交互/预览/架构）",
+    "Bugfix: elevation + selection indicator（HyperOS 适配）"
   ],
-  "cancelled_phases": [
-    "Approval-wait notification (unreliable, dropped)",
-    "Host-side wrapper (user enters PRoot first)"
-  ],
-  "pending_phases": [
-    "User verification on device"
+  "pending_optional": [
+    "RowHandler 提取独立文件",
+    "更多预览格式（视频/音频/PDF）",
+    "文件操作批处理进度条"
   ]
 }
