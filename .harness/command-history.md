@@ -66,7 +66,29 @@ git status --short
 Result:
 
 ```text
-repository initialized on main branch
+passed
+```
+
+## 2026-06-28 — 全量审计 + 修复
+
+Commands:
+
+```bash
+./gradlew :app:testShellScripts --no-daemon
+./gradlew :app:compileDebugKotlin --no-daemon
+./gradlew :app:testDebugUnitTest --no-daemon
+./gradlew :app:assembleDebug --no-daemon
+git log --oneline -5
+git diff --stat cf076dc..4d5c41f
+```
+
+Result:
+
+```text
+testShellScripts: 47/47 PASS
+compileDebugKotlin: BUILD SUCCESSFUL
+testDebugUnitTest: 78/78 PASS
+assembleDebug: BUILD SUCCESSFUL
 ```
 
 Commands:

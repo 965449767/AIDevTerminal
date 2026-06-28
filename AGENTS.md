@@ -21,9 +21,11 @@ JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64 ./gradlew assembleDebug --no-daemon
 按改动范围选最轻的验证方式，避免全量编译：
 
 | 场景 | 命令 | 耗时 |
-|---|---|---|
+|---|---|---|---|
 | 纯逻辑/结构改动 | `./gradlew :app:compileDebugKotlin --no-daemon` | ~1-2m |
 | 改完跑单元测试 | `./gradlew :app:testDebugUnitTest --no-daemon` | ~2-4m |
+| Shell 脚本改动 | `./gradlew :app:testShellScripts --no-daemon` | ~10s |
+| 全量验证 | `./gradlew :app:testShellScripts :app:testDebugUnitTest :app:assembleDebug --no-daemon` | ~6-8m |
 | UI/行为需真机验证 | `bash /root/.android-env/scripts/build-android.sh` | ~4-5m |
 | 首次构建/依赖变更 | 同上（必须全量） | ~4-5m |
 

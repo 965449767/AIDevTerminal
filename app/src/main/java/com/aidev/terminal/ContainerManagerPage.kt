@@ -148,10 +148,24 @@ class ContainerManagerPage : ShellPage {
         // === rootfs 管理 ===
         list.addView(ui.section("rootfs 管理", "清理缓存、重新安装"))
         list.addView(ui.actionRow("清理 APT 缓存", "释放 apt 缓存占用的空间") {
-            host.openTerminal("apt clean && rm -rf /var/cache/apt/archives/*")
+            MaterialAlertDialogBuilder(activity)
+                .setTitle("确认清理")
+                .setMessage("确定要清理 APT 缓存吗？")
+                .setPositiveButton("清理") { _, _ ->
+                    host.openTerminal("apt clean && rm -rf /var/cache/apt/archives/*")
+                }
+                .setNegativeButton("取消", null)
+                .show()
         })
         list.addView(ui.actionRow("清理临时文件", "删除 /tmp 和日志文件") {
-            host.openTerminal("rm -rf /tmp/* && rm -rf /var/log/*.old")
+            MaterialAlertDialogBuilder(activity)
+                .setTitle("确认清理")
+                .setMessage("确定要清理临时文件和日志吗？此操作不可撤销。")
+                .setPositiveButton("清理") { _, _ ->
+                    host.openTerminal("rm -rf /tmp/* && rm -rf /var/log/*.old")
+                }
+                .setNegativeButton("取消", null)
+                .show()
         })
         list.addView(ui.actionRow("查看磁盘使用", "详细查看各目录占用空间") {
             host.openTerminal("du -sh /* 2>/dev/null | sort -rh | head -20")

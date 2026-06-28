@@ -26,12 +26,13 @@ internal class ProjectToolsHelper(private val h: FilePageHost) {
         } else {
             markers.joinToString("\n") { "✓ ${it.second}：${it.first}" } + "\n\n目录：${dir.absolutePath}"
         }
+        val up = ubuntuPath(dir)
         val runCmd = when {
-            File(dir, "package.json").exists() -> "cd \"${dir.absolutePath}\" && npm install && npm run dev"
-            File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists() -> "cd \"${dir.absolutePath}\" && ./gradlew assembleDebug"
-            File(dir, "requirements.txt").exists() -> "cd \"${dir.absolutePath}\" && pip install -r requirements.txt --break-system-packages"
-            File(dir, "pyproject.toml").exists() -> "cd \"${dir.absolutePath}\" && python3 -m pip install . --break-system-packages"
-            else -> "cd \"${dir.absolutePath}\" && ls -la"
+            File(dir, "package.json").exists() -> "cd \"$up\" && npm install && npm run dev"
+            File(dir, "build.gradle").exists() || File(dir, "build.gradle.kts").exists() -> "cd \"$up\" && ./gradlew assembleDebug"
+            File(dir, "requirements.txt").exists() -> "cd \"$up\" && pip install -r requirements.txt --break-system-packages"
+            File(dir, "pyproject.toml").exists() -> "cd \"$up\" && python3 -m pip install . --break-system-packages"
+            else -> "cd \"$up\" && ls -la"
         }
         MaterialAlertDialogBuilder(h.hostActivity())
             .setTitle("项目识别")
@@ -52,31 +53,47 @@ internal class ProjectToolsHelper(private val h: FilePageHost) {
 
     fun projectWorkspace() {
         val dir = h.hostSelectedFile()?.takeIf { it.isDirectory } ?: h.hostActiveDir()
-        val items = arrayOf("标记当前项目", "清除当前项目", "项目概览", "项目健康检查", "运行修复建议", "最近操作", "项目脚本", "复制诊断报告", "复制修复命令", "项目识别", "查看 README", "Git 状态", "Git Diff", "安装依赖", "运行开发服务", "运行测试", "构建项目", "终端进入目录", "复制项目命令", "导出项目摘要")
+        val up = ubuntuPath(dir)
+        val isGradle = File(dir, "build.gradle.kts").isFile || File(dir, "build.gradle").isFile
+        val items = mutableListOf(
+            "标记当前项目", "清除当前项目", "项目概览", "项目健康检查",
+            "运行修复建议", "最近操作", "项目脚本", "复制诊断报告",
+            "复制修复命令", "项目识别", "查看 README", "Git 状态",
+            "Git Diff", "安装依赖", "运行开发服务", "运行测试",
+            "构建项目"
+        )
+        if (isGradle) {
+            items.add("安装APK")
+            items.add("运行App")
+        }
+        items.addAll(listOf("终端进入目录", "复制项目命令", "导出项目摘要"))
+        val builtApkRel = "app/build/outputs/apk/debug/app-debug.apk"
         MaterialAlertDialogBuilder(h.hostActivity())
             .setTitle("项目工作区")
-            .setItems(items) { _, which ->
-                when (which) {
-                    0 -> markCurrentProject(dir)
-                    1 -> clearCurrentProject()
-                    2 -> projectOverview(dir)
-                    3 -> runInTerminal("cd \"${dir.absolutePath}\" && ${ProjectCommands.healthCommand(dir)}")
-                    4 -> confirmProjectRepair(dir)
-                    5 -> showProjectHistory()
-                    6 -> showProjectScripts(dir)
-                    7 -> copyProjectReport(dir)
-                    8 -> copyRepairCommand(dir)
-                    9 -> inspectProject()
-                    10 -> showReadme(dir)
-                    11 -> runInTerminal("cd \"${dir.absolutePath}\" && git status --short --branch")
-                    12 -> runInTerminal("cd \"${dir.absolutePath}\" && git diff --stat")
-                    13 -> runInTerminal("cd \"${dir.absolutePath}\" && ${ProjectCommands.installCommand(dir)}")
-                    14 -> runInTerminal("cd \"${dir.absolutePath}\" && ${ProjectCommands.devCommand(dir)}")
-                    15 -> runInTerminal("cd \"${dir.absolutePath}\" && ${ProjectCommands.testCommand(dir)}")
-                    16 -> runInTerminal("cd \"${dir.absolutePath}\" && ${ProjectCommands.buildCommand(dir)}")
-                    17 -> runInTerminal("cd \"${dir.absolutePath}\" && pwd && ls -la")
-                    18 -> copyProjectCommands(dir)
-                    19 -> exportProjectSummary(dir)
+            .setItems(items.toTypedArray()) { _, which ->
+                when (items[which]) {
+                    "标记当前项目" -> markCurrentProject(dir)
+                    "清除当前项目" -> clearCurrentProject()
+                    "项目概览" -> projectOverview(dir)
+                    "项目健康检查" -> runInTerminal("cd \"$up\" && ${ProjectCommands.healthCommand(dir)}")
+                    "运行修复建议" -> confirmProjectRepair(dir)
+                    "最近操作" -> showProjectHistory()
+                    "项目脚本" -> showProjectScripts(dir)
+                    "复制诊断报告" -> copyProjectReport(dir)
+                    "复制修复命令" -> copyRepairCommand(dir)
+                    "项目识别" -> inspectProject()
+                    "查看 README" -> showReadme(dir)
+                    "Git 状态" -> runInTerminal("cd \"$up\" && git status --short --branch")
+                    "Git Diff" -> runInTerminal("cd \"$up\" && git diff --stat")
+                    "安装依赖" -> runInTerminal("cd \"$up\" && ${ProjectCommands.installCommand(dir)}")
+                    "运行开发服务" -> runInTerminal("cd \"$up\" && ${ProjectCommands.devCommand(dir)}")
+                    "运行测试" -> runInTerminal("cd \"$up\" && ${ProjectCommands.testCommand(dir)}")
+                    "构建项目" -> runInTerminal("cd \"$up\" && ${ProjectCommands.buildCommand(dir)}")
+                    "安装APK" -> runInTerminal("cd \"$up\" && cp \"$builtApkRel\" /sdcard/$(basename \"$up\")-debug.apk && installapk \"/sdcard/$(basename \"$up\")-debug.apk\"")
+                    "运行App" -> runInTerminal("cd \"$up\" && PKG=\$(grep -oP 'namespace\\s*=\\s*\"\\K[^\"]+' app/build.gradle.kts) && am start -n \"\${PKG}/.MainActivity\"")
+                    "终端进入目录" -> runInTerminal("cd \"$up\" && pwd && ls -la")
+                    "复制项目命令" -> copyProjectCommands(dir)
+                    "导出项目摘要" -> exportProjectSummary(dir)
                 }
             }
             .show()
@@ -183,7 +200,8 @@ internal class ProjectToolsHelper(private val h: FilePageHost) {
     }
 
     private fun confirmProjectRepair(dir: File) {
-        val command = "cd \"${dir.absolutePath}\" && ${ProjectCommands.repairCommand(dir)}"
+        val up = ubuntuPath(dir)
+        val command = "cd \"$up\" && ${ProjectCommands.repairCommand(dir)}"
         MaterialAlertDialogBuilder(h.hostActivity())
             .setTitle("确认修复项目")
             .setMessage("项目：${dir.name}\n路径：${dir.absolutePath}\n\n执行：\n$command\n\n注意：某些修复会删除缓存、依赖目录或锁文件。")
@@ -208,7 +226,10 @@ internal class ProjectToolsHelper(private val h: FilePageHost) {
                 val parts = rows[which].split("\t", limit = 4)
                 val path = parts.getOrNull(2).orEmpty()
                 val command = parts.getOrNull(3).orEmpty()
-                if (path.isNotBlank() && command.isNotBlank()) runInTerminal("cd \"$path\" && $command")
+                if (path.isNotBlank() && command.isNotBlank()) {
+                    val upPath = ubuntuPath(File(path))
+                    runInTerminal("cd \"$upPath\" && $command")
+                }
             }
             .setPositiveButton("复制全部") { _, _ ->
                 h.hostCopyText("AIDev 项目历史", rows.joinToString("\n"))
@@ -232,10 +253,11 @@ internal class ProjectToolsHelper(private val h: FilePageHost) {
             .take(30)
             .toList()
         if (scripts.isEmpty()) return h.hostToast("未识别到 npm scripts")
+        val up = ubuntuPath(dir)
         MaterialAlertDialogBuilder(h.hostActivity())
             .setTitle("项目脚本")
             .setItems(scripts.map { "${it.first}\n${it.second}" }.toTypedArray()) { _, which ->
-                runInTerminal("cd \"${dir.absolutePath}\" && npm run ${scripts[which].first}")
+                runInTerminal("cd \"$up\" && npm run ${scripts[which].first}")
             }
             .setPositiveButton("复制脚本") { _, _ ->
                 h.hostCopyText("AIDev 项目脚本", scripts.joinToString("\n") { "${it.first}: ${it.second}" })
@@ -275,10 +297,11 @@ internal class ProjectToolsHelper(private val h: FilePageHost) {
             else -> emptyList()
         }
         if (scripts.isEmpty()) return h.hostToast("未识别到可用项目脚本")
+        val up = ubuntuPath(dir)
         MaterialAlertDialogBuilder(h.hostActivity())
             .setTitle("项目脚本")
             .setItems(scripts.map { "${it.first}\n${it.second}" }.toTypedArray()) { _, which ->
-                runInTerminal("cd \"${dir.absolutePath}\" && ${scripts[which].second}")
+                runInTerminal("cd \"$up\" && ${scripts[which].second}")
             }
             .setPositiveButton("复制脚本") { _, _ ->
                 h.hostCopyText("AIDev 项目脚本", scripts.joinToString("\n") { "${it.first}: ${it.second}" })
@@ -331,6 +354,11 @@ internal class ProjectToolsHelper(private val h: FilePageHost) {
             .show()
     }
 
+    private fun ubuntuPath(dir: File): String {
+        val home = File(h.hostActivity().filesDir, "home")
+        return SyncCoordinator.toUbuntuPath(dir, home) ?: dir.absolutePath
+    }
+
     private fun runInTerminal(command: String) {
         val dir = h.hostSelectedFile()?.takeIf { it.isDirectory } ?: h.hostActiveDir()
         rememberProjectAction(commandLabel(command), dir, command)
@@ -348,6 +376,8 @@ internal class ProjectToolsHelper(private val h: FilePageHost) {
         command.contains("install") || command.contains("fetch") -> "依赖"
         command.contains("clean") || command.contains("tidy") -> "修复"
         command.contains("tasks --all") || command.contains("collect-only") -> "诊断"
+        command.contains("installapk") || command.contains("pm install") -> "安装"
+        command.contains("am start") -> "运行"
         else -> "命令"
     }
 

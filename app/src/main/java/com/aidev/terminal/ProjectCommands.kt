@@ -49,6 +49,7 @@ object ProjectCommands {
     fun installCommand(dir: File?): String = dir?.let { d ->
         when {
             File(d, "package.json").exists() -> "npm install"
+            File(d, "build.gradle").exists() || File(d, "build.gradle.kts").exists() -> "./gradlew build"
             File(d, "requirements.txt").exists() -> "pip install -r requirements.txt --break-system-packages"
             File(d, "pyproject.toml").exists() -> "python3 -m pip install . --break-system-packages"
             File(d, "Cargo.toml").exists() -> "cargo fetch"

@@ -2,14 +2,22 @@ package com.aidev.terminal
 
 import android.app.Activity
 import android.content.ClipboardManager
+import android.os.Handler
+import android.os.Looper
+import android.view.View
 import android.widget.EditText
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
 internal class FileOperationsHelper(private val h: FilePageHost) {
+
+    private val undoStack = mutableListOf<List<Pair<File, File>>>()
+    private val trashCleanupHandler = Handler(Looper.getMainLooper())
+    private val cleanupTasks = mutableListOf<Runnable>()
 
     fun deleteSelected() {
         val targets = if (h.hostMultiMode) {
@@ -20,37 +28,98 @@ internal class FileOperationsHelper(private val h: FilePageHost) {
             listOf(src.absolutePath)
         }
         val hasDirs = targets.any { File(it).isDirectory }
-        if (!hasDirs) {
-            MaterialAlertDialogBuilder(h.hostActivity())
-                .setTitle("确认删除")
-                .setMessage("确定删除这 ${targets.size} 个文件？")
-                .setPositiveButton("删除") { _, _ ->
-                    var fail = 0
-                    targets.forEach { if (!File(it).deleteRecursively()) { fail++; h.hostDragLog("delete failed: $it") } }
-                    if (h.hostMultiMode) h.hostExitMultiMode() else h.hostClearSelection()
-                    h.hostReloadAll()
-                    h.hostToast("已删除 ${targets.size} 项${if (fail > 0) "（${fail} 项失败）" else ""}")
-                }
-                .setNegativeButton("取消", null)
-                .show()
-            return
-        }
+        val msg = if (hasDirs) "确定删除这 ${targets.size} 个文件/目录？\n（文件将移动到 .trash，可撤销）"
+                  else "确定删除这 ${targets.size} 个文件？\n（文件将移动到 .trash，可撤销）"
         MaterialAlertDialogBuilder(h.hostActivity())
-            .setTitle("确认删除")
-            .setMessage("确定删除这 ${targets.size} 个文件/目录？")
+            .setTitle("删除")
+            .setMessage(msg)
             .setPositiveButton("删除") { _, _ ->
-                h.hostScope.launch {
-                    var fail = 0
-                    withContext(Dispatchers.IO) {
-                        targets.forEach { if (!File(it).deleteRecursively()) { fail++; h.hostDragLog("delete failed: $it") } }
+                val dir = h.hostActiveDir()
+                val trashDir = File(dir, ".trash").apply { mkdirs() }
+                val timestamp = System.currentTimeMillis()
+                var fail = 0
+                val trashed = mutableListOf<Pair<File, File>>()
+                targets.forEach { path ->
+                    val src = File(path)
+                    val trash = File(trashDir, "${timestamp}_${src.name}")
+                    if (src.renameTo(trash)) {
+                        trashed.add(src.absoluteFile to trash)
+                    } else {
+                        fail++
                     }
-                    if (h.hostMultiMode) h.hostExitMultiMode() else h.hostClearSelection()
-                    h.hostReloadAll()
-                    h.hostToast("已删除 ${targets.size} 项${if (fail > 0) "（${fail} 项失败）" else ""}")
+                }
+                if (h.hostMultiMode) h.hostExitMultiMode() else h.hostClearSelection()
+                h.hostReloadAll()
+                if (trashed.isNotEmpty()) {
+                    undoStack.add(trashed)
+                    showUndo(trashed.size, dir)
+                } else if (fail > 0) {
+                    h.hostToast("删除失败")
                 }
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    private fun showUndo(count: Int, dir: File) {
+        val root = h.hostActivity().findViewById<View>(android.R.id.content)
+        Snackbar.make(root, "已移动到回收站（${count} 项）", Snackbar.LENGTH_LONG)
+            .setAction("撤销") { undoLast() }
+            .show()
+        scheduleTrashCleanup(dir)
+    }
+
+    private fun undoLast() {
+        if (undoStack.isEmpty()) return
+        val batch = undoStack.removeLast()
+        var ok = 0
+        for ((original, trash) in batch) {
+            if (trash.renameTo(original)) {
+                ok++
+            } else {
+                h.hostDragLog("undo failed: ${trash.name} → ${original.path}")
+            }
+        }
+        h.hostReloadAll()
+        h.hostToast("已撤销 ${ok} 项")
+    }
+
+    fun emptyTrash() {
+        val dir = h.hostActiveDir()
+        val trashDir = File(dir, ".trash")
+        if (!trashDir.exists() || trashDir.listFiles().isNullOrEmpty()) {
+            return h.hostToast("回收站已空")
+        }
+        val count = trashDir.listFiles()?.size ?: 0
+        MaterialAlertDialogBuilder(h.hostActivity())
+            .setTitle("清空回收站")
+            .setMessage("确定永久删除回收站中的 $count 个文件？此操作不可撤销。")
+            .setPositiveButton("清空") { _, _ ->
+                var fail = 0
+                trashDir.listFiles()?.forEach { if (!it.deleteRecursively()) fail++ }
+                if (fail == 0) h.hostToast("回收站已清空")
+                else h.hostToast("${fail} 项清理失败")
+                undoStack.clear()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun scheduleTrashCleanup(dir: File) {
+        val trashDir = File(dir, ".trash")
+        if (!trashDir.exists()) return
+        val task = Runnable {
+            val cutoff = System.currentTimeMillis() - 180_000
+            trashDir.listFiles()?.forEach { file ->
+                val parts = file.name.split("_", limit = 2)
+                val ts = parts.firstOrNull()?.toLongOrNull() ?: return@forEach
+                if (ts < cutoff && !file.deleteRecursively()) {
+                    h.hostDragLog("trash cleanup failed: ${file.name}")
+                }
+            }
+        }
+        cleanupTasks.add(task)
+        trashCleanupHandler.postDelayed(task, 180_000)
     }
 
     private fun copyToClipbook(paths: List<String>, move: Boolean) {

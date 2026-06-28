@@ -426,7 +426,7 @@
           "cmd": "aidev-create-android-project <应用名> <包名> [输出目录]",
           "desc": "从模板创建 Android 项目，自动匹配当前环境的 AGP/Kotlin/Gradle 版本",
           "tags": ["内置命令", "Android 开发", "脚手架"],
-          "usage": "  aidev-create-android-project MyApp com.example.myapp                     # 创建到 /root/projects/MyApp\n  aidev-create-android-project MyApp com.example.myapp /sdcard/projects  # 指定输出目录",
+          "usage": "  aidev-create-android-project MyApp com.example.myapp                        # 创建到 /Workspace/Android/MyApp\n  aidev-create-android-project MyApp com.example.myapp /root/projects               # 指定输出目录",
           "permissions": "无特殊权限要求。需在 Ubuntu 容器内执行。",
           "notes": "生成的项目包含: build.gradle.kts (AGP 8.7.3 + Kotlin 2.0.21)、单 Activity + layout、Material Design 主题。自动下载 Gradle Wrapper 并初始化 Git。创建后可直接 aidev-build --full 编译。"
         },

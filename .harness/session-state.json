@@ -1,17 +1,19 @@
 {
-  "phase": "opencode-notification-wrapper",
-  "current_step": "编译验证",
+  "phase": "full-chain-audit-fix",
+  "current_step": "用户验证待办",
   "completed_phases": [
     "Environment enhancement (Phase 0-3, 6-9)",
     "Deployment guard refactor",
     "OpenCode architecture research + docs",
-    "aidev-opencode script implementation"
+    "aidev-opencode script implementation",
+    "Compile + test verification (opencode-notification-wrapper)",
+    "Full-chain audit + all P0-P4 fixes"
   ],
   "cancelled_phases": [
     "Approval-wait notification (unreliable, dropped)",
     "Host-side wrapper (user enters PRoot first)"
   ],
   "pending_phases": [
-    "Compile + test verification"
+    "User verification on device"
   ]
 }

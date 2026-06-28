@@ -276,6 +276,10 @@ class SecurityAuditPage : ShellPage {
                 toast("没有需要修复的问题")
             }
         })
+        list.addView(ui.actionRow("重新扫描", "重新执行全部安全检查") {
+            showLoading()
+            runAudit()
+        })
     }
 
     /**

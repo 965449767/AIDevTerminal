@@ -7,14 +7,14 @@ set -eo pipefail
 
 APP_NAME="${1:-}"
 PACKAGE="${2:-}"
-OUTPUT_DIR="${3:-/root/projects}"
+OUTPUT_DIR="${3:-/Workspace/Android}"
 
 if [ -z "$APP_NAME" ] || [ -z "$PACKAGE" ]; then
     echo "用法: aidev-create-android-project <应用名> <包名> [输出目录]"
     echo ""
     echo "示例:"
     echo "  aidev-create-android-project MyApp com.example.myapp"
-    echo "  aidev-create-android-project MyApp com.example.myapp /root/projects"
+    echo "  aidev-create-android-project MyApp com.example.myapp /Workspace/Android"
     exit 1
 fi
 
@@ -32,19 +32,39 @@ if [ -d "$PROJECT_DIR" ]; then
     exit 1
 fi
 
-# AGP / Kotlin 版本（与当前环境一致）
+# AGP / Kotlin / Gradle 版本（与当前环境一致）
 AGP_VERSION="8.7.3"
 KOTLIN_VERSION="2.0.21"
 GRADLE_VERSION="8.14.5"
 
-# 从 build.gradle.kts 获取实际版本（本项目）
+# 从构建脚本所在目录上溯查找宿主项目（AdvTerminal）
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../../.." 2>/dev/null && pwd || true)"
+HAS_HOST=false
 if [ -f "$PROJECT_ROOT/build.gradle.kts" ]; then
+    HAS_HOST=true
     FOUND_AGP=$(grep "com.android.application" "$PROJECT_ROOT/build.gradle.kts" 2>/dev/null | sed -n 's/.*version[[:space:]]*"\([^"]*\)".*/\1/p')
     [ -n "$FOUND_AGP" ] && AGP_VERSION="$FOUND_AGP"
     FOUND_KOTLIN=$(grep -E "^(plugins|id.*kotlin)" "$PROJECT_ROOT/build.gradle.kts" 2>/dev/null | grep -oP '"[0-9]+\.[0-9]+\.[0-9]+"' | head -1 | tr -d '"')
     [ -n "$FOUND_KOTLIN" ] && KOTLIN_VERSION="$FOUND_KOTLIN"
+    FOUND_GRADLE=$(grep '^distributionUrl' "$PROJECT_ROOT/gradle/wrapper/gradle-wrapper.properties" 2>/dev/null | grep -oP 'gradle-\K[0-9.]+(?=-bin\.zip)')
+    [ -n "$FOUND_GRADLE" ] && GRADLE_VERSION="$FOUND_GRADLE"
+fi
+
+# 从宿主提取仓库配置
+HOST_PLUGIN_REPOS=""
+HOST_DEP_REPOS=""
+HOST_DIST_URL="distributionUrl=https\\://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
+HOST_PROPS_EXTRA=""
+if [ "$HAS_HOST" = true ]; then
+    HOST_PLUGIN_REPOS=$(awk '/^pluginManagement {/,/^}/' "$PROJECT_ROOT/settings.gradle.kts" 2>/dev/null | sed '1,/repositories {/d; /^}/,$d')
+    HOST_DEP_REPOS=$(awk '/^dependencyResolutionManagement {/,/^}/' "$PROJECT_ROOT/settings.gradle.kts" 2>/dev/null | sed '1,/repositories {/d; /^}/,$d')
+    HOST_DIST_URL=$(grep '^distributionUrl' "$PROJECT_ROOT/gradle/wrapper/gradle-wrapper.properties" 2>/dev/null || echo "$HOST_DIST_URL")
+    # 提取项目级 gradle.properties（排除注释/空行/全局配置/模板已有项）
+    HOST_PROPS_EXTRA=$(grep -v '^#' "$PROJECT_ROOT/gradle.properties" 2>/dev/null \
+        | grep -v '^$' \
+        | grep -v 'android\.aapt2\|android\.suppress\|systemProp\.' \
+        | grep -v '^org\.gradle\.jvmargs\|^android\.useAndroidX\|^kotlin\.code\.style\|^android\.nonTransitiveRClass' || true)
 fi
 
 echo ""
@@ -62,33 +82,38 @@ echo ""
 mkdir -p "$PROJECT_DIR"
 cd "$PROJECT_DIR"
 
-# ─── settings.gradle.kts ───
-cat > settings.gradle.kts <<EOF
+# ─── settings.gradle.kts（仓库配置从宿主继承） ───
+if [ -n "$HOST_PLUGIN_REPOS" ]; then
+    # 从宿主提取的完整仓库列表
+    printf 'pluginManagement {\n    repositories {\n' > settings.gradle.kts
+    echo "$HOST_PLUGIN_REPOS" >> settings.gradle.kts
+    printf '    }\n}\n\ndependencyResolutionManagement {\n    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)\n    repositories {\n' >> settings.gradle.kts
+    echo "$HOST_DEP_REPOS" >> settings.gradle.kts
+    printf '    }\n}\n\nrootProject.name = "%s"\ninclude(":app")\n' "${APP_NAME}" >> settings.gradle.kts
+else
+    # 宿主不可用时使用内置默认值
+    cat > settings.gradle.kts <<'SETTINGS_EOF'
 pluginManagement {
     repositories {
-        google {
-            mavenContent {
-                includeGroupByRegex(".*google.*")
-                includeGroupByRegex(".*android.*")
-            }
-        }
-        maven("https://maven.aliyun.com/repository/public")
-        mavenCentral()
+        maven { setUrl("https://maven.aliyun.com/repository/google") }
+        maven { setUrl("https://maven.aliyun.com/repository/central") }
+        maven { setUrl("https://maven.aliyun.com/repository/gradle-plugin") }
+        maven { setUrl("https://jitpack.io") }
         gradlePluginPortal()
     }
 }
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        google()
-        maven("https://maven.aliyun.com/repository/public")
-        mavenCentral()
+        maven { setUrl("https://maven.aliyun.com/repository/google") }
+        maven { setUrl("https://maven.aliyun.com/repository/central") }
+        maven { setUrl("https://jitpack.io") }
     }
 }
-
-rootProject.name = "${APP_NAME}"
-include(":app")
-EOF
+SETTINGS_EOF
+    echo "rootProject.name = \"${APP_NAME}\"" >> settings.gradle.kts
+    echo 'include(":app")' >> settings.gradle.kts
+fi
 
 # ─── 根 build.gradle.kts ───
 cat > build.gradle.kts <<EOF
@@ -98,25 +123,37 @@ plugins {
 }
 EOF
 
-# ─── gradle.properties ───
+# ─── gradle.properties（基础设置 + 宿主继承项） ───
 cat > gradle.properties <<EOF
 org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
 android.useAndroidX=true
 kotlin.code.style=official
 android.nonTransitiveRClass=true
+$(echo "$HOST_PROPS_EXTRA")
 EOF
 
-# ─── local.properties (从本项目复制 SDK 路径) ───
-if [ -f "$PROJECT_ROOT/local.properties" ]; then
-    grep "^sdk.dir\|^sdk" "$PROJECT_ROOT/local.properties" > local.properties 2>/dev/null || true
+# ─── local.properties (SDK 路径探测) ───
+SDK_DIR=""
+if [ -d "/Android/platforms" ]; then
+    SDK_DIR="/Android"
+elif [ -n "$ANDROID_HOME" ] && [ -d "$ANDROID_HOME/platforms" ]; then
+    SDK_DIR="$ANDROID_HOME"
+elif [ -n "$ANDROID_SDK_ROOT" ] && [ -d "$ANDROID_SDK_ROOT/platforms" ]; then
+    SDK_DIR="$ANDROID_SDK_ROOT"
+elif [ -f "$PROJECT_ROOT/local.properties" ]; then
+    SDK_DIR=$(grep "^sdk.dir\|^sdk" "$PROJECT_ROOT/local.properties" 2>/dev/null | head -1 | cut -d= -f2 || true)
 fi
 
-# ─── Gradle Wrapper ───
+if [ -n "$SDK_DIR" ]; then
+    echo "sdk.dir=$SDK_DIR" > local.properties
+fi
+
+# ─── Gradle Wrapper（distributionUrl 从宿主继承） ───
 mkdir -p gradle/wrapper
 cat > gradle/wrapper/gradle-wrapper.properties <<EOF
 distributionBase=GRADLE_USER_HOME
 distributionPath=wrapper/dists
-distributionUrl=https\://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip
+${HOST_DIST_URL}
 networkTimeout=10000
 validateDistributionUrl=true
 zipStoreBase=GRADLE_USER_HOME
@@ -332,6 +369,10 @@ EOF
 
 git add -A 2>/dev/null || true
 git commit -m "Initial commit: ${APP_NAME}" --allow-empty 2>/dev/null || true
+
+# 构建代码搜索索引
+echo "  构建索引..."
+aidev-index 2>/dev/null || true
 
 echo ""
 echo "═══════════════════════════════════════════"

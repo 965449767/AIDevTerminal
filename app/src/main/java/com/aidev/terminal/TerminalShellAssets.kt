@@ -474,7 +474,26 @@ EOF
                 // AIDev: Auto-wrap aapt2 for ARM64 QEMU environment
                 def arch = System.getProperty("os.arch", "")
                 if (!arch.contains("aarch64")) return
-                logger.lifecycle "AIDev: ARM64 detected, aapt2 QEMU wrapper active"
+                if (System.getProperty("android.aapt2DaemonMode") == null) {
+                    System.setProperty("android.aapt2DaemonMode", "false")
+                }
+                def aapt2 = System.getProperty("android.aapt2FromMavenOverride")
+                if (aapt2 == null) {
+                    def sdkDir = System.getenv("ANDROID_SDK_ROOT") ?: "/Android"
+                    def btDir = new File(sdkDir, "build-tools")
+                    if (btDir.exists()) {
+                        def dirs = btDir.listFiles().findAll { it.isDirectory() }.sort().reverse()
+                        for (d in dirs) {
+                            def f = new File(d, "aapt2")
+                            if (f.canExecute()) {
+                                System.setProperty("android.aapt2FromMavenOverride", f.absolutePath)
+                                aapt2 = f.absolutePath
+                                break
+                            }
+                        }
+                    }
+                }
+                logger.lifecycle "AIDev: ARM64 QEMU wrapper" + (aapt2 ? " (aapt2=" + aapt2 + ")" : "")
             """.trimIndent(),
             "copy-apk.gradle" to """
                 // AIDev: Copy built APKs to /sdcard/ for easy installation
@@ -483,17 +502,16 @@ EOF
                         p.afterEvaluate {
                             if (!p.plugins.hasPlugin("com.android.application")) return
                             p.android.applicationVariants.configureEach { variant ->
-                                variant.outputs.each { output ->
-                                    def apkFile = output.outputFile
-                                    if (apkFile == null || !apkFile.name.endsWith(".apk")) return
-                                    tasks.matching { t ->
-                                        t.name.startsWith("assemble") && t.name.contains(variant.name.capitalize())
-                                    }.configureEach { assembleTask ->
-                                        assembleTask.doLast {
-                                            def sdcard = new File("/sdcard/AIDev/" + apkFile.name)
-                                            sdcard.parentFile.mkdirs()
-                                            sdcard.bytes = apkFile.bytes
-                                            logger.lifecycle "AIDev: APK -> " + sdcard
+                                def caps = variant.name.substring(0,1).toUpperCase() + variant.name.substring(1)
+                                def assemble = tasks.named("assemble" + caps)
+                                assemble.configure {
+                                    doLast {
+                                        def apk = variant.outputs.first()?.outputFile
+                                        if (apk != null && apk.exists()) {
+                                            def target = new File("/sdcard/AIDev/", apk.name)
+                                            target.parentFile.mkdirs()
+                                            target.bytes = apk.bytes
+                                            logger.lifecycle "AIDev: APK -> " + target
                                         }
                                     }
                                 }

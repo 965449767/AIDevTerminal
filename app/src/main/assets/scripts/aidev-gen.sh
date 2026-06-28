@@ -128,9 +128,8 @@ EOF
         if grep -q "android:name=\".${CLASS}\"" "$MANIFEST" 2>/dev/null; then
             echo "  Manifest: ${CLASS} 已在 AndroidManifest.xml 中注册"
         else
-            echo ""
-            echo "  请手动在 AndroidManifest.xml 的 <application> 内添加:"
-            echo "    <activity android:name=\".${CLASS}\" android:exported=\"false\" />"
+            sed -i '/<\/application>/i\        <activity android:name=".'"${CLASS}"'" android:exported="false" \/>' "$MANIFEST"
+            echo "  Manifest: 已注册 ${CLASS}"
         fi
         ;;
 

@@ -3,7 +3,7 @@
 # 自动选择最轻验证方式，处理 AAPT2 死锁，诊断构建错误
 # 用法: aidev-build [--full|--test|--compile] [--clean]
 
-set -eo pipefail
+set -o pipefail
 
 MODE="auto"
 CLEAN=false
@@ -153,6 +153,7 @@ if [ $BUILD_EXIT -eq 0 ]; then
         APK_SIZE_KB=$((APK_SIZE / 1024))
         echo "  BUILD SUCCESSFUL (${BUILD_MIN}m${BUILD_SEC}s)"
         echo "  APK: $APK_PATH (${APK_SIZE_KB}KB)"
+        echo "  Install: cp $APK_PATH /sdcard/ && installapk /sdcard/app-debug.apk"
     else
         echo "  BUILD SUCCESSFUL (${BUILD_MIN}m${BUILD_SEC}s)"
     fi

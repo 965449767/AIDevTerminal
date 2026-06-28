@@ -92,6 +92,7 @@ build_index() {
     fi
 
     # — 合并为 JSON —
+    json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\r//g; s/\n/\\n/g'; }
     echo "{" > "$tmp/index.json"
 
     # classes
@@ -104,7 +105,7 @@ build_index() {
             first=false
             local full_name=""
             [ -n "$pkg" ] && full_name="${pkg}.${cls%% *}" || full_name="${cls%% *}"
-            echo -n "    {\"name\":\"$full_name\",\"file\":\"$rel\"}" >> "$tmp/index.json"
+            echo -n "    {\"name\":\"$(json_escape "$full_name")\",\"file\":\"$(json_escape "$rel")\"}" >> "$tmp/index.json"
         done
     done < "$tmp/classes.txt"
     echo "" >> "$tmp/index.json"
@@ -116,7 +117,7 @@ build_index() {
     while IFS='|' read -r type name path; do
         $first || echo "," >> "$tmp/index.json"
         first=false
-        echo -n "    {\"type\":\"$type\",\"name\":\"$name\",\"file\":\"${path#$SRC_DIR/res/}\"}" >> "$tmp/index.json"
+        echo -n "    {\"type\":\"$(json_escape "$type")\",\"name\":\"$(json_escape "$name")\",\"file\":\"$(json_escape "${path#$SRC_DIR/res/}")\"}" >> "$tmp/index.json"
     done < <(cat "$tmp/layout.txt" "$tmp/strings.txt" "$tmp/resources.txt" 2>/dev/null)
     echo "" >> "$tmp/index.json"
     echo '  ],' >> "$tmp/index.json"
@@ -127,7 +128,7 @@ build_index() {
     while IFS='|' read -r rel sig; do
         $first || echo "," >> "$tmp/index.json"
         first=false
-        echo -n "    {\"file\":\"$rel\",\"sig\":\"${sig//\"/\\\"}\"}" >> "$tmp/index.json"
+        echo -n "    {\"file\":\"$(json_escape "$rel")\",\"sig\":\"$(json_escape "$sig")\"}" >> "$tmp/index.json"
     done < "$tmp/functions.txt"
     echo "" >> "$tmp/index.json"
     echo '  ],' >> "$tmp/index.json"
@@ -138,7 +139,7 @@ build_index() {
     while IFS='|' read -r type name; do
         $first || echo "," >> "$tmp/index.json"
         first=false
-        echo -n "    {\"type\":\"$type\",\"name\":\"$name\"}" >> "$tmp/index.json"
+        echo -n "    {\"type\":\"$(json_escape "$type")\",\"name\":\"$(json_escape "$name")\"}" >> "$tmp/index.json"
     done < "$tmp/components.txt"
     echo "" >> "$tmp/index.json"
     echo '  ]' >> "$tmp/index.json"

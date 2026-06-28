@@ -13,6 +13,14 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import java.io.File
+import java.net.InetSocketAddress
+import java.net.Socket
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SshBookmarksPage : ShellPage {
     private var connections = listOf<SshConnection>()
@@ -20,6 +28,8 @@ class SshBookmarksPage : ShellPage {
     private var emptyHint: TextView? = null
     private var ui: AIDevUi? = null
     var dismiss: (() -> Unit)? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val statusViews = mutableMapOf<String, TextView>()
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.ui = ui
@@ -96,6 +106,7 @@ class SshBookmarksPage : ShellPage {
     private fun renderConnections(activity: Activity, ui: AIDevUi, host: ShellHost) {
         val container = listContainer ?: return
         container.removeAllViews()
+        statusViews.clear()
 
         if (connections.isEmpty()) {
             emptyHint?.visibility = View.VISIBLE
@@ -138,12 +149,37 @@ class SshBookmarksPage : ShellPage {
                         setTextColor(ui.palette.muted)
                     })
                 }
+                val statusText = TextView(activity).apply {
+                    text = "检测中..."
+                    textSize = DesignTokens.TEXT_CAPTION
+                    setTextColor(ui.palette.muted)
+                }
+                addView(statusText)
+                statusViews[conn.id] = statusText
                 addView(View(activity).apply {
                     setBackgroundColor(ui.palette.outline)
                     layoutParams = LinearLayout.LayoutParams(-1, 1).apply { topMargin = ui.dp(DesignTokens.SPACE_4) }
                 })
             }
             container.addView(itemView)
+        }
+
+        scope.launch(Dispatchers.IO) {
+            val palette = ui?.palette ?: return@launch
+            connections.forEach { conn ->
+                val reachable = try {
+                    Socket().use { it.connect(InetSocketAddress(conn.host, conn.port), 2000) }
+                    true
+                } catch (_: Exception) {
+                    false
+                }
+                withContext(Dispatchers.Main) {
+                    statusViews[conn.id]?.apply {
+                        text = if (reachable) "✓ 可达" else "✗ 不可达"
+                        setTextColor(if (reachable) palette.success else palette.danger)
+                    }
+                }
+            }
         }
     }
 
@@ -178,6 +214,10 @@ class SshBookmarksPage : ShellPage {
         dialog.getButton(DialogInterface.BUTTON_NEGATIVE).setTextColor(palette.muted)
     }
 
+    override fun onDestroy(activity: Activity) {
+        scope.cancel()
+    }
+
     private fun showAddDialog(activity: Activity, ui: AIDevUi, host: ShellHost) {
         val nameInput = EditText(activity).apply { hint = "显示名称（如 我的服务器）"; setTextColor(ui.palette.text); setHintTextColor(ui.palette.muted); setBackgroundColor(ui.palette.surfaceAlt) }
         val hostInput = EditText(activity).apply { hint = "主机地址（IP 或域名）"; setTextColor(ui.palette.text); setHintTextColor(ui.palette.muted); setBackgroundColor(ui.palette.surfaceAlt) }
@@ -200,10 +240,15 @@ class SshBookmarksPage : ShellPage {
                     Toast.makeText(activity, "名称和主机地址不能为空", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
+                val port = portInput.text.trim().toString().toIntOrNull() ?: 22
+                if (port !in 1..65535) {
+                    Toast.makeText(activity, "端口号必须在 1-65535 之间", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
                 val conn = SshConnection(
                     name = name,
                     host = hostStr,
-                    port = portInput.text.trim().toString().toIntOrNull() ?: 22,
+                    port = port,
                     user = userInput.text.trim().toString().ifEmpty { "root" }
                 )
                 SshConfigManager.add(activity, conn)
@@ -222,9 +267,16 @@ class SshBookmarksPage : ShellPage {
                 when (which) {
                     0 -> showEditDialog(activity, ui, host, conn)
                     1 -> {
-                        SshConfigManager.delete(activity, conn.id)
-                        connections = SshConfigManager.getAll(activity).sortedByDescending { it.lastConnected }
-                        renderConnections(activity, ui, host)
+                        MaterialAlertDialogBuilder(activity)
+                            .setTitle("确认删除")
+                            .setMessage("确定要删除 SSH 连接「${conn.name}」吗？")
+                            .setPositiveButton("删除") { _, _ ->
+                                SshConfigManager.delete(activity, conn.id)
+                                connections = SshConfigManager.getAll(activity).sortedByDescending { it.lastConnected }
+                                renderConnections(activity, ui, host)
+                            }
+                            .setNegativeButton("取消", null)
+                            .show()
                     }
                 }
             }
@@ -253,10 +305,15 @@ class SshBookmarksPage : ShellPage {
                     Toast.makeText(activity, "名称和主机地址不能为空", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
+                val port = portInput.text.trim().toString().toIntOrNull() ?: conn.port
+                if (port !in 1..65535) {
+                    Toast.makeText(activity, "端口号必须在 1-65535 之间", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
                 val updated = conn.copy(
                     name = name,
                     host = hostStr,
-                    port = portInput.text.trim().toString().toIntOrNull() ?: conn.port,
+                    port = port,
                     user = userInput.text.trim().toString().ifEmpty { "root" }
                 )
                 SshConfigManager.update(activity, updated)

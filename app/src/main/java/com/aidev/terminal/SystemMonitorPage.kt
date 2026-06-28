@@ -15,6 +15,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -42,6 +43,7 @@ class SystemMonitorPage : ShellPage {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var refreshJob: Job? = null
     private var isVisible = false
+    private var paused = false
 
     // CPU 采样：保存上一次 /proc/stat 的数据用于计算差值
     private var prevCpuTotal: Long = 0L
@@ -114,7 +116,7 @@ class SystemMonitorPage : ShellPage {
         stopRefreshing()
         refreshJob = scope.launch {
             while (isActive && isVisible) {
-                refreshData()
+                if (!paused) refreshData()
                 delay(REFRESH_INTERVAL_MS)
             }
         }
@@ -167,8 +169,8 @@ class SystemMonitorPage : ShellPage {
             }
             prevCpuTotal = total
             prevCpuIdle = idle
-        } catch (_: Exception) {
-            // 无法读取 /proc/stat，保持默认值 0
+        } catch (e: Exception) {
+            Log.w("SysMon", "collectCpuUsage failed", e)
         }
     }
 
@@ -195,8 +197,8 @@ class SystemMonitorPage : ShellPage {
             }
             prevRxBytes = totalRx
             prevTxBytes = totalTx
-        } catch (_: Exception) {
-            // 无法读取 /proc/net/dev
+        } catch (e: Exception) {
+            Log.w("SysMon", "collectNetworkTraffic failed", e)
         }
     }
 
@@ -214,8 +216,8 @@ class SystemMonitorPage : ShellPage {
     private fun unregisterBatteryReceiver() {
         try {
             batteryReceiver?.let { activity.unregisterReceiver(it) }
-        } catch (_: Exception) {
-            // 忽略未注册的异常
+        } catch (e: Exception) {
+            Log.w("SysMon", "unregisterBatteryReceiver failed", e)
         }
         batteryReceiver = null
     }
@@ -260,8 +262,8 @@ class SystemMonitorPage : ShellPage {
             val bm = activity.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager ?: return
             val cap = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
             if (cap >= 0) batteryLevel = cap
-        } catch (_: Exception) {
-            // 忽略
+        } catch (e: Exception) {
+            Log.w("SysMon", "collectBatteryInfo failed", e)
         }
     }
 
@@ -287,8 +289,8 @@ class SystemMonitorPage : ShellPage {
                     key == "SwapFree" -> info.swapFree = kb
                 }
             }
-        } catch (_: Exception) {
-            // 无法读取 /proc/meminfo
+        } catch (e: Exception) {
+            Log.w("SysMon", "getMemoryInfo failed", e)
         }
         return info
     }
@@ -319,8 +321,8 @@ class SystemMonitorPage : ShellPage {
             }
             process.errorStream?.bufferedReader()?.use { it.readText() }
             process.waitFor()
-        } catch (_: Exception) {
-            // 执行失败
+        } catch (e: Exception) {
+            Log.w("SysMon", "getDiskInfo failed", e)
         }
         return result
     }
@@ -353,8 +355,8 @@ class SystemMonitorPage : ShellPage {
             }
             process.errorStream?.bufferedReader()?.use { it.readText() }
             process.waitFor()
-        } catch (_: Exception) {
-            // 执行失败
+        } catch (e: Exception) {
+            Log.w("SysMon", "getProcessList failed", e)
         }
         return result.take(MAX_PROCESS_COUNT)
     }
@@ -364,8 +366,29 @@ class SystemMonitorPage : ShellPage {
     private fun rebuildUi(diskInfo: List<DiskInfo>, processes: List<ProcessInfo>) {
         list.removeAllViews()
 
-        // 标题
-        list.addView(ui.section("系统监控", "CPU / 内存 / 磁盘 / 网络，每 3 秒自动刷新"))
+        // 暂停/恢复按钮行
+        val titleRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(ui.dp(DesignTokens.SPACE_12), ui.dp(DesignTokens.SPACE_8), ui.dp(DesignTokens.SPACE_12), 0)
+            addView(ui.text("系统监控", DesignTokens.TEXT_H2, ui.palette.text, bold = true).apply {
+                setPadding(0, 0, ui.dp(8), 0)
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            addView(TextView(activity).apply {
+                text = if (paused) "▶ 恢复" else "⏸ 暂停"
+                textSize = DesignTokens.TEXT_BODY
+                setTextColor(if (paused) ui.palette.success else ui.palette.warning)
+                setOnClickListener {
+                    paused = !paused
+                    if (!paused) refreshData()
+                    rebuildUi(getDiskInfo(), getProcessList())
+                }
+            })
+        }
+        list.addView(titleRow)
+        if (paused) {
+            list.addView(ui.muted("已暂停，点击「恢复」继续监控").apply { setPadding(ui.dp(DesignTokens.SPACE_12), 0, 0, ui.dp(DesignTokens.SPACE_8)) })
+        }
 
         // 资源概览卡片（2x2 网格）
         list.addView(buildResourceCards())
@@ -400,8 +423,6 @@ class SystemMonitorPage : ShellPage {
         list.addView(ui.section("电池与温度", "实时电池状态"))
         list.addView(buildBatterySection())
 
-        // 滚动到顶部
-        scrollView.post { scrollView.scrollTo(0, 0) }
     }
 
     /** 构建 2x2 资源概览卡片 */
@@ -640,7 +661,8 @@ class SystemMonitorPage : ShellPage {
         return when {
             bytesPerSec < 1024 -> "${bytesPerSec} B/s"
             bytesPerSec < 1024 * 1024 -> String.format("%.1f KB/s", bytesPerSec / 1024.0)
-            else -> String.format("%.1f MB/s", bytesPerSec / (1024.0 * 1024.0))
+            bytesPerSec < 1024L * 1024 * 1024 -> String.format("%.1f MB/s", bytesPerSec / (1024.0 * 1024.0))
+            else -> String.format("%.2f GB/s", bytesPerSec / (1024.0 * 1024.0 * 1024.0))
         }
     }
 
@@ -652,7 +674,8 @@ class SystemMonitorPage : ShellPage {
             val rootDisk = diskInfo.firstOrNull { it.mountedOn == "/" }
                 ?: diskInfo.firstOrNull()
             rootDisk?.usePercent ?: "N/A"
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w("SysMon", "parseDiskPercent failed", e)
             "N/A"
         }
     }

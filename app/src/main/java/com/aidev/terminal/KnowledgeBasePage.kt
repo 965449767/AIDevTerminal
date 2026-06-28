@@ -3,6 +3,8 @@ package com.aidev.terminal
 import android.app.Activity
 import android.graphics.Color
 import android.graphics.Typeface
+import android.os.Handler
+import android.os.Looper
 import android.graphics.drawable.GradientDrawable
 import android.text.SpannableString
 import android.text.Spanned
@@ -30,6 +32,8 @@ class KnowledgeBasePage : ShellPage {
     private var allCategories: List<KnowledgeCategory> = emptyList()
     private var currentFilter: String = ""
     private var selectedCategoryId: String? = null
+    private val searchHandler = Handler(Looper.getMainLooper())
+    private var searchRunnable: Runnable? = null
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
@@ -51,7 +55,9 @@ class KnowledgeBasePage : ShellPage {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                     currentFilter = s?.toString()?.trim() ?: ""
-                    render()
+                    searchRunnable?.let { searchHandler.removeCallbacks(it) }
+                    searchRunnable = Runnable { render() }
+                    searchHandler.postDelayed(searchRunnable!!, 300)
                 }
                 override fun afterTextChanged(s: android.text.Editable?) {}
             })

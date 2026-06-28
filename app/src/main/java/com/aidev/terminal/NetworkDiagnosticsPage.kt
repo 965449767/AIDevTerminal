@@ -20,8 +20,8 @@ import kotlinx.coroutines.withContext
 import java.net.InetAddress
 import java.net.NetworkInterface
 import java.net.Socket
+import java.net.HttpURLConnection
 import java.net.URL
-import javax.net.ssl.HttpsURLConnection
 
 /**
  * 网络诊断页面：ping、HTTP 请求、端口检查、DNS、网络信息
@@ -190,7 +190,7 @@ class NetworkDiagnosticsPage : ShellPage {
         scope.launch(Dispatchers.IO) {
             val result = try {
                 val url = URL(urlStr)
-                val conn = url.openConnection() as HttpsURLConnection
+                val conn = url.openConnection() as HttpURLConnection
                 conn.requestMethod = method
                 conn.connectTimeout = 10000
                 conn.readTimeout = 10000
@@ -269,7 +269,12 @@ class NetworkDiagnosticsPage : ShellPage {
                 "端口 $port 在 $host 上关闭或不可达"
             }
             withContext(Dispatchers.Main) {
-                Toast.makeText(activity, result, Toast.LENGTH_LONG).show()
+                MaterialAlertDialogBuilder(activity)
+                    .setTitle("端口检查结果")
+                    .setMessage(result)
+                    .setPositiveButton("复制") { _, _ -> copyText("端口检查", result) }
+                    .setNegativeButton("关闭", null)
+                    .show()
             }
         }
     }
@@ -407,7 +412,7 @@ class NetworkDiagnosticsPage : ShellPage {
 
     private fun isValidDomain(domain: String): Boolean {
         if (domain.length > 253) return false
-        return domain.matches(Regex("^\\w[\\w\\-]*(\\.\\w[\\w\\-]*)*$"))
+        return domain.matches(Regex("^[\\w][\\w\\-]*([.][\\w][\\w\\-]*)*$"))
     }
 
     private fun isValidUrl(url: String): Boolean {

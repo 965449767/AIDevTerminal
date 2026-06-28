@@ -94,7 +94,16 @@ EOF
                 CUR_SIZE=$(stat --format=%s "$RES_FILE" 2>/dev/null || stat -f%z "$RES_FILE" 2>/dev/null)
                 if [ "$CUR_SIZE" -gt "$LAST_SIZE" ]; then
                     NEW_DATA=$(dd if="$RES_FILE" bs=1 skip="$LAST_SIZE" 2>/dev/null || tail -c +$((LAST_SIZE + 1)) "$RES_FILE" 2>/dev/null)
-                    [ -n "$NEW_DATA" ] && echo "$NEW_DATA"
+                    [ -z "$NEW_DATA" ] && continue
+
+                    if [ -n "$TAGS" ]; then
+                        IFS=',' read -ra TAG_LIST <<< "$TAGS"
+                        for filter_tag in "${TAG_LIST[@]}"; do
+                            echo "$NEW_DATA" | grep -i "$filter_tag" || true
+                        done
+                    else
+                        echo "$NEW_DATA"
+                    fi
 
                     LAST_SIZE=$CUR_SIZE
 
@@ -109,13 +118,6 @@ EOF
                             rm -f "$REQ_FILE" "$RES_FILE" 2>/dev/null || true
                             exit 0
                         fi
-                    fi
-
-                    if [ -n "$TAGS" ]; then
-                        IFS=',' read -ra TAG_LIST <<< "$TAGS"
-                        for filter_tag in "${TAG_LIST[@]}"; do
-                            echo "$NEW_DATA" | grep -i "$filter_tag" || true
-                        done
                     fi
                 fi
             fi

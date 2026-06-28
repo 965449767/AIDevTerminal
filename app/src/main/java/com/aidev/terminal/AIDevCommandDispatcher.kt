@@ -53,18 +53,8 @@ object AIDevCommandDispatcher {
                 return
             }
         }
-        val isForeground = AIDevApp.getCurrentActivity() != null
-
-        val chId: String
-        val channelPriority: String?
-        if (isForeground) {
-            chId = "${CHANNEL_ID}_foreground"
-            channelPriority = "low"
-        } else {
-            chId = channelId(priority)
-            channelPriority = priority
-        }
-        ensureChannel(nm, chId, channelPriority)
+        val chId = channelId(priority)
+        ensureChannel(nm, chId, priority)
 
         val builder = if (Build.VERSION.SDK_INT >= 26) {
             android.app.Notification.Builder(context, chId)
@@ -73,7 +63,7 @@ object AIDevCommandDispatcher {
             android.app.Notification.Builder(context)
         }
         if (ongoing) builder.setOngoing(true)
-        if (Build.VERSION.SDK_INT >= 26 && (alertOnlyOnce || isForeground)) {
+        if (Build.VERSION.SDK_INT >= 26 && alertOnlyOnce) {
             builder.setOnlyAlertOnce(true)
         }
         val notification = builder

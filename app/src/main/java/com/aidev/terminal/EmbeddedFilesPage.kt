@@ -1,10 +1,19 @@
 package com.aidev.terminal
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
+import android.animation.Animator
+import android.animation.ValueAnimator
 import android.app.Activity
 import android.content.Intent
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorFilter
+import android.graphics.Paint
+import android.graphics.PixelFormat
+import android.graphics.PorterDuff
+import android.graphics.RectF
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
@@ -15,6 +24,7 @@ import android.os.StatFs
 import android.provider.Settings
 import android.text.TextUtils
 import android.text.Editable
+import android.text.TextWatcher
 import android.util.Log
 import android.view.Gravity
 import android.view.DragEvent
@@ -30,10 +40,14 @@ import android.webkit.WebViewClient
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.content.ContextCompat
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.core.widget.NestedScrollView
 import java.io.File
 import kotlin.math.abs
@@ -51,23 +65,56 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
     private lateinit var ui: AIDevUi
     private lateinit var leftList: LinearLayout
     private lateinit var rightList: LinearLayout
-    private lateinit var pathBar: TextView
+    private lateinit var pathBar: LinearLayout
+    private lateinit var pathBarChipRow: LinearLayout
+    private lateinit var pathBarStatus: TextView
+    private lateinit var loadingSpinner: ProgressBar
+    private var searchInput: EditText? = null
+    private var filterRow: LinearLayout? = null
+    private var filterMode: String = "all"
+    private var leftSwipeRefresh: SwipeRefreshLayout? = null
+    private var rightSwipeRefresh: SwipeRefreshLayout? = null
     private lateinit var splitView: View
     private lateinit var treeView: View
     private lateinit var projectTree: ProjectTreeView
+    private lateinit var gf: GestureFeedbackManager
     private lateinit var modeToggle: View
     private var collapseBtn: View? = null
+    private val swipeMaxDp = 200
+    private val swipeActionThreshold = 80
+    private val swipePeekThreshold = 60
     private var toolbarActions: View? = null
     private var treeContainer: View? = null
-    private lateinit var filePreviewPanel: LinearLayout
-    private lateinit var previewName: TextView
-    private lateinit var previewInfo: TextView
-    private lateinit var previewContent: FrameLayout
-    private lateinit var previewEdit: EditText
-    private lateinit var previewScroll: NestedScrollView
-    private lateinit var previewText: TextView
-    private lateinit var previewWeb: WebView
-    private var previewDirtyDot: View? = null
+    private lateinit var previewMgr: PreviewManager
+    private val filePreviewPanel get() = previewMgr.panel
+    private val previewName get() = previewMgr.nameView
+    private val previewInfo get() = previewMgr.infoView
+    private val previewContent get() = previewMgr.contentFrame
+    private val previewEdit get() = previewMgr.editText
+    private val previewScroll get() = previewMgr.scrollView
+    private val previewText get() = previewMgr.plainText
+    private val previewWeb get() = previewMgr.webView
+    private val previewImage get() = previewMgr.imageView
+    private val previewNavPrev get() = previewMgr.navPrev
+    private val previewNavNext get() = previewMgr.navNext
+    private val previewDirtyDot get() = previewMgr.dirtyDot
+    private val previewHtmlToggle get() = previewMgr.htmlToggle
+    private val previewEditToggle get() = previewMgr.editToggle
+    private val previewSaveBtn get() = previewMgr.saveBtn
+    private val previewTabRow get() = previewMgr.tabRow
+    private val previewInfoPanel get() = previewMgr.infoPanel
+    private val previewPermsPanel get() = previewMgr.permsPanel
+    private var previewImageBitmap get() = previewMgr.imageBitmap
+        set(v) { previewMgr.imageBitmap = v }
+    private var previewImageWidth get() = previewMgr.imageWidth
+        set(v) { previewMgr.imageWidth = v }
+    private var previewImageHeight get() = previewMgr.imageHeight
+        set(v) { previewMgr.imageHeight = v }
+    private var previewTabIndex get() = previewMgr.tabIndex
+        set(v) { previewMgr.tabIndex = v }
+    private var previewFileList get() = previewMgr.fileList
+        set(v) { previewMgr.fileList = v }
+    private var previewInfoExtra: String = ""
     private val dirtyHandler = Handler(Looper.getMainLooper())
     private val dirtyCheck = object : Runnable {
         override fun run() {
@@ -76,14 +123,13 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
             updatePreviewButtons()
         }
     }
-    private lateinit var previewHtmlToggle: View
-    private lateinit var previewEditToggle: View
-    private lateinit var previewSaveBtn: View
     private var contentContainer: FrameLayout? = null
     private lateinit var fileActionBar: HorizontalScrollView
     private lateinit var fileActionInfo: TextView
+    private lateinit var dragDropBar: View
     private var leftPane: View? = null
     private var rightPane: View? = null
+    private var currentAnimators: MutableMap<View, android.animation.ValueAnimator> = mutableMapOf()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val _state = MutableStateFlow(FilePageState(
         activeLeft = true,
@@ -161,21 +207,104 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
         }
     }
 
+    private fun workspaceDir(activity: Activity): File =
+        File(activity.filesDir, "home/ubuntu-rootfs/Workspace")
+
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
         this.ui = ui
+        gf = GestureFeedbackManager(activity, pm.sharedPreferences)
+        runCatching { workspaceDir(activity).mkdirs() }
+        _state.update { it.copy(leftDir = workspaceDir(activity)) }
         val root = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(ui.dp(8), ui.dp(8), ui.dp(8), ui.dp(8))
         }
         root.addView(toolbar(host), LinearLayout.LayoutParams(-1, ui.dp(42)))
-        pathBar = ui.text("", 12f, ui.palette.accent, bold = true).apply {
-            setPadding(ui.dp(8), ui.dp(7), ui.dp(8), ui.dp(7))
-            maxLines = 2
-            ellipsize = TextUtils.TruncateAt.MIDDLE
+        pathBar = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
             background = paneHeaderBg()
+            setPadding(ui.dp(4), ui.dp(2), ui.dp(6), ui.dp(2))
+            val chipRow = FrameLayout(activity).apply {
+                val scroll = HorizontalScrollView(activity).apply {
+                    isHorizontalScrollBarEnabled = false
+                    clipToPadding = false
+                    setPadding(ui.dp(4), 0, ui.dp(4), 0)
+                    addView(LinearLayout(activity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                    }.also { pathBarChipRow = it })
+                }
+                addView(scroll, FrameLayout.LayoutParams(-1, -2))
+                loadingSpinner = ProgressBar(activity, null, android.R.attr.progressBarStyleSmall).apply {
+                    layoutParams = FrameLayout.LayoutParams(ui.dp(16), ui.dp(16), Gravity.RIGHT or Gravity.CENTER_VERTICAL)
+                    visibility = View.GONE
+                }
+                addView(loadingSpinner)
+            }
+            addView(chipRow, LinearLayout.LayoutParams(-1, -2))
+            pathBarStatus = ui.text("", 10f, ui.palette.muted).apply {
+                setPadding(ui.dp(6), ui.dp(2), ui.dp(6), ui.dp(2))
+                maxLines = 1
+            }
+            addView(pathBarStatus)
         }
         root.addView(pathBar, LinearLayout.LayoutParams(-1, -2).apply { setMargins(ui.dp(4), 0, ui.dp(4), ui.dp(8)) })
+        root.addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(ui.dp(4), 0, ui.dp(4), 0)
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                background = paneHeaderBg()
+                setPadding(ui.dp(4), ui.dp(2), ui.dp(4), ui.dp(2))
+                val edit = EditText(activity).apply {
+                    hint = "搜索文件..."
+                    textSize = 12f
+                    setTextColor(ui.palette.text)
+                    setHintTextColor(ui.palette.muted)
+                    setBackgroundColor(Color.TRANSPARENT)
+                    setPadding(ui.dp(6), 0, ui.dp(6), 0)
+                    addTextChangedListener(object : TextWatcher {
+                        override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                        override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                        override fun afterTextChanged(s: Editable?) { applyFilter(); applyFilter(false) }
+                    })
+                }
+                searchInput = edit
+                addView(edit, LinearLayout.LayoutParams(0, -1, 1f))
+                val clearBtn = ImageView(activity).apply {
+                    layoutParams = LinearLayout.LayoutParams(ui.dp(22), ui.dp(22)).apply { setMargins(0, 0, ui.dp(4), 0) }
+                    setImageResource(R.drawable.ic_empty_file)
+                    setColorFilter(ui.palette.muted, PorterDuff.Mode.SRC_IN)
+                    scaleType = ImageView.ScaleType.CENTER_INSIDE
+                    visibility = View.GONE
+                    setOnClickListener { searchInput?.setText("") }
+                }
+                addView(clearBtn)
+                edit.addTextChangedListener(object : TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                    override fun afterTextChanged(s: Editable?) { clearBtn.visibility = if (s.isNullOrEmpty()) View.GONE else View.VISIBLE }
+                })
+            }, LinearLayout.LayoutParams(-1, ui.dp(36)))
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                val tabs = listOf("全部" to "all", "文件夹" to "folder", "文件" to "file")
+                for ((label, mode) in tabs) {
+                    val btn = ui.text(label, 11f, ui.palette.text).apply {
+                        setPadding(ui.dp(8), ui.dp(3), ui.dp(8), ui.dp(3))
+                        setOnClickListener {
+                            filterMode = mode
+                            updateFilterTabs()
+                            applyFilter()
+                            applyFilter(false)
+                        }
+                    }
+                    addView(btn)
+                    if (mode == "all") updateFilterTabs()
+                }
+            }.also { filterRow = it }, LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, ui.dp(4)) })
+        }, LinearLayout.LayoutParams(-1, -2).apply { setMargins(ui.dp(4), 0, ui.dp(4), ui.dp(4)) })
         splitView = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }.also { panes ->
             leftList = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
             rightList = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
@@ -205,12 +334,23 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
             addView(treeContainer, FrameLayout.LayoutParams(-1, -1))
         }
         contentContainer?.let { root.addView(it, LinearLayout.LayoutParams(-1, 0, 1f)) }
-        buildFilePreviewPanel()
-        root.addView(filePreviewPanel, LinearLayout.LayoutParams(-1, 0, 1f))
+        previewMgr = PreviewManager(activity, ui, contentContainer!!)
+        val textWatcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                dirtyHandler.removeCallbacks(dirtyCheck)
+                dirtyHandler.postDelayed(dirtyCheck, 250)
+            }
+            override fun afterTextChanged(s: android.text.Editable?) {}
+        }
+        previewMgr.build(textWatcher) { i -> switchPreviewTab(i) }
+        previewMgr.onNavigate = { dir -> previewNav(dir) }
+        previewMgr.onClose = { closeFilePreview() }
         buildFileActionBar()
         root.addView(fileActionBar, LinearLayout.LayoutParams(-1, ui.dp(42)))
+        buildDragDropBar()
+        contentContainer?.addView(dragDropBar)
         reloadAll()
-        applyLayoutMode()
         return root
     }
 
@@ -260,7 +400,8 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
             "位置 · 收藏/跳转" to { navHelper.showFavorites() },
             "位置 · 常用目录" to { navHelper.showQuickDirs() },
             "位置 · 最近项目" to { navHelper.showRecentProjects() },
-            "系统 · 安装 APK" to { installSelectedApk(host) }
+            "系统 · 安装 APK" to { installSelectedApk(host) },
+            "系统 · 清空回收站" to { fileOps.emptyTrash() }
         )
         val recent = recentFileMenuLabels().filter { label -> actions.any { it.first == label } }
         val display = recent.map { "最近 · ${it.substringAfter(" · ")}" to it } + actions.filterNot { recent.contains(it.first) }.map { it.first to it.first }
@@ -314,6 +455,8 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
                 when (event.action) {
                     DragEvent.ACTION_DRAG_STARTED -> {
                         dragLog("STARTED cd=${event.clipDescription} mime=${event.clipDescription?.getMimeType(0)}")
+                        val paths = event.localState as? List<*>
+                        if (paths != null) showFloatingPills(paths.mapNotNull { it as? String })
                         true
                     }
                     DragEvent.ACTION_DRAG_ENTERED -> {
@@ -324,15 +467,16 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
                         }
                         true
                     }
+                    DragEvent.ACTION_DRAG_LOCATION -> {
+                        updateDragPosition(v, event.x, event.y)
+                        true
+                    }
                     DragEvent.ACTION_DRAG_EXITED -> {
                         v.background = paneBg
                         true
                     }
-                    DragEvent.ACTION_DRAG_ENDED -> {
-                        v.background = paneBg
-                        true
-                    }
                     DragEvent.ACTION_DROP -> {
+                        hideFloatingPills()
                         val paths = event.localState as? List<*>
                         dragLog("DROP isLeft=$isLeft paths=${paths?.joinToString(",")}")
                         if (paths != null) {
@@ -350,7 +494,7 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
                                         }
                                     }
                                     dragLog("DROP async ok=$ok")
-                                    if (ok) { ui.pulse(); loadPane(isLeft); updatePathBar() }
+                                    if (ok) { gf.confirm(); loadPane(isLeft); updatePathBar() }
                                 }
                             } else {
                                 val ok = srcPaths.all { path ->
@@ -362,7 +506,7 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
                                     }.getOrDefault(false)
                                 }
                                 dragLog("DROP ok=$ok")
-                                if (ok) { ui.pulse(); loadPane(isLeft); updatePathBar() }
+                                if (ok) { gf.confirm(); loadPane(isLeft); updatePathBar() }
                             }
                             true
                         } else {
@@ -372,6 +516,7 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
                     }
                     DragEvent.ACTION_DRAG_ENDED -> {
                         v.background = ui.surfaceBackground()
+                        hideFloatingPills()
                         if (multiMode) exitMultiMode()
                         true
                     }
@@ -390,21 +535,27 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
         }
         if (isLeft) leftPane = outer else rightPane = outer
         val list = if (isLeft) leftList else rightList
-        outer.addView(ScrollView(activity).apply {
-            setOnTouchListener { v, event ->
-                if (!multiMode && event.action == MotionEvent.ACTION_DOWN && activeLeft != isLeft) {
-                    activeLeft = isLeft
-                    selectedFile = null
-                    ui.pulse()
-                    updatePathBar()
-                    updatePaneHighlight()
-                    refreshHighlight(true); refreshHighlight(false)
+        outer.addView(SwipeRefreshLayout(activity).apply {
+            setOnRefreshListener { reloadAll() }
+            setColorSchemeColors(0xFF7C3AED.toInt())
+            setProgressBackgroundColorSchemeColor(ui.palette.surface)
+            if (isLeft) leftSwipeRefresh = this else rightSwipeRefresh = this
+            addView(ScrollView(activity).apply {
+                setOnTouchListener { v, event ->
+                    if (!multiMode && event.action == MotionEvent.ACTION_DOWN && activeLeft != isLeft) {
+                        activeLeft = isLeft
+                        selectedFile = null
+                        ui.pulse()
+                        updatePathBar()
+                        updatePaneHighlight()
+                        refreshHighlight(true); refreshHighlight(false)
+                    }
+                    if (event.action == MotionEvent.ACTION_UP) v.performClick()
+                    false
                 }
-                if (event.action == MotionEvent.ACTION_UP) v.performClick()
-                false
-            }
-            isFillViewport = true
-            addView(list)
+                isFillViewport = true
+                addView(list)
+            }, LinearLayout.LayoutParams(-1, 0, 1f))
         }, LinearLayout.LayoutParams(-1, 0, 1f))
         return outer
     }
@@ -421,6 +572,7 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
     private fun loadPane(isLeft: Boolean) {
         var dir = if (isLeft) leftDir else rightDir
         val list = if (isLeft) leftList else rightList
+        loadingSpinner.visibility = View.VISIBLE
         if (dir.listFiles() == null) {
             val fallback = Environment.getExternalStorageDirectory()
             dir = fallback
@@ -432,10 +584,26 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
         if (files == null) {
             list.addView(info("无法读取，可能需要存储权限。"))
             updatePathBar()
+            loadingSpinner.visibility = View.GONE
             return
         }
-        files.take(300).forEach { list.addView(row(label(it), it, isLeft, false)) }
+        val total = files.size
+        if (total == 0) {
+            list.addView(emptyState())
+        } else {
+            files.take(300).forEach { list.addView(row(label(it), it, isLeft, false)) }
+            if (total > 300) {
+                list.addView(info("共 $total 项，仅显示前 300 项"))
+            }
+        }
         updatePathBar()
+        loadingSpinner.visibility = View.GONE
+        (if (isLeft) leftSwipeRefresh else rightSwipeRefresh)?.isRefreshing = false
+        filterMode = "all"
+        updateFilterTabs()
+        searchInput?.setText("")
+        applyFilter(isLeft)
+        applyFilter(!isLeft)
     }
 
     private fun updatePathBar() {
@@ -448,9 +616,56 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
         val totalGB = stat.totalBytes.toDouble() / (1024 * 1024 * 1024)
         val freeGB = stat.availableBytes.toDouble() / (1024 * 1024 * 1024)
         val storage = "储存:${"%.2f".format(freeGB)}G/${"%.2f".format(totalGB)}G"
+        pathBarStatus.text = "${status}  ${storage}"
+        pathBarChipRow.removeAllViews()
         val home = File(activity.filesDir, "home")
-        val displayPath = PathBridge.androidToUbuntu(home, dir) ?: dir.absolutePath
-        pathBar.text = "${displayPath}\n${status}  ${storage}"
+        val displayPath = PathBridge.androidToUbuntu(home, dir)
+        if (displayPath != null) {
+            val parts = displayPath.removePrefix("/").split("/")
+            var running = home.parentFile!!
+            addChip("~", home)
+            for (part in parts) {
+                addSep()
+                running = File(running, part)
+                addChip(part, running)
+            }
+        } else {
+            val parts = mutableListOf<Pair<String, File>>()
+            var current = dir
+            while (true) {
+                parts.add(current.name.ifEmpty { "/" } to current)
+                current = current.parentFile ?: break
+            }
+            parts.reverse()
+            for ((name, target) in parts) {
+                if (target != File("/")) addSep()
+                addChip(name, target)
+            }
+        }
+    }
+
+    private fun addChip(label: String, target: File) {
+        val chip = ui.text(label, 12f, ui.palette.accent, bold = true).apply {
+            setPadding(ui.dp(3), ui.dp(4), ui.dp(3), ui.dp(4))
+            setTextColor(ui.palette.accent)
+            minimumWidth = 0
+            background = GradientDrawable().apply {
+                setColor(0x1A7C3AED.toInt())
+                cornerRadius = ui.dp(4).toFloat()
+            }
+            setOnClickListener {
+                if (target.exists() && target.isDirectory) {
+                    if (activeLeft) leftDir = target else rightDir = target
+                    updatePaneHighlight(); reloadAll()
+                }
+            }
+        }
+        pathBarChipRow.addView(chip)
+    }
+
+    private fun addSep() {
+        val sep = ui.text("/", 12f, ui.palette.muted).apply { setPadding(ui.dp(2), 0, ui.dp(2), 0) }
+        pathBarChipRow.addView(sep)
     }
 
     private fun updatePaneHighlight() {
@@ -464,8 +679,8 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
         rightPane?.background = if (!activeLeft) active else paneBg
     }
 
-    private fun row(text: String, file: File, isLeft: Boolean, parent: Boolean): View =
-        TextView(activity).apply {
+    private fun row(text: String, file: File, isLeft: Boolean, parent: Boolean): View {
+        val content = TextView(activity).apply {
             this.text = text
             textSize = 12f
             setTextColor(ui.palette.text)
@@ -473,223 +688,104 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.MIDDLE
             includeFontPadding = false
-            setBackgroundColor(
-                if (multiMode && file.absolutePath in multiSelected && multiPaneSide == isLeft) ui.palette.accent
-                else if (!multiMode && selectedFile?.absolutePath == file.absolutePath && activeLeft == isLeft) ui.palette.accent
-                else Color.TRANSPARENT
-            )
-            tag = file
+            setBackgroundColor(Color.TRANSPARENT)
             outlineProvider = ViewOutlineProvider.BOUNDS
-            var swipeConsumed = false
-            var longPressTriggered = false
-            var dragStarted = false
-            var downX = 0f
+            tag = "row_content"
+            pivotY = 0f
+        }
 
-            val gd = GestureDetector(activity, object : GestureDetector.SimpleOnGestureListener() {
-                override fun onDown(e: MotionEvent): Boolean {
-                    swipeConsumed = false
-                    longPressTriggered = false
-                    dragStarted = false
-                    downX = e.x
-                    return true
-                }
-
-                override fun onSingleTapUp(e: MotionEvent): Boolean {
-                    ui.pulse()
-                    activeLeft = isLeft
-                    updatePaneHighlight()
-                    if (multiMode && multiPaneSide != isLeft) {
-                        multiMode = false
-                        multiPaneSide = true
-                        multiSelected = emptySet()
-                        selectedFile = null
-                        fileActionBar.visibility = View.GONE
-                        refreshHighlight(true); refreshHighlight(false)
-                    }
-                    if (multiMode) {
-                        toggleMultiSelect(file, isLeft)
-                    } else if (file.isDirectory) {
-                        navigateTo(file)
-                    } else if (!parent) {
-                        openFile(file)
-                    }
-                    this@apply.performClick()
-                    return true
-                }
-
-                override fun onLongPress(e: MotionEvent) {
-                    dragLog("onLongPress file=${file.name} multiMode=$multiMode")
-                    this@apply.performLongClick()
-                    if (multiMode) {
-                        if (multiPaneSide != isLeft) {
-                            exitMultiMode()
-                            return
-                        }
-                        longPressTriggered = true
-                        this@apply.parent.requestDisallowInterceptTouchEvent(true)
-                        this@apply.elevation = ui.dp(4).toFloat()
-                        this@apply.translationZ = ui.dp(4).toFloat()
-                        updateMultiInfo()
-                        return
-                    }
-                    activeLeft = isLeft
-                    updatePaneHighlight()
-                    selectedFile = file
-                    longPressTriggered = true
-                    this@apply.parent.requestDisallowInterceptTouchEvent(true)
-                    this@apply.elevation = ui.dp(4).toFloat()
-                    this@apply.translationZ = ui.dp(4).toFloat()
-                    fileActionBar.visibility = View.VISIBLE
-                    updateMultiInfo()
-                }
-
-                override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
-                    if (swipeConsumed) return true
-                    if (longPressTriggered) return false
-                    val dx = abs(e2.x - (e1?.x ?: e2.x))
-                    val dy = abs(e2.y - (e1?.y ?: e2.y))
-                    if (dx > dy * 2f && dx > 30f) {
-                        swipeConsumed = true
-                        this@apply.parent.requestDisallowInterceptTouchEvent(true)
-                        if (multiMode) {
-                            dragLog("SWIPE rangeSelect file=${file.name} multi=${multiSelected.toList()}")
-                            this@apply.post { rangeSelect(file, isLeft) }
-                        } else {
-                            dragLog("SWIPE enterMultiMode file=${file.name}")
-                            this@apply.post {
-                                activeLeft = isLeft
-                                updatePaneHighlight()
-                                selectedFile = file
-                                enterMultiMode(file)
-                            }
-                        }
-                        return true
-                    }
-                    return false
-                }
+        val actionOverlay = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
+            visibility = View.GONE
+            setPadding(0, 0, ui.dp(4), 0)
+            addView(swipeActionBtn("📋", 0xFF3B82F6.toInt()) {
+                selectedFile = file; activeLeft = isLeft; updatePaneHighlight()
+                if (!parent) fileOps.copyToOther(false)
+                gf.snapSpring(content, 0f, 0f)
             })
+            addView(swipeActionBtn("🗑", 0xFFEF4444.toInt()) {
+                selectedFile = file; activeLeft = isLeft; updatePaneHighlight()
+                fileOps.deleteSelected()
+                gf.snapSpring(content, 0f, 0f)
+            })
+            addView(swipeActionBtn("⋯", 0xFF6366F1.toInt()) {
+                selectedFile = file; activeLeft = isLeft; updatePaneHighlight()
+                fileActions(file)
+                gf.snapSpring(content, 0f, 0f)
+            })
+        }
 
-            setOnTouchListener { _, event ->
-                if (!multiMode && event.action == MotionEvent.ACTION_DOWN && activeLeft != isLeft) {
-                    activeLeft = isLeft
-                    selectedFile = null
-                    ui.pulse()
-                    updatePathBar()
-                    updatePaneHighlight()
-                    refreshHighlight(true); refreshHighlight(false)
-                }
-                val gdResult = gd.onTouchEvent(event)
-                if (longPressTriggered) {
-                    when (event.action) {
-                        MotionEvent.ACTION_MOVE -> {
-                            if (!dragStarted && abs(event.x - downX) > 60f) {
-                                dragStarted = true
-                                ui.pulse()
-                                longPressTriggered = false
-                                this@apply.elevation = 0f
-                                this@apply.translationZ = 0f
-                                fileActionBar.visibility = View.GONE
-                                val paths = if (multiMode && multiPaneSide == isLeft && multiSelected.isNotEmpty())
-                                    multiSelected.toList() else listOf(file.absolutePath)
-                                val clip = ClipData("file", arrayOf("text/plain"), ClipData.Item(paths.first()))
-                                paths.drop(1).forEach { clip.addItem(ClipData.Item(it)) }
-                                dragLog("startDragAndDrop paths=${paths.joinToString(",")}")
-                                runCatching { this@apply.startDragAndDrop(clip, View.DragShadowBuilder(this@apply), paths, 0) }
-                                    .onFailure { dragLog("startDragAndDrop failed: ${it.message}") }
-                            }
-                            this@apply.parent.requestDisallowInterceptTouchEvent(true)
-                            true
-                        }
-                        MotionEvent.ACTION_UP -> {
-                            longPressTriggered = false
-                            this@apply.elevation = 0f
-                            this@apply.translationZ = 0f
-                            if (!dragStarted) {
-                                activeLeft = isLeft
-                                selectedFile = file
-                                enterMultiMode(file)
-                            }
-                            true
-                        }
-                        MotionEvent.ACTION_CANCEL -> {
-                            longPressTriggered = false
-                            this@apply.elevation = 0f
-                            this@apply.translationZ = 0f
-                            false
-                        }
-                        else -> true
+        val previewOverlay = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            visibility = View.GONE
+            val info = if (file.isDirectory) "📁 ${file.name}" else "📄 ${file.name}  ${formatSize(file.length())}"
+            addView(ui.text(info, 10f, ui.palette.accent).apply {
+                setPadding(ui.dp(6), 0, ui.dp(6), 0); setBackgroundColor(0x1A7C3AED); includeFontPadding = false
+            })
+        }
+
+        var progressRing: View? = null
+        var arcDrawable: ArcProgressDrawable? = null
+        val iconSize = ui.dp(22)
+
+        val wrapper = FrameLayout(activity).apply {
+            addView(actionOverlay, FrameLayout.LayoutParams(-1, -1, Gravity.RIGHT or Gravity.CENTER_VERTICAL))
+            addView(previewOverlay, FrameLayout.LayoutParams(-2, -1, Gravity.LEFT or Gravity.CENTER_VERTICAL))
+            if (!parent) {
+                addView(ImageView(activity).apply {
+                    tag = "file_icon"
+                    layoutParams = FrameLayout.LayoutParams(iconSize, iconSize, Gravity.LEFT or Gravity.CENTER_VERTICAL).apply {
+                        leftMargin = ui.dp(8)
                     }
-                } else {
-                    gdResult
-                }
+                    setImageResource(if (file.isDirectory) R.drawable.ic_doc_folder else R.drawable.ic_doc_generic)
+                    setColorFilter(ui.palette.text, PorterDuff.Mode.SRC_IN)
+                })
             }
-
+            addView(content, FrameLayout.LayoutParams(-1, -1).apply {
+                if (!parent) leftMargin = ui.dp(8) + iconSize + ui.dp(6)
+            })
+            addView(View(activity).apply {
+                tag = "row_divider"
+                layoutParams = FrameLayout.LayoutParams(-1, ui.dp(1), Gravity.BOTTOM).apply { leftMargin = ui.dp(8) }
+                setBackgroundColor(0x18FFFFFF.toInt())
+            })
             if (file.isDirectory && !parent) {
-                var hoverPending = false
-                setOnDragListener { v, event ->
-                    when (event.action) {
-                        DragEvent.ACTION_DRAG_STARTED -> true
-                        DragEvent.ACTION_DRAG_ENTERED -> {
-                            v.setBackgroundColor(0x3A7C3AED.toInt())
-                            hoverPending = true
-                            v.postDelayed({
-                                if (hoverPending && file.isDirectory) {
-                                    hoverPending = false
-                                    navigateTo(file)
-                                }
-                            }, 500)
-                            true
-                        }
-                        DragEvent.ACTION_DRAG_EXITED, DragEvent.ACTION_DRAG_ENDED -> {
-                            v.setBackgroundColor(Color.TRANSPARENT)
-                            hoverPending = false
-                            true
-                        }
-                        DragEvent.ACTION_DROP -> {
-                            v.setBackgroundColor(Color.TRANSPARENT)
-                            hoverPending = false
-                            val paths = event.localState as? List<*>
-                            if (paths != null) {
-                                val srcPaths = paths.mapNotNull { it as? String }
-                                if (srcPaths.any { File(it).isDirectory }) {
-                                    scope.launch {
-                                        var ok = 0; var fail = 0
-                                        withContext(Dispatchers.IO) {
-                                            srcPaths.forEach { path ->
-                                                val src = File(path)
-                                                val dst = File(file, src.name)
-                                                try {
-                                                    fileOps.copyDir(src, dst)
-                                                    ok++
-                                                } catch (e: Exception) {
-                                                    fail++; dragLog("drop to dir failed: ${src.name}: ${e.message}")
-                                                }
-                                            }
-                                        }
-                                        toast(if (fail > 0) "已复制 ${ok} 项（${fail} 项失败）" else "已复制 ${ok} 项")
-                                        ui.pulse(); loadPane(isLeft); updatePathBar()
-                                    }
-                                } else {
-                                    var ok = 0; var fail = 0
-                                    srcPaths.forEach { path ->
-                                        val src = File(path)
-                                        val dst = File(file, src.name)
-                                        try {
-                                            src.copyTo(dst)
-                                            ok++
-                                        } catch (e: Exception) {
-                                            fail++; dragLog("drop to dir failed: ${src.name}: ${e.message}")
-                                        }
-                                    }
-                                    toast(if (fail > 0) "已复制 ${ok} 项（${fail} 项失败）" else "已复制 ${ok} 项")
-                                    ui.pulse(); loadPane(isLeft); updatePathBar()
-                                }
-                            }
-                            true
-                        }
-                        else -> true
-                    }
+                val a = ArcProgressDrawable(0xFF7C3AED.toInt(), ui.dp(3).toFloat())
+                arcDrawable = a
+                val ring = View(activity).apply {
+                    layoutParams = FrameLayout.LayoutParams(ui.dp(28), ui.dp(28), Gravity.RIGHT or Gravity.CENTER_VERTICAL)
+                    background = a; visibility = View.GONE
                 }
+                addView(ring)
+                progressRing = ring
+            }
+            tag = file
+        }
+
+        RowHandler(content, actionOverlay, previewOverlay, wrapper, file, isLeft, parent, progressRing, arcDrawable).install()
+        return wrapper
+    }
+
+    private fun swipeActionBtn(label: String, bgColor: Int, click: () -> Unit): TextView =
+        TextView(activity).apply {
+            text = label
+            textSize = 13f
+            gravity = Gravity.CENTER
+            includeFontPadding = false
+            setTextColor(Color.WHITE)
+            val s = ui.dp(32)
+            layoutParams = LinearLayout.LayoutParams(s, s).apply {
+                setMargins(ui.dp(2), 0, ui.dp(2), 0)
+            }
+            background = GradientDrawable().apply {
+                setColor(bgColor)
+                cornerRadius = s.toFloat() / 2f
+            }
+            setOnClickListener {
+                gf.tick()
+                click()
             }
         }
 
@@ -765,125 +861,19 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
         }
         if (!split && ::projectTree.isInitialized) {
             val home = File(activity.filesDir, "home")
-            val root = pm.currentProjectPath.takeIf { it.isNotBlank() }?.let { File(it) }
+            val workspace = workspaceDir(activity)
+            val root = workspace.takeIf { it.isDirectory() }
                 ?: ProjectDetector.findProjectRoot(home)
                 ?: home
             projectTree.setRoot(root)
+            val projPath = pm.currentProjectPath.takeIf { it.isNotBlank() }
+            if (projPath != null) projectTree.expandTo(File(projPath))
             projectTree.restoreExpanded(pm.treeExpandedPaths)
             pendingSyncPath?.let {
                 projectTree.expandTo(File(it))
                 pendingSyncPath = null
             }
         }
-    }
-
-    private fun buildFilePreviewPanel() {
-        filePreviewPanel = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(ui.dp(4), 0, ui.dp(4), 0)
-            visibility = View.GONE
-        }
-        val header = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(ui.dp(6), ui.dp(6), ui.dp(6), ui.dp(6))
-            background = paneHeaderBg()
-        }
-        val closeBtn = TextView(activity).apply {
-            text = "\u2715"
-            textSize = 16f
-            setTextColor(ui.palette.accent)
-            gravity = Gravity.CENTER
-            setPadding(ui.dp(8), ui.dp(4), ui.dp(8), ui.dp(4))
-            setOnClickListener { closeFilePreview() }
-        }
-        val nameLayout = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(0, 0, ui.dp(8), 0)
-        }
-        previewName = ui.text("", 13f, ui.palette.accent, bold = true).apply {
-            setPadding(0, 0, 0, ui.dp(2))
-        }
-        previewInfo = ui.text("", 11f, ui.palette.muted)
-        nameLayout.addView(previewName, LinearLayout.LayoutParams(-1, -2))
-        nameLayout.addView(previewInfo, LinearLayout.LayoutParams(-1, -2))
-        header.addView(nameLayout, LinearLayout.LayoutParams(0, -2, 1f))
-        header.addView(closeBtn, LinearLayout.LayoutParams(-2, -2))
-        filePreviewPanel.addView(header, LinearLayout.LayoutParams(-1, -2))
-
-        previewContent = FrameLayout(activity).apply {
-            setPadding(0, ui.dp(4), 0, ui.dp(4))
-        }
-        previewEdit = EditText(activity).apply {
-            isFocusable = false
-            isClickable = true
-            setTextColor(ui.palette.text)
-            setHintTextColor(ui.palette.muted)
-            setBackgroundColor(ui.palette.surfaceAlt)
-            setPadding(ui.dp(6), ui.dp(6), ui.dp(6), ui.dp(6))
-            textSize = 12f
-            typeface = android.graphics.Typeface.MONOSPACE
-            gravity = Gravity.TOP
-            layoutParams = FrameLayout.LayoutParams(-1, -1)
-            addTextChangedListener(object : android.text.TextWatcher {
-                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                    dirtyHandler.removeCallbacks(dirtyCheck)
-                    dirtyHandler.postDelayed(dirtyCheck, 250)
-                }
-                override fun afterTextChanged(s: Editable?) {}
-            })
-        }
-        previewContent.addView(previewEdit)
-        previewText = TextView(activity).apply {
-            setTextColor(ui.palette.text)
-            setBackgroundColor(ui.palette.surfaceAlt)
-            setPadding(ui.dp(6), ui.dp(6), ui.dp(6), ui.dp(6))
-            textSize = 12f
-            typeface = android.graphics.Typeface.MONOSPACE
-            gravity = Gravity.TOP
-        }
-        previewScroll = NestedScrollView(activity).apply {
-            addView(previewText)
-            layoutParams = FrameLayout.LayoutParams(-1, -1)
-            visibility = View.GONE
-        }
-        previewContent.addView(previewScroll)
-        previewWeb = WebView(activity).apply {
-            settings.javaScriptEnabled = true
-            settings.allowContentAccess = false
-            settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-            settings.allowFileAccess = true
-            settings.domStorageEnabled = true
-            settings.loadWithOverviewMode = true
-            settings.useWideViewPort = true
-            settings.builtInZoomControls = true
-            settings.setSupportZoom(true)
-            layoutParams = FrameLayout.LayoutParams(-1, -1)
-            visibility = View.GONE
-        }
-        previewContent.addView(previewWeb)
-        filePreviewPanel.addView(previewContent, LinearLayout.LayoutParams(-1, 0, 1f))
-
-        val bottomBar = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(ui.dp(4), ui.dp(2), ui.dp(4), ui.dp(2))
-            background = ui.surfaceBackground()
-        }
-        previewHtmlToggle = action("源码") { toggleHtmlMode() }
-        previewEditToggle = action("编辑") { togglePreviewEditMode() }
-        previewSaveBtn = action("保存") { savePreviewContent() }
-        previewDirtyDot = View(activity).apply {
-            setBackgroundColor(0xFFFFD700.toInt())
-            val s = ui.dp(8)
-            layoutParams = LinearLayout.LayoutParams(s, s)
-            (layoutParams as LinearLayout.LayoutParams).setMargins(0, 0, ui.dp(2), 0)
-            visibility = View.GONE
-        }
-        bottomBar.addView(previewHtmlToggle)
-        bottomBar.addView(previewEditToggle)
-        bottomBar.addView(previewDirtyDot)
-        bottomBar.addView(previewSaveBtn)
-        filePreviewPanel.addView(bottomBar, LinearLayout.LayoutParams(-1, -2))
     }
 
     private fun buildFileActionBar() {
@@ -907,22 +897,188 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
         }
     }
 
+    private fun buildDragDropBar() {
+        dragDropBar = FrameLayout(activity)
+        (dragDropBar as FrameLayout).visibility = View.GONE
+    }
+
+    private var currentDragPaths: List<String>? = null
+    private var pillViews = mutableListOf<View>()
+    private var pillColors = intArrayOf(0xFF3B82F6.toInt(), 0xFF10B981.toInt(), 0xFFEF4444.toInt(), 0xFF6366F1.toInt())
+
+    private fun showFloatingPills(paths: List<String>) {
+        currentDragPaths = paths
+        if (pillViews.isNotEmpty()) return
+        val labels = listOf("\uD83D\uDCCB \u590D\u5236", "\u2702\uFE0F \u79FB\u52A8", "\uD83D\uDDD1 \u5220\u9644", "\u2139\uFE0F \u8BE6\u60C5")
+        val colors = pillColors
+        val actions = listOf<(List<String>) -> Unit>(
+            { p -> executeDragCopy(p) }, { p -> executeDragMove(p) },
+            { p -> executeDragDelete(p) }, { p -> executeDragInfo(p) }
+        )
+        val bar = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(ui.dp(4), ui.dp(2), ui.dp(4), ui.dp(2))
+            background = GradientDrawable().apply {
+                setColor(0xDD1E1E2E.toInt())
+                cornerRadius = ui.dp(28).toFloat()
+            }
+            for (i in labels.indices) {
+                val color = colors[i]
+                addView(TextView(activity).apply {
+                    text = labels[i]; textSize = 11f; gravity = Gravity.CENTER
+                    setTextColor(Color.WHITE); typeface = android.graphics.Typeface.DEFAULT_BOLD
+                    includeFontPadding = false
+                    setPadding(ui.dp(8), 0, ui.dp(8), 0)
+                    layoutParams = LinearLayout.LayoutParams(0, ui.dp(38), 1f).apply { setMargins(ui.dp(2), 0, ui.dp(2), 0) }
+                    background = GradientDrawable().apply {
+                        setColor(color and 0x00FFFFFF or 0xAA000000.toInt())
+                        cornerRadius = ui.dp(19).toFloat(); setStroke(ui.dp(1), color)
+                    }
+                    setOnDragListener { pv, event ->
+                        runCatching {
+                            when (event.action) {
+                                DragEvent.ACTION_DRAG_STARTED -> { pv.alpha = 0.6f; true }
+                                DragEvent.ACTION_DRAG_ENTERED -> {
+                                    pv.alpha = 1f; gf.confirm()
+                                    pv.background = GradientDrawable().apply {
+                                        setColor(color); cornerRadius = ui.dp(19).toFloat()
+                                    }
+                                    true
+                                }
+                                DragEvent.ACTION_DRAG_EXITED -> {
+                                    pv.alpha = 0.6f
+                                    pv.background = GradientDrawable().apply {
+                                        setColor(color and 0x00FFFFFF or 0xAA000000.toInt())
+                                        cornerRadius = ui.dp(19).toFloat(); setStroke(ui.dp(1), color)
+                                    }
+                                    true
+                                }
+                                DragEvent.ACTION_DROP -> {
+                                    val p = event.localState as? List<*>
+                                    if (p != null) actions[i](p.mapNotNull { it as? String })
+                                    gf.drop(); true
+                                }
+                                DragEvent.ACTION_DRAG_ENDED -> { pv.alpha = 1f; true }
+                                else -> true
+                            }
+                        }.getOrDefault(true)
+                    }
+                })
+            }
+        }
+        val container = dragDropBar as? FrameLayout ?: return
+        container.addView(bar, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        container.visibility = View.VISIBLE
+    }
+
+    private fun hideFloatingPills() {
+        val container = dragDropBar as? FrameLayout ?: return
+        container.visibility = View.GONE
+        container.removeAllViews()
+        pillViews.clear()
+        currentDragPaths = null
+    }
+
+    fun updateDragPosition(v: View, eventX: Float, eventY: Float) {
+        val container = dragDropBar as? FrameLayout ?: return
+        if (container.visibility != View.VISIBLE) return
+        val vLoc = IntArray(2)
+        v.getLocationOnScreen(vLoc)
+        val parentLoc = IntArray(2)
+        (container.parent as? View)?.getLocationOnScreen(parentLoc) ?: return
+        val absX = vLoc[0] + eventX
+        val absY = vLoc[1] + eventY
+        val relX = absX - parentLoc[0] - container.width / 2f
+        val relY = absY - parentLoc[1] - container.height - ui.dp(20)
+        val p = container.parent as? View ?: return
+        container.translationX = relX.coerceIn(0f, (p.width - container.width).coerceAtLeast(0).toFloat())
+        container.translationY = relY.coerceAtLeast(ui.dp(4).toFloat())
+    }
+
+    private fun executeDragCopy(paths: List<String>) {
+        val sources = paths.map { File(it) }.filter { it.exists() }; if (sources.isEmpty()) return
+        val dstDir = if (activeLeft) rightDir else leftDir
+        executeFileTransfer(sources, dstDir, move = false)
+    }
+
+    private fun executeDragMove(paths: List<String>) {
+        val sources = paths.map { File(it) }.filter { it.exists() }; if (sources.isEmpty()) return
+        val dstDir = if (activeLeft) rightDir else leftDir
+        executeFileTransfer(sources, dstDir, move = true)
+    }
+
+    private fun executeFileTransfer(sources: List<File>, dstDir: File, move: Boolean) {
+        val hasDirs = sources.any { it.isDirectory }
+        val run = {
+            sources.forEach { src ->
+                val dst = File(dstDir, src.name)
+                if (!dst.exists()) runCatching {
+                    if (src.isDirectory) fileOps.copyDir(src, dst)
+                    else src.copyTo(dst)
+                    if (move && !src.deleteRecursively()) dragLog("delete after move failed: ${src.name}")
+                }.onFailure { dragLog("transfer failed: ${src.name}: ${it.message}") }
+            }
+            gf.confirm()
+            toast(if (move) "已移动 ${sources.size} 项" else "已复制 ${sources.size} 项")
+            reloadAll()
+        }
+        if (hasDirs) scope.launch { withContext(Dispatchers.IO) { run() } } else run()
+    }
+
+    private fun executeDragDelete(paths: List<String>) {
+        val files = paths.map { File(it) }.filter { it.exists() }; if (files.isEmpty()) return
+        var fail = 0
+        files.forEach { if (!it.deleteRecursively()) fail++ }
+        gf.drop()
+        toast(if (fail > 0) "已删除 ${files.size - fail} 项（${fail} 项失败）" else "已删除 ${files.size} 项")
+        reloadAll()
+    }
+
+    private fun executeDragInfo(paths: List<String>) {
+        val file = paths.firstOrNull()?.let { File(it) } ?: return
+        if (!file.exists()) return toast("文件已不存在")
+        if (file.isDirectory) toast("\uD83D\uDCC1 ${file.name}  (${file.listFiles()?.size ?: 0} 项)")
+        else toast("\uD83D\uDCC4 ${file.name}  ${formatSize(file.length())}")
+    }
+
     private fun showFilePreview(file: File, editMode: Boolean = false) {
         if (!file.isFile) return
+        val isFirstShow = !previewMgr.isVisible()
+        if (isFirstShow) {
+            val dir = if (activeLeft) leftDir else rightDir
+            previewFileList = dir.listFiles()?.filter { it.isFile && it.name != "." && it.name != ".." }?.sortedBy { it.name.lowercase() }
+            previewTabIndex = 0
+            switchPreviewTab(0)
+        }
+        previewMgr.show(isFirstShow)
+        loadPreviewContent(file, editMode)
+    }
+
+    private fun loadPreviewContent(file: File, editMode: Boolean = false) {
         previewFile = file
         isPreviewEditMode = editMode
         isPreviewViewMode = false
         isHtmlSourceMode = false
         isPreviewDirty = false
-        pathBar.visibility = View.GONE
-        modeToggle.visibility = View.GONE
-        contentContainer?.visibility = View.GONE
-        filePreviewPanel.visibility = View.VISIBLE
-        previewEdit.visibility = View.GONE
-        previewScroll.visibility = View.VISIBLE
-        previewWeb.visibility = View.GONE
+        previewMgr.resetViews()
+        previewInfoExtra = ""
+        if (isImageFile(file)) {
+            showPreviewImage(file)
+            updatePreviewHeader(file, "")
+            updatePreviewButtons()
+            updateNavButtons()
+            return
+        }
+        if (file.length() > 5 * 1024 * 1024) {
+            showPreviewBinaryInfo(file)
+            updatePreviewHeader(file, "二进制文件")
+            updatePreviewButtons()
+            updateNavButtons()
+            return
+        }
         val isHtml = isHtmlFile(file)
-        previewHtmlToggle.visibility = if (isHtml || isEnhancedFile(file)) View.VISIBLE else View.GONE
+        previewHtmlToggle?.visibility = if (isHtml || isEnhancedFile(file)) View.VISIBLE else View.GONE
         scope.launch {
             val text = withContext(Dispatchers.IO) {
                 runCatching { file.readText() }.getOrElse { "无法读取：${it.message}" }
@@ -939,8 +1095,10 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
             when {
                 isHtml && !editMode -> showHtmlRender(file)
                 isEnhancedFile(file) && !editMode -> loadEnhancedPreview(file, text)
+                else -> previewScroll.visibility = View.VISIBLE
             }
             updatePreviewButtons()
+            updateNavButtons()
         }
     }
 
@@ -959,21 +1117,21 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
     }
 
     private fun doClosePreview() {
-        pathBar.visibility = View.VISIBLE
-        modeToggle.visibility = View.VISIBLE
-        filePreviewPanel.visibility = View.GONE
-        contentContainer?.visibility = View.VISIBLE
-        previewFile = null
-        previewText.text = ""
-        previewEdit.setText("")
-        previewEdit.isFocusable = false
-        previewWeb.loadUrl("about:blank")
-        previewWeb.visibility = View.GONE
-        previewEdit.visibility = View.VISIBLE
-        previewScroll.visibility = View.GONE
-        isPreviewViewMode = false
-        isHtmlSourceMode = false
-        isPreviewDirty = false
+        previewMgr.hide {
+            previewFile = null
+            previewText.text = ""
+            previewEdit.setText("")
+            previewEdit.isFocusable = false
+            previewWeb.loadUrl("about:blank")
+            previewWeb.visibility = View.GONE
+            previewEdit.visibility = View.VISIBLE
+            previewScroll.visibility = View.GONE
+            isPreviewViewMode = false
+            isHtmlSourceMode = false
+            isPreviewDirty = false
+            selectedFile = null
+        }
+        refreshHighlight(true); refreshHighlight(false)
     }
 
     private fun showHtmlRender(file: File?) {
@@ -1079,7 +1237,7 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
         val html = isHtmlFile(file)
         val enhanced = !html && isEnhancedFile(file)
         val showViewToggle = html || enhanced
-        previewHtmlToggle.visibility = if (showViewToggle) View.VISIBLE else View.GONE
+        previewHtmlToggle?.visibility = if (showViewToggle) View.VISIBLE else View.GONE
         (previewHtmlToggle as? TextView)?.let {
             if (html) it.text = if (isPreviewViewMode && !isHtmlSourceMode) "源码" else "渲染"
             else it.text = if (isPreviewViewMode) "源码" else "预览"
@@ -1089,7 +1247,7 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
             isPreviewEditMode -> "预览"
             else -> "编辑"
         }
-        previewSaveBtn.isEnabled = isPreviewEditMode && isPreviewDirty
+        previewSaveBtn?.isEnabled = isPreviewEditMode && isPreviewDirty
         previewDirtyDot?.visibility = if (isPreviewEditMode && isPreviewDirty) View.VISIBLE else View.GONE
     }
 
@@ -1167,13 +1325,26 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
     private fun refreshHighlight(isLeft: Boolean) {
         val list = if (isLeft) leftList else rightList
         for (i in 0 until list.childCount) {
-            val v = list.getChildAt(i) as? TextView ?: continue
-            val f = v.tag as? File ?: continue
-            v.setBackgroundColor(
-                if (multiMode && f.absolutePath in multiSelected && multiPaneSide == isLeft) ui.palette.accent
-                else if (!multiMode && selectedFile?.absolutePath == f.absolutePath && activeLeft == isLeft) ui.palette.accent
-                else Color.TRANSPARENT
-            )
+            val wrapper = list.getChildAt(i)
+            val f = wrapper.tag as? File ?: continue
+            val selected = (multiMode && f.absolutePath in multiSelected && multiPaneSide == isLeft) ||
+                (!multiMode && selectedFile?.absolutePath == f.absolutePath && activeLeft == isLeft)
+            wrapper.setBackgroundColor(if (selected) 0x087C3AED.toInt() else Color.TRANSPARENT)
+            val content = wrapper.findViewWithTag<View>("row_content") as? TextView
+            if (content != null) {
+                content.pivotY = 0f
+                if (selected && multiMode) {
+                    content.scaleX = 1.05f; content.scaleY = 1.05f
+                } else {
+                    content.scaleX = 1f; content.scaleY = 1f
+                    content.translationX = 0f; content.translationY = 0f
+                }
+                content.setTextColor(if (selected) 0xFF7C3AED.toInt() else ui.palette.text)
+            }
+            val icon = wrapper.findViewWithTag<ImageView>("file_icon")
+            if (icon != null) {
+                icon.setColorFilter(if (selected) 0xFF7C3AED.toInt() else ui.palette.text, PorterDuff.Mode.SRC_IN)
+            }
         }
     }
 
@@ -1191,13 +1362,7 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
         val src = selected() ?: return toast("请先选择文件")
         if (!src.isFile) return toast("目录不能预览")
         if (src.name.endsWith(".apk", ignoreCase = true)) { projectTools.showApkInfo(src); return }
-        if (isImageFile(src)) { showImageInfo(src); return }
-        scope.launch {
-            val isText = withContext(Dispatchers.IO) { isLikelyText(src) }
-            if (isText && src.length() <= 512 * 1024) showFilePreview(src)
-            else if (!isText) showBinaryInfo(src)
-            else toast("该文件不适合直接预览")
-        }
+        showFilePreview(src)
     }
 
     private fun editSelected() {
@@ -1209,28 +1374,6 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
             if (!isText) toast("该文件不像文本文件")
             else showFilePreview(src, editMode = true)
         }
-    }
-
-    private fun showImageInfo(file: File) {
-        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        scope.launch {
-            withContext(Dispatchers.IO) { BitmapFactory.decodeFile(file.absolutePath, options) }
-            MaterialAlertDialogBuilder(activity)
-                .setTitle("图片信息")
-                .setMessage("文件：${file.name}\n尺寸：${options.outWidth} × ${options.outHeight}\n类型：${options.outMimeType ?: file.extension}\n大小：${formatSize(file.length())}\n路径：${file.absolutePath}")
-                .setPositiveButton("复制路径") { _, _ -> copySelectedPath() }
-                .setNegativeButton("关闭", null)
-                .show()
-        }
-    }
-
-    private fun showBinaryInfo(file: File) {
-        MaterialAlertDialogBuilder(activity)
-            .setTitle("文件信息")
-            .setMessage("文件：${file.name}\n类型：${file.extension.ifBlank { "未知/二进制" }}\n大小：${formatSize(file.length())}\n路径：${file.absolutePath}\n\n该文件不适合直接作为文本预览。")
-            .setPositiveButton("复制路径") { _, _ -> copySelectedPath() }
-            .setNegativeButton("关闭", null)
-            .show()
     }
 
     private fun isHtmlFile(file: File?): Boolean = FileUtils.isHtmlFile(file)
@@ -1306,6 +1449,96 @@ $lnCss
 
     private fun isImageFile(file: File): Boolean = FileUtils.isImageFile(file)
     private fun isLikelyText(file: File): Boolean = FileUtils.isLikelyText(file)
+
+    private fun showPreviewImage(file: File) {
+        previewEdit.visibility = View.GONE
+        previewScroll.visibility = View.GONE
+        previewWeb.visibility = View.GONE
+        previewImage.visibility = View.VISIBLE
+        previewImage.setImageDrawable(null)
+        scope.launch {
+            val maxDim = ui.dp(600).coerceAtLeast(400)
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(file.absolutePath, bounds)
+                    val (w, h) = (bounds.outWidth to bounds.outHeight)
+                    var sample = 1
+                    while (w / sample > maxDim || h / sample > maxDim) sample *= 2
+                    if (sample < 1) sample = 1
+                    Triple(
+                        BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply { inSampleSize = sample }),
+                        w, h
+                    )
+                }.getOrNull()
+            }
+            if (result != null) {
+                val (bm, w, h) = result
+                previewImageBitmap = bm
+                previewImageWidth = w
+                previewImageHeight = h
+                previewImage.setImageBitmap(bm)
+                previewImage.scaleType = ImageView.ScaleType.FIT_CENTER
+                previewImage.setOnClickListener { switchPreviewTab(1) }
+            } else {
+                previewImage.setImageResource(R.drawable.ic_doc_generic)
+                previewImage.scaleType = ImageView.ScaleType.CENTER
+                previewImage.setOnClickListener(null)
+            }
+        }
+    }
+
+    private fun showPreviewBinaryInfo(file: File) {
+        previewEdit.visibility = View.GONE
+        previewScroll.visibility = View.GONE
+        previewWeb.visibility = View.GONE
+        previewImage.visibility = View.GONE
+        previewInfoExtra = "二进制文件 · ${formatSize(file.length())}"
+        switchPreviewTab(1)
+    }
+
+    private fun showInfoTab(file: File, extra: String = "") {
+        previewMgr.populateInfoTab(file, extra)
+    }
+
+    private fun updateNavButtons() {
+        val files = previewFileList ?: getPreviewFiles()
+        val idx = files.indexOfFirst { it.absolutePath == previewFile?.absolutePath }
+        previewNavPrev.alpha = if (idx > 0) 1f else 0.3f
+        previewNavNext.alpha = if (idx >= 0 && idx < files.size - 1) 1f else 0.3f
+    }
+
+    private fun previewNav(dir: Int) {
+        val files = previewFileList ?: getPreviewFiles()
+        val idx = files.indexOfFirst { it.absolutePath == previewFile?.absolutePath }
+        val target = idx + dir
+        if (target < 0 || target >= files.size) return
+        loadPreviewContent(files[target])
+    }
+
+    private fun getPreviewFiles(): List<File> {
+        return previewFileList ?: let {
+            val dir = if (activeLeft) leftDir else rightDir
+            dir.listFiles()?.filter { it.isFile && it.name != "." && it.name != ".." }?.sortedBy { it.name.lowercase() }
+                ?: emptyList()
+        }
+    }
+
+    private fun switchPreviewTab(index: Int) {
+        previewMgr.switchTab(index)
+        val file = previewFile ?: return
+        when (index) {
+            1 -> {
+                previewMgr.populateInfoTab(file, previewInfoExtra)
+                previewInfoExtra = ""
+            }
+            2 -> previewMgr.populatePermsTab(file)
+        }
+    }
+
+    private fun showPermsTab(file: File) {
+        previewMgr.populatePermsTab(file)
+    }
 
     private fun copySelectedPath() {
         val src = selected() ?: activeDir()
@@ -1544,19 +1777,58 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
         lastOpenFile = file
         selectedFile = file
         if (file.name.endsWith(".apk", ignoreCase = true)) { projectTools.showApkInfo(file); return }
-        if (isImageFile(file)) { showImageInfo(file); return }
-        if (file.length() > 5 * 1024 * 1024) { showBinaryInfo(file); return }
-        scope.launch {
-            val isText = withContext(Dispatchers.IO) { isLikelyText(file) }
-            withContext(Dispatchers.Main) {
-                if (isText) showFilePreview(file) else showBinaryInfo(file)
-            }
+        showFilePreview(file)
+    }
+
+    private fun applyFilter(isLeft: Boolean = true) {
+        val list = if (isLeft) leftList else rightList
+        val keyword = searchInput?.text?.toString()?.trim()?.lowercase() ?: ""
+        val showParent = keyword.isEmpty() && filterMode == "all"
+        for (i in 0 until list.childCount) {
+            val child = list.getChildAt(i)
+            val f = child.tag as? File ?: continue
+            val name = f.name.lowercase()
+            val matches = keyword.isEmpty() || name.contains(keyword)
+            val typeOk = filterMode == "all" || (filterMode == "folder") == f.isDirectory
+            child.visibility = if (matches && typeOk) View.VISIBLE else View.GONE
+        }
+        val parentRow = if (list.childCount > 0) list.getChildAt(0) else null
+        if (parentRow?.tag is File && (parentRow.tag as File).name == "..") {
+            parentRow.visibility = if (showParent) View.VISIBLE else View.GONE
         }
     }
 
-    private fun label(file: File): String = (if (file.isDirectory) "📁 " else "📄 ") + file.name + if (file.isFile) "  ${formatSize(file.length())}" else ""
+    private fun updateFilterTabs() {
+        val row = filterRow ?: return
+        val labels = listOf("全部", "文件夹", "文件")
+        val modes = listOf("all", "folder", "file")
+        for (i in 0 until minOf(row.childCount, labels.size)) {
+            val btn = row.getChildAt(i) as? TextView ?: continue
+            val active = modes[i] == filterMode
+            btn.setTextColor(if (active) ui.palette.accent else ui.palette.text)
+            btn.setBackgroundColor(if (active) 0x1A7C3AED.toInt() else Color.TRANSPARENT)
+        }
+    }
+
+    private fun label(file: File): String = file.name + if (file.isFile) "  ${formatSize(file.length())}" else ""
     private fun formatSize(n: Long): String = FileUtils.formatSize(n)
     private fun info(text: String): TextView = ui.text(text, 12f, ui.palette.muted).apply { setPadding(ui.dp(8), ui.dp(10), ui.dp(8), ui.dp(10)) }
+    private fun emptyState(): View = LinearLayout(activity).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        layoutParams = LinearLayout.LayoutParams(-1, ui.dp(140))
+        setPadding(0, ui.dp(24), 0, ui.dp(24))
+        val iconView = ImageView(activity).apply {
+            setImageResource(R.drawable.ic_empty_file)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            layoutParams = LinearLayout.LayoutParams(ui.dp(64), ui.dp(64))
+        }
+        addView(iconView)
+        addView(ui.text("此文件夹为空", 13f, ui.palette.muted).apply {
+            setPadding(0, ui.dp(12), 0, 0)
+            gravity = Gravity.CENTER
+        })
+    }
     private fun copyText(label: String, text: String) {
         ClipboardHelper.copy(activity, label, text)
     }
@@ -1606,4 +1878,270 @@ ${result.stderr.take(500).ifBlank { "(空)" }}
     override fun hostNavigateTo(dir: File) { navigateTo(dir) }
 
     override val hostScope: CoroutineScope get() = scope
+
+    private inner class RowHandler(
+        private val content: View,
+        private val actionOverlay: View,
+        private val previewOverlay: View,
+        private val wrapper: FrameLayout,
+        private val file: File,
+        private val isLeft: Boolean,
+        private val parent: Boolean,
+        private val progressRing: View? = null,
+        private val arcDrawable: ArcProgressDrawable? = null
+    ) {
+        private var swipeConsumed = false
+        private var longPressTriggered = false
+        private var dragStarted = false
+        private var swipeOffset = 0f
+        private var downX = 0f
+        private var hoverAnimator: ValueAnimator? = null
+        private var isHoverRunning = false
+
+        private val maxSwipePx = ui.dp(swipeMaxDp)
+        private val actionThresholdPx = ui.dp(swipeActionThreshold)
+        private val peekThresholdPx = ui.dp(swipePeekThreshold)
+
+        private lateinit var gd: GestureDetector
+
+        fun install() {
+            setupGestureDetector()
+            setupTouchListener()
+            if (file.isDirectory && !parent && progressRing != null && arcDrawable != null) {
+                setupDragListener()
+            }
+        }
+
+        private fun disallowTouch() {
+            (wrapper.parent as? android.view.ViewParent)?.requestDisallowInterceptTouchEvent(true)
+        }
+
+        private fun setupGestureDetector() {
+            gd = GestureDetector(activity, object : GestureDetector.SimpleOnGestureListener() {
+                override fun onDown(e: MotionEvent): Boolean {
+                    swipeConsumed = false; longPressTriggered = false; dragStarted = false
+                    swipeOffset = 0f; downX = e.x
+                    return true
+                }
+
+                override fun onSingleTapUp(e: MotionEvent): Boolean {
+                    gf.tick()
+                    activeLeft = isLeft
+                    updatePaneHighlight()
+                    if (multiMode && multiPaneSide != isLeft) {
+                        multiMode = false; multiPaneSide = true
+                        multiSelected = emptySet(); selectedFile = null
+                        fileActionBar.visibility = View.GONE
+                        refreshHighlight(true); refreshHighlight(false)
+                    }
+                    if (multiMode) toggleMultiSelect(file, isLeft)
+                    else if (file.isDirectory) navigateTo(file)
+                    else if (!parent) openFile(file)
+                    content.performClick()
+                    return true
+                }
+
+                override fun onLongPress(e: MotionEvent) {
+                    dragLog("onLongPress file=${file.name} multiMode=$multiMode")
+                    gf.pickup()
+                    content.performLongClick()
+                    if (multiMode) {
+                        if (multiPaneSide != isLeft) { exitMultiMode(); return }
+                        longPressTriggered = true; disallowTouch()
+                        content.scaleX = 1.05f; content.scaleY = 1.05f
+                        updateMultiInfo(); return
+                    }
+                    activeLeft = isLeft; updatePaneHighlight()
+                    selectedFile = file; longPressTriggered = true; disallowTouch()
+                    fileActionBar.visibility = View.VISIBLE; updateMultiInfo()
+                }
+
+                override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
+                    if (swipeConsumed) return true
+                    if (longPressTriggered) return false
+                    val deltaX = (e2.x - (e1?.x ?: e2.x))
+                    val absDx = abs(deltaX)
+                    val absDy = abs(e2.y - (e1?.y ?: e2.y))
+                    if (absDx > absDy * 2f && absDx > 30f) {
+                        if (multiMode) { swipeConsumed = true; disallowTouch(); wrapper.post { rangeSelect(file, isLeft) }; return true }
+                        swipeConsumed = true; disallowTouch()
+                        swipeOffset = deltaX.coerceIn(-maxSwipePx.toFloat(), maxSwipePx.toFloat())
+                        content.translationX = swipeOffset
+                        when {
+                            swipeOffset < -actionThresholdPx * 0.3f -> { actionOverlay.visibility = View.VISIBLE; previewOverlay.visibility = View.GONE }
+                            swipeOffset > peekThresholdPx * 0.3f -> { previewOverlay.visibility = View.VISIBLE; actionOverlay.visibility = View.GONE }
+                            else -> { actionOverlay.visibility = View.GONE; previewOverlay.visibility = View.GONE }
+                        }
+                        return true
+                    }
+                    return false
+                }
+            })
+        }
+
+        private fun setupTouchListener() {
+            wrapper.setOnTouchListener { _, event ->
+                if (!multiMode && event.action == MotionEvent.ACTION_DOWN && activeLeft != isLeft) {
+                    activeLeft = isLeft; selectedFile = null
+                    ui.pulse(); updatePathBar(); updatePaneHighlight()
+                    refreshHighlight(true); refreshHighlight(false)
+                }
+                val gdResult = gd.onTouchEvent(event)
+                if (longPressTriggered) {
+                    when (event.action) {
+                        MotionEvent.ACTION_MOVE -> {
+                            if (!dragStarted && abs(event.x - downX) > 60f) {
+                                dragStarted = true; gf.confirm(); longPressTriggered = false
+                                content.scaleX = 1.05f; content.scaleY = 1.05f
+                                fileActionBar.visibility = View.GONE
+                                val paths = if (multiMode && multiPaneSide == isLeft && multiSelected.isNotEmpty())
+                                    multiSelected.toList() else listOf(file.absolutePath)
+                                val clip = ClipData("file", arrayOf("text/plain"), ClipData.Item(paths.first()))
+                                paths.drop(1).forEach { clip.addItem(ClipData.Item(it)) }
+                                dragLog("startDragAndDrop paths=${paths.joinToString(",")}")
+                                runCatching { content.startDragAndDrop(clip, View.DragShadowBuilder(content), paths, 0) }
+                                    .onFailure { dragLog("startDragAndDrop failed: ${it.message}") }
+                            }
+                            disallowTouch(); true
+                        }
+                        MotionEvent.ACTION_UP -> {
+                            longPressTriggered = false
+                            if (!dragStarted) {
+                                content.scaleX = 1.05f; content.scaleY = 1.05f
+                                activeLeft = isLeft; selectedFile = file
+                                enterMultiMode(file)
+                            } else {
+                                content.scaleX = 1f; content.scaleY = 1f
+                                content.elevation = 0f; content.translationZ = 0f
+                            }
+                            true
+                        }
+                        MotionEvent.ACTION_CANCEL -> {
+                            longPressTriggered = false
+                            content.animate().cancel()
+                            content.scaleX = 1f; content.scaleY = 1f
+                            content.elevation = 0f; content.translationZ = 0f
+                            false
+                        }
+                        else -> true
+                    }
+                } else if (swipeConsumed) {
+                    when (event.action) {
+                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                            val offset = content.translationX
+                            when {
+                                offset < -actionThresholdPx -> gf.snapSpring(content, offset, -maxSwipePx.toFloat()) { actionOverlay.visibility = View.VISIBLE }
+                                offset > peekThresholdPx -> gf.snapSpring(content, offset, peekThresholdPx.toFloat()) { previewOverlay.visibility = View.VISIBLE }
+                                else -> gf.snapSpring(content, offset, 0f) { actionOverlay.visibility = View.GONE; previewOverlay.visibility = View.GONE }
+                            }
+                            swipeConsumed = false; swipeOffset = 0f; true
+                        }
+                        else -> true
+                    }
+                } else gdResult
+            }
+        }
+
+        private fun setupDragListener() {
+            val a = arcDrawable ?: return
+            val ring = progressRing ?: return
+            wrapper.setOnDragListener { v, event ->
+                when (event.action) {
+                    DragEvent.ACTION_DRAG_STARTED -> {
+                        val paths = event.localState as? List<*>
+                        if (paths != null) showFloatingPills(paths.mapNotNull { it as? String })
+                        true
+                    }
+                    DragEvent.ACTION_DRAG_ENTERED -> {
+                        if (isHoverRunning) { true } else {
+                            var navigated = false
+                            isHoverRunning = true
+                            gf.targetGlow(v, true, 0xFF7C3AED.toInt())
+                            a.sweep = 0f; ring.visibility = View.VISIBLE; ring.alpha = 1f
+                            hoverAnimator?.cancel()
+                            hoverAnimator = ValueAnimator.ofFloat(0f, 360f).apply {
+                                duration = 700L
+                                addUpdateListener { anim ->
+                                    a.sweep = (anim.animatedFraction * 360f).coerceAtMost(360f)
+                                    if (!navigated && anim.animatedFraction >= 1f && file.isDirectory) {
+                                        navigated = true; navigateTo(file)
+                                    }
+                                }
+                                start()
+                            }
+                            true
+                        }
+                    }
+                    DragEvent.ACTION_DRAG_EXITED, DragEvent.ACTION_DRAG_ENDED -> {
+                        isHoverRunning = false
+                        gf.targetGlow(v, false, 0xFF7C3AED.toInt())
+                        hoverAnimator?.cancel(); hoverAnimator = null
+                        ring.visibility = View.GONE; true
+                    }
+                    DragEvent.ACTION_DRAG_LOCATION -> { updateDragPosition(v, event.x, event.y); true }
+                    DragEvent.ACTION_DROP -> {
+                        hideFloatingPills()
+                        gf.targetGlow(v, false, 0xFF7C3AED.toInt()); gf.drop()
+                        hoverAnimator?.cancel(); hoverAnimator = null; ring.visibility = View.GONE
+                        val paths = event.localState as? List<*>
+                        if (paths != null) {
+                            val srcPaths = paths.mapNotNull { it as? String }
+                            if (srcPaths.any { File(it).isDirectory }) {
+                                scope.launch {
+                                    var ok = 0; var fail = 0
+                                    withContext(Dispatchers.IO) { srcPaths.forEach { path ->
+                                        try { fileOps.copyDir(File(path), File(file, File(path).name)); ok++ }
+                                        catch (e: Exception) { fail++; hostDragLog("drop to dir failed: $path: ${e.message}") }
+                                    } }
+                                    toast(if (fail > 0) "已复制 ${ok} 项（${fail} 项失败）" else "已复制 ${ok} 项")
+                                    gf.confirm(); loadPane(isLeft); updatePathBar()
+                                }
+                            } else {
+                                var ok = 0; var fail = 0
+                                srcPaths.forEach { path ->
+                                    try { File(path).copyTo(File(file, File(path).name)); ok++ }
+                                    catch (e: Exception) { fail++; hostDragLog("drop to dir failed: $path: ${e.message}") }
+                                }
+                                toast(if (fail > 0) "已复制 ${ok} 项（${fail} 项失败）" else "已复制 ${ok} 项")
+                                gf.confirm(); loadPane(isLeft); updatePathBar()
+                            }
+                        }
+                        true
+                    }
+                    else -> true
+                }
+            }
+        }
+    }
+
+    private class ArcProgressDrawable(private val color: Int, strokeWidth: Float) : Drawable() {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            style = Paint.Style.STROKE
+            this.strokeWidth = strokeWidth
+            strokeCap = Paint.Cap.ROUND
+        }
+        private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color and 0x00FFFFFF or 0x30000000.toInt()
+            style = Paint.Style.STROKE
+            this.strokeWidth = strokeWidth
+        }
+
+        var sweep: Float = 0f
+            set(value) {
+                field = value.coerceIn(0f, 360f)
+                invalidateSelf()
+            }
+
+        override fun draw(canvas: Canvas) {
+            val halfStroke = paint.strokeWidth / 2f
+            val rect = RectF(bounds).apply { inset(halfStroke, halfStroke) }
+            canvas.drawOval(rect, bgPaint)
+            canvas.drawArc(rect, -90f, sweep, false, paint)
+        }
+
+        override fun setAlpha(alpha: Int) { paint.alpha = alpha; bgPaint.alpha = alpha / 3 }
+        override fun setColorFilter(cf: ColorFilter?) { paint.colorFilter = cf }
+        override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+    }
 }
