@@ -1,5 +1,5 @@
-# Test: opencode-install
-SCRIPT="$ASSETS_DIR/opencode-install.sh"
+# Test: opencode-check
+SCRIPT="$ASSETS_DIR/opencode-check.sh"
 
 # run it (read-only check)
 output=$(bash "$SCRIPT" 2>&1 || true)

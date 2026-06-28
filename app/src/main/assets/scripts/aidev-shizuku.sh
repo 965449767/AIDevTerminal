@@ -11,7 +11,7 @@
 #   battery reset            重置电池状态
 #   status                   检查 Shizuku 状态
 
-set -e
+set -eo pipefail
 BRIDGE_DIR="/host-home/.aidev-shizuku-bridge"
 REQUEST_DIR="$BRIDGE_DIR/request"
 RESULT_DIR="$BRIDGE_DIR/result"

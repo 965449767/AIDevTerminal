@@ -202,7 +202,7 @@ class EmbeddedSettingsPage : ShellPage {
             File(rootfs, "bin/opencode")
         )
         val opencodeOk = opencodeBinPaths.any { it.exists() }
-        checks.add(CheckItem("OpenCode", opencodeOk, "AI 编程助手", if (!opencodeOk) "opencode-install" else null))
+        checks.add(CheckItem("OpenCode", opencodeOk, "AI 编程助手", if (!opencodeOk) "opencode-check" else null))
 
         val failedChecks = checks.filter { !it.ok }
         val allOk = failedChecks.isEmpty()
@@ -229,7 +229,7 @@ class EmbeddedSettingsPage : ShellPage {
                 .setMessage(body.toString())
                 .setPositiveButton(if (hasFixable) "一键修复" else "关闭") { _, _ ->
                     if (hasFixable) {
-                        host.openTerminal("setup-dev-env && opencode-install")
+                        host.openTerminal("setup-dev-env && opencode-check")
                     }
                 }
                 .setNeutralButton("终端详细检测") { _, _ ->

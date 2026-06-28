@@ -180,12 +180,21 @@
         },
         {
           "title": "检查 OpenCode 环境",
-          "cmd": "opencode-install / setup-opencode",
+          "cmd": "opencode-check",
           "desc": "验证 OpenCode 安装状态 + AIDev Android 开发工具注册",
           "tags": ["内置命令", "AI 工具", "环境配置"],
-          "usage": "  opencode-install 或 setup-opencode      # 检查 OpenCode 和 AIDev 命令注册状态",
+          "usage": "  opencode-check                        # 检查 OpenCode 和 AIDev 命令注册状态",
           "permissions": "无需网络。需在 Ubuntu 容器内执行。",
           "notes": "opencode 不再内置到 APK 中，用户需自行安装：opencode upgrade。7 个 aidev-* 命令 .md 文件已预部署到 ~/.config/opencode/commands/，安装 opencode 后自动注册。本脚本仅为环境验证工具，不执行安装。"
+        },
+        {
+          "title": "安装 OpenCode",
+          "cmd": "setup-opencode",
+          "desc": "安装 OpenCode 和注册 AIDev 自定义命令到 system prompt",
+          "tags": ["内置命令", "AI 工具", "环境配置"],
+          "usage": "  setup-opencode                        # 安装/更新 OpenCode 并注册 AIDev 命令\n  setup-opencode upgrade                  # 升级 OpenCode 到最新版",
+          "permissions": "需要网络连接。需在 Ubuntu 容器内执行。",
+          "notes": "会执行 opencode upgrade 安装最新版 OpenCode，然后将 aidev-* 命令注册到 system prompt。安装完成后可用 opencode-check 验证状态。opencode-install 是本命令的别名，行为一致。"
         },
         {
           "title": "OpenCode 通知包装",
@@ -300,9 +309,9 @@
           "cmd": "aidev-clean [选项]",
           "desc": "清理构建缓存和临时文件，释放手机存储空间",
           "tags": ["内置命令", "存储管理", "构建优化"],
-          "usage": "  aidev-clean                          # 查看帮助\n  aidev-clean --dry-run                # 预览可清理的空间（不删除）\n  aidev-clean --all                    # 清理 Gradle 缓存 + build 目录 + apt 缓存\n  aidev-clean --gradle                 # 仅清理 Gradle 临时缓存\n  aidev-clean --builds                 # 仅删除 build/ 和 app/build/ 目录",
+          "usage": "  aidev-clean                          # 查看帮助\n  aidev-clean -n                       # 预览可清理的空间（不删除）\n  aidev-clean -a                       # 清理 Gradle 缓存 + build 目录 + apt 缓存\n  aidev-clean -g                       # 仅清理 Gradle 临时缓存\n  aidev-clean -b                       # 仅删除 build/ 和 app/build/ 目录",
           "permissions": "无特殊权限要求。",
-          "notes": "--dry-run 安全预览，不删任何文件。--all 会删除 .gradle/ 和 build/ 目录，下次构建需重新下载依赖。清理 apt cache 使用 apt-get clean。"
+          "notes": "Android shell 和 PRoot 容器内均可使用（实现不同，行为一致）。--dry-run 安全预览，不删任何文件。--all 会删除 .gradle/ 和 build/ 目录，下次构建需重新下载依赖。清理 apt cache 使用 apt-get clean。"
         },
         {
           "title": "查看监听端口",
@@ -374,7 +383,7 @@
           "tags": ["内置命令", "应用管理", "文件管理"],
           "usage": "  installapk /sdcard/Download/app.apk    # 从下载目录安装\n  installapk ./app-release.apk           # 从当前目录安装\n  installapk ~/app.apk                   # 从主目录安装",
           "permissions": "需要 REQUEST_INSTALL_PACKAGES 权限（允许安装未知来源应用）",
-          "notes": "通过 FileProvider 将 APK 暴露给 Android 安装器。路径支持 /sdcard/ 和 ~/（主目录）开头的路径。首次使用需授权「安装未知应用」。如需静默安装（无界面确认），可用 aidev-shizuku install <apk_path>。"
+          "notes": "Android shell 和 PRoot 容器内均可使用。PRoot 内委托 aidev-install --gui（通过 CommandBridge 调起系统安装器）。静默安装（无界面确认）用 aidev-shizuku install <apk_path>。"
         },
         {
           "title": "卸载应用",
@@ -383,7 +392,7 @@
           "tags": ["内置命令", "应用管理"],
           "usage": "  uninstallapp com.example.myapp          # 卸载应用\n  uninstallapp com.android.chrome         # 卸载 Chrome",
           "permissions": "无特殊权限要求",
-          "notes": "会弹出系统卸载确认对话框。无法卸载系统预装应用。"
+          "notes": "Android shell 和 PRoot 容器内均可使用。PRoot 内通过 Shizuku 静默卸载（pm uninstall --user 0）。无法卸载系统预装应用。"
         },
         {
           "title": "Shizuku 命令",
@@ -392,7 +401,7 @@
           "tags": ["内置命令", "Shizuku", "系统控制", "开发调试", "应用管理"],
           "usage": "  aidev-shizuku exec 'input keyevent 3'                    # 模拟 HOME 键\n  aidev-shizuku exec 'getprop ro.build.version.sdk'       # 查看 SDK 版本\n  aidev-shizuku install /sdcard/Download/app.apk          # 静默安装 APK\n  aidev-shizuku input keyevent KEYCODE_HOME               # 按 HOME 键\n  aidev-shizuku input tap 500 1000                        # 模拟点击 (x,y)\n  aidev-shizuku wifi on                                   # 开启 WiFi\n  aidev-shizuku wifi off                                  # 关闭 WiFi\n  aidev-shizuku data on                                   # 开启移动数据\n  aidev-shizuku data off                                  # 关闭移动数据\n  aidev-shizuku battery level 50                          # 模拟电池电量 50%\n  aidev-shizuku battery reset                             # 恢复真实电池状态\n  aidev-shizuku status                                    # 检查 Shizuku 状态",
           "permissions": "需要 Shizuku 授权（在「任务」页授权）。执行的具体命令权限取决于 Android shell 用户。",
-          "notes": "所有命令在 Android 宿主环境执行（非 PRoot 容器）。支持 pm、input、svc、dumpsys、getprop 等系统工具。exec 子命令可执行任意 shell 命令。安装 APK 使用 pm install 静默安装，无需用户确认。input 模拟操作在部分设备上可能需要额外授权。"
+          "notes": "Android shell 和 PRoot 容器内均可使用。注意子命令用空格分隔，如 aidev-shizuku install <apk>，不是 aidev-shizuku-install。支持 pm、input、svc、dumpsys、getprop 等系统工具。安装 APK 使用 pm install 静默安装，无需用户确认。"
         },
         {
           "title": "Android Shell",
@@ -401,7 +410,7 @@
           "tags": ["内置命令", "系统控制", "开发调试"],
           "usage": "  android-sh 'getprop ro.build.version.sdk'  # 查看 Android SDK 版本\n  android-sh 'wm size'                        # 查看屏幕分辨率\n  android-sh 'dumpsys battery'                 # 查看电池状态\n  android-sh 'pm list packages | grep chrome'  # 查找已安装应用",
           "permissions": "无特殊权限要求（命令权限取决于 Android shell 用户权限）",
-          "notes": "命令在 Android 宿主环境执行，而非 PRoot 容器内。此命令通过文件桥接将命令发送到 Android 侧执行并返回结果。支持 getprop、wm、pm、am、dumpsys 等系统工具。"
+          "notes": "Android shell 和 PRoot 容器内均可使用。PRoot 内通过 Shizuku 委托执行。支持 getprop、wm、pm、am、dumpsys 等系统工具。如需静默安装，用 aidev-shizuku install。"
         },
         {
           "title": "APK 信息解析",
@@ -410,7 +419,7 @@
           "tags": ["内置命令", "Android 开发", "APK 分析"],
           "usage": "  aidev-apk-info app/build/outputs/apk/debug/app-debug.apk    # 查看构建的 APK\n  aidev-apk-info /sdcard/Download/some.apk                   # 查看下载的 APK\n  aidev-apk-info ./app-release.apk                           # 查看当前目录 APK",
           "permissions": "无特殊权限要求。需要 aapt2 输出完整信息（Gradle 构建后自动缓存）。",
-          "notes": "优先使用 aapt2 解析（从 Gradle 缓存或 Android SDK 中查找），未找到时以基础模式运行（仅显示文件大小）。aapt2 在 Gradle 构建一次后就会缓存在 ~/.gradle/caches/ 中。"
+          "notes": "优先使用 aapt2 解析（从 Gradle 缓存或 Android SDK 中查找），未找到时以基础模式运行（显示文件大小和包名）。aapt2 在 Gradle 构建一次后就会缓存在 ~/.gradle/caches/ 中。"
         },
         {
           "title": "智能构建",
@@ -419,14 +428,14 @@
           "tags": ["内置命令", "Android 开发", "构建工具"],
           "usage": "  aidev-build                                     # 自动选择最轻方式\n  aidev-build --full                              # 全量编译 (assembleDebug)\n  aidev-build --test                              # 编译 + 单元测试\n  aidev-build --compile                           # 仅 Kotlin 编译\n  aidev-build --clean                             # clean 后增量编译\n  aidev-build --full --clean                      # 清理后全量编译",
           "permissions": "无特殊权限要求。需要在 Ubuntu 容器内执行（需要 JDK 和 Gradle）。",
-          "notes": "自动处理 AAPT2 守护进程死锁（wrap-android-native.sh）。检测代理可用性，代理不可达时自动禁用。构建失败时自动诊断常见错误（AAPT2、Gradle 配置等）。"
+          "notes": "Gradle init script 已处理 AAPT2 守护进程禁用（wrap-native.gradle）。检测代理可用性，代理不可达时自动禁用。构建失败时自动诊断常见错误（AAPT2、Gradle 配置等）。auto 模式检测 git 改动范围（含 unstaged）选择最轻构建方式。构建日志写入 /tmp/aidev-build-<PID>.log，成功自动删除。"
         },
         {
           "title": "新建 Android 项目",
           "cmd": "aidev-create-android-project <应用名> <包名> [输出目录]",
           "desc": "从模板创建 Android 项目，自动匹配当前环境的 AGP/Kotlin/Gradle 版本",
           "tags": ["内置命令", "Android 开发", "脚手架"],
-          "usage": "  aidev-create-android-project MyApp com.example.myapp                        # 创建到 /Workspace/Android/MyApp\n  aidev-create-android-project MyApp com.example.myapp /root/projects               # 指定输出目录",
+          "usage": "  aidev-create-android-project MyApp com.example.myapp                        # 创建到 /root/Workspace/Android/MyApp\n  aidev-create-android-project MyApp com.example.myapp /root/projects               # 指定输出目录",
           "permissions": "无特殊权限要求。需在 Ubuntu 容器内执行。",
           "notes": "生成的项目包含: build.gradle.kts (AGP 8.7.3 + Kotlin 2.0.21)、单 Activity + layout、Material Design 主题。自动下载 Gradle Wrapper 并初始化 Git。创建后可直接 aidev-build --full 编译。"
         },
@@ -444,18 +453,27 @@
           "cmd": "aidev-error-why [关键词]",
           "desc": "搜索常见构建/运行时错误并显示中文解决方案，aidev-build 失败时自动调用",
           "tags": ["内置命令", "调试", "诊断"],
-          "usage": "  aidev-error-why AAPT2                               # 搜索 AAPT2 相关错误\n  aidev-error-why proxy                                 # 搜索代理相关错误\n  cat build.log | aidev-error-why                        # 从编译日志中自动匹配\n  aidev-build --full 2>&1 | aidev-error-why              # 构建失败后诊断\n  aidev-error-why --all                                  # 查看所有支持的错误模式",
+          "usage": "  aidev-error-why AAPT2                               # 搜索 AAPT2 相关错误\n  aidev-error-why --lang en AAPT2                       # 英文输出\n  aidev-error-why proxy                                 # 搜索代理相关错误\n  cat build.log | aidev-error-why                        # 从编译日志中自动匹配\n  aidev-build --full 2>&1 | aidev-error-why              # 构建失败后诊断\n  aidev-error-why --all                                  # 查看所有支持的错误模式",
           "permissions": "无特殊权限要求",
           "notes": "支持的模式: AAPT2 死锁/崩溃、Kotlin 编译错误、Gradle Daemon/配置问题、依赖冲突、资源未找到、NDK/ABI、Java 版本、代理、OOM、SDK 路径。aidev-build 构建失败时自动运行此命令。"
         },
         {
           "title": "代码搜索索引",
-          "cmd": "aidev-index [class|res|string|layout|function] <关键词>",
+          "cmd": "aidev-index [class|res|resource|string|layout|function|fun|component] <关键词>",
           "desc": "为 Android 项目建立可搜索索引，快速查找类和资源定义位置",
           "tags": ["内置命令", "Android 开发", "搜索"],
           "usage": "  aidev-index                                    # 构建/刷新索引\n  aidev-index class MainActivity              # 搜索类定义\n  aidev-index res layout                      # 搜索布局资源\n  aidev-index string app_name                 # 搜索字符串资源\n  aidev-index layout activity                 # 搜索布局文件\n  aidev-index function loadData               # 搜索方法名\n  aidev-index component MainActivity          # 搜索 Android 组件",
           "permissions": "无特殊权限要求。需要在项目根目录运行。",
           "notes": "首次运行会扫描 java/ 目录和 res/ 资源文件，建立 .aidev-index.json 索引。后续搜索秒级返回。索引包含: 类名、资源、方法签名、AndroidManifest 组件。"
+        },
+        {
+          "title": "安装 APK",
+          "cmd": "aidev-install [选项] [APK路径]",
+          "desc": "安装 APK，自动发现最新构建产物，支持静默（Shizuku）/标准（系统安装器）双模式",
+          "tags": ["内置命令", "Android 开发", "安装"],
+          "usage": "  aidev-install                                    # 自动发现 APK，优先 Shizuku 静默安装\n  aidev-install app-debug.apk                     # 安装指定 APK\n  aidev-install --silent -s                       # 强制 Shizuku 静默安装\n  aidev-install --gui -g                          # 强制系统安装界面\n  aidev-install --uninstall -u com.example.app    # 卸载应用\n  aidev-install --status                          # 检查 Shizuku 状态",
+          "permissions": "Shizuku 静默安装需 Shizuku 授权且授予 root 或 shell 权限。系统安装器模式无需特殊权限。",
+          "notes": "auto 模式先通过 heartbeat 检测 Shizuku 是否可用，可用则静默安装，不可用则回退到系统安装界面（通过 CommandBridge 发送请求）。APK 路径不在 /sdcard/ 下时自动复制到临时路径再安装，安装后自动清理。"
         }
       ]
     },

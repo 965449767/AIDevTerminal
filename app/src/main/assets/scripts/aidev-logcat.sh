@@ -11,7 +11,7 @@
 #   aidev-logcat --watch-crash                       # 持续监听直到检测到崩溃
 #   aidev-logcat --clear                             # 清空缓冲区
 
-set -e
+set -eo pipefail
 BRIDGE_DIR="/host-home/.aidev-shizuku-bridge"
 REQUEST_DIR="$BRIDGE_DIR/request"
 RESULT_DIR="$BRIDGE_DIR/result"
@@ -75,7 +75,7 @@ if [ "$FOLLOW" = "--follow" ]; then
     echo "持续监听中... (Ctrl+C 停止)"
     echo ""
 
-    CRASH_PATTERNS="FATAL EXCEPTION|CRASH|Native crash|kill|ANR|Process.*has died|android.util.Log"
+    CRASH_PATTERNS="FATAL EXCEPTION|CRASH|Native crash|ANR|Process.*has died|FATAL.*signal"
 
     LAST_SIZE=0
     while true; do

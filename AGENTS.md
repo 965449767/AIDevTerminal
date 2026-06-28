@@ -83,7 +83,7 @@ These are available at `/usr/local/bin/aidev-*` inside the PRoot Ubuntu environm
 | `aidev-gen activity\|fragment\|viewmodel <name>` | Generate component skeleton code |
 | `aidev-index class\|res\|layout\|string\|function <kw>` | Code search index for Android projects |
 
-Run `opencode-install` once to register these as OpenCode custom commands
+Run `opencode-check` once to register these as OpenCode custom commands
 (installs OpenCode if needed + writes command files to `~/.config/opencode/commands/`).
 
 ### 知识库同步规则

@@ -1,5 +1,6 @@
 package com.aidev.terminal
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -7,10 +8,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
-import java.util.concurrent.CountDownLatch
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @Suppress("StaticFieldLeak")
 object ShizukuBridgeService {
 
@@ -35,8 +37,13 @@ object ShizukuBridgeService {
         job = CoroutineScope(Dispatchers.IO).launch {
             while (isActive) {
                 runCatching {
-                    requestDir.listFiles()?.filter { it.name.startsWith("log_") || it.name.startsWith("camera_") || it.name.startsWith("exec_") }?.forEach { file ->
-                        handleRequest(requestDir, resultDir, file)
+                    requestDir.listFiles()?.filter {
+                        (it.name.startsWith("log_") || it.name.startsWith("camera_") || it.name.startsWith("exec_") || it.name.startsWith("hb_")) &&
+                        !it.name.endsWith(".processing")
+                    }?.forEach { file ->
+                        val claimed = File(requestDir, "${file.name}.processing")
+                        if (!file.renameTo(claimed)) return@forEach
+                        launch { handleRequest(requestDir, resultDir, claimed) }
                     }
                 }
                 delay(500)
@@ -50,29 +57,29 @@ object ShizukuBridgeService {
         appCtx = null
     }
 
-    private fun handleRequest(requestDir: File, resultDir: File, reqFile: File) {
-        val resFile = File(resultDir, reqFile.name)
-        if (resFile.exists()) return
+    private suspend fun handleRequest(requestDir: File, resultDir: File, processingFile: File) {
+        val origName = processingFile.name.removeSuffix(".processing")
+        val resFile = File(resultDir, origName)
 
-        val content = runCatching { reqFile.readText() }.getOrNull() ?: return
+        val content = runCatching { processingFile.readText() }.getOrNull() ?: return
         val fields = content.lines().associate {
             val parts = it.split("=", limit = 2)
             parts[0] to if (parts.size > 1) parts[1] else ""
         }
 
         val type = fields["TYPE"] ?: ""
-        AIDevLogger.i("ShizukuBridge", "Processing: type=$type, file=${reqFile.name}")
+        AIDevLogger.i("ShizukuBridge", "Processing: type=$type, file=$origName")
 
         when (type) {
             "exec" -> handleExecRequest(resFile, fields["COMMAND"] ?: "")
             else -> handleLogRequest(resFile, fields)
         }
-        reqFile.delete()
+        processingFile.delete()
     }
 
-    private fun handleExecRequest(resFile: File, command: String) {
+    private suspend fun handleExecRequest(resFile: File, command: String) {
         AIDevLogger.i("ShizukuBridge", "Executing: $command")
-        val result = runBlocking { ShizukuLogcat.executeCommand(command) }
+        val result = ShizukuLogcat.executeCommand(command)
         val output = if (result.exitCode == 0) {
             result.stdout.ifBlank { "命令执行成功（无输出）" }
         } else {
@@ -81,7 +88,7 @@ object ShizukuBridgeService {
         atomicWriteText(resFile, output)
     }
 
-    private fun handleLogRequest(resFile: File, fields: Map<String, String>) {
+    private suspend fun handleLogRequest(resFile: File, fields: Map<String, String>) {
         val packageName = fields["PACKAGE"] ?: "com.aidev.terminal"
         val lineCount = fields["LINES"]?.toIntOrNull() ?: 200
         val follow = fields["FOLLOW"]?.isNotEmpty() == true
@@ -107,25 +114,28 @@ object ShizukuBridgeService {
                 }
             )
         } else {
-            val done = CountDownLatch(1)
-            ShizukuLogcat.fetchLog(
-                packageName = packageName,
-                lines = lineCount,
-                level = level,
-                tag = tag
-            ) { result ->
-                result.onSuccess { logs ->
-                    atomicWriteText(resFile, logs)
-                }.onFailure { e ->
-                    AIDevLogger.e("ShizukuBridge", "fetchLog failed", e)
-                    atomicWriteText(resFile, "ERROR: ${e.message}\n")
+            val logs = try {
+                withTimeout(30_000L) {
+                    suspendCancellableCoroutine<String> { cont ->
+                        ShizukuLogcat.fetchLog(
+                            packageName = packageName,
+                            lines = lineCount,
+                            level = level,
+                            tag = tag
+                        ) { result ->
+                            result.onSuccess { logs ->
+                                cont.resume(logs, onCancellation = null)
+                            }.onFailure { e ->
+                                AIDevLogger.e("ShizukuBridge", "fetchLog failed", e)
+                                cont.resume("ERROR: ${e.message}\n", onCancellation = null)
+                            }
+                        }
+                    }
                 }
-                done.countDown()
+            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                "ERROR: 请求超时\n"
             }
-            runCatching { done.await(30, java.util.concurrent.TimeUnit.SECONDS) }
-            if (done.count > 0) {
-                atomicWriteText(resFile, "ERROR: 请求超时\n")
-            }
+            atomicWriteText(resFile, logs)
         }
     }
 

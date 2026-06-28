@@ -3,7 +3,11 @@
 # 用法: aidev-apk-info <apk_path>
 # 依赖: aapt2 (优先) 或只显示基本信息
 
-set -e
+set -eo pipefail
+CLEANUP_DIRS=""
+
+cleanup() { for d in $CLEANUP_DIRS; do rm -rf "$d" 2>/dev/null || true; done; }
+trap cleanup EXIT
 
 if [ -z "$1" ]; then
     echo "用法: aidev-apk-info <apk_path>"
@@ -118,6 +122,7 @@ else
     # 从 AndroidManifest.xml 提取基本信息
     if command -v unzip &>/dev/null; then
         TMPDIR=$(mktemp -d 2>/dev/null || echo "/tmp/apk-info-$$")
+        CLEANUP_DIRS="$CLEANUP_DIRS $TMPDIR"
         mkdir -p "$TMPDIR"
         if unzip -o "$APK" AndroidManifest.xml -d "$TMPDIR" &>/dev/null; then
             MANIFEST="$TMPDIR/AndroidManifest.xml"
@@ -126,7 +131,6 @@ else
                 echo "  包名: $PKG"
             fi
         fi
-        rm -rf "$TMPDIR" 2>/dev/null || true
     fi
 
     echo ""

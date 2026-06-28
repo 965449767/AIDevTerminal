@@ -31,9 +31,14 @@ object TerminalShellAssets {
         if (needsDeploy) {
             installProotSupportLibraries(activity)
             if (rootfs.isDirectory) {
-                deployTools(activity, rootfs)
+                deployLargeAssets(activity, rootfs)
             }
             deployMarker.writeText("$currentCode\n")
+        }
+
+        // OpenCode 命令配置文件每次启动都部署（确保与新命令同步）
+        if (rootfs.isDirectory) {
+            deployOpenCodeCommands(activity, rootfs)
         }
 
         // rootfs 辅助脚本每次检查（rootfs 可能被重装）
@@ -104,7 +109,8 @@ object TerminalShellAssets {
         File(home, ".aidev_shell_fallback").delete()
     }
 
-    private fun deployTools(activity: Activity, rootfs: File) {
+    /** 部署大文件（curl/ca-certs），仅在 versionCode 变更时执行 */
+    private fun deployLargeAssets(activity: Activity, rootfs: File) {
         val targetDir = File(rootfs, "usr/local/bin").apply { mkdirs() }
         runCatching {
             activity.assets.open("tools/curl").use { input ->
@@ -120,10 +126,13 @@ object TerminalShellAssets {
             }
             File(caCertsDir, "ca-certificates.crt").setReadable(true)
         }
+    }
 
+    /** 部署 OpenCode 命令配置 .md 文件，每次启动都执行 */
+    private fun deployOpenCodeCommands(activity: Activity, rootfs: File) {
         val cmdsDir = File(rootfs, "root/.config/opencode/commands").apply { mkdirs() }
         listOf(
-            "aidev-build", "aidev-apk-info", "aidev-create-project",
+            "aidev-build", "aidev-apk-info", "aidev-create-android-project",
             "aidev-gen", "aidev-error-why", "aidev-logcat", "aidev-index"
         ).forEach { name ->
             runCatching {
@@ -168,7 +177,7 @@ object TerminalShellAssets {
             aidev-auto-bootstrap() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-auto-bootstrap "${'$'}@"; }
             aidev-doctor() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-doctor "${'$'}@"; }
             setup-dev-env() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" setup-dev-env "${'$'}@"; }
-            opencode-install() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" opencode-install "${'$'}@"; }
+            opencode-check() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" opencode-check "${'$'}@"; }
             setup-opencode() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" setup-opencode "${'$'}@"; }
             aidev-current-project() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-current-project" "${'$'}@"; }
             aidev-agent-context() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-agent-context" "${'$'}@"; }
@@ -183,11 +192,14 @@ object TerminalShellAssets {
             aidev-gen() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-gen "${'$'}@"; }
             aidev-error-why() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-error-why "${'$'}@"; }
             aidev-index() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-index "${'$'}@"; }
+            android-sh() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" android-sh "${'$'}@"; }
+            installapk() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" installapk "${'$'}@"; }
+            uninstallapp() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" uninstallapp "${'$'}@"; }
+            aidev-clean() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-ubuntu-core" aidev-clean "${'$'}@"; }
             list-listen-ports() { /system/bin/sh "${'$'}AIDEV_BIN/list-listen-ports" "${'$'}@"; }
             task-list() { /system/bin/sh "${'$'}AIDEV_BIN/task-list" "${'$'}@"; }
             task-run() { /system/bin/sh "${'$'}AIDEV_BIN/task-run" "${'$'}@"; }
             aidev-proxy() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-proxy" "${'$'}@"; }
-            aidev-clean() { /system/bin/sh "${'$'}AIDEV_BIN/aidev-clean" "${'$'}@"; }
             """.trimIndent() + "\n"
         )
     }

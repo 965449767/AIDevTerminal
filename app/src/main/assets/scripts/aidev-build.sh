@@ -3,7 +3,7 @@
 # 自动选择最轻验证方式，处理 AAPT2 死锁，诊断构建错误
 # 用法: aidev-build [--full|--test|--compile] [--clean]
 
-set -o pipefail
+set -eo pipefail
 
 MODE="auto"
 CLEAN=false
@@ -21,7 +21,7 @@ for arg in "$@"; do
             echo "选项:"
             echo "  --full       全量编译 (assembleDebug)"
             echo "  --test       编译 + 单元测试"
-            echo "  --compile    仅 kotlin 编译 (默认, 自动选择最轻方式)"
+            echo "  --compile    仅 kotlin 编译"
             echo "  --clean      先 clean 再构建"
             echo "  --help       显示此帮助"
             echo ""
@@ -52,15 +52,12 @@ fi
 
 chmod +x gradlew 2>/dev/null || true
 
-# 检查并处理 AAPT2 daemon
-WRAP_SCRIPT="/usr/local/bin/wrap-android-native.sh"
-if [ -f "$WRAP_SCRIPT" ]; then
-    if grep -q "android.aapt2DaemonMode=false" ~/.gradle/gradle.properties 2>/dev/null; then
-        :
-    else
-        echo "设置 aapt2DaemonMode=false..."
-        bash "$WRAP_SCRIPT" 2>/dev/null || true
-    fi
+# 检查 Android SDK
+if [ ! -f "local.properties" ] && [ -z "${ANDROID_HOME:-}" ] && [ -z "${ANDROID_SDK_ROOT:-}" ]; then
+    echo "错误: 未找到 Android SDK。请创建 local.properties:"
+    echo "  echo 'sdk.dir=/Android' > local.properties"
+    echo "或设置环境变量: export ANDROID_HOME=/Android"
+    exit 1
 fi
 
 PROXY_ARGS=""
@@ -95,7 +92,7 @@ if [ "$CLEAN" = true ]; then
 fi
 
 BUILD_START=$(date +%s)
-BUILD_LOG="build.log"
+BUILD_LOG="/tmp/aidev-build-$$.log"
 > "$BUILD_LOG"
 
 echo ""
@@ -120,7 +117,7 @@ case "$MODE" in
         ;;
     auto)
         echo "→ 检测改动范围，选择最轻构建方式..."
-        CHANGED=$(git diff --name-only HEAD 2>/dev/null || echo "")
+        CHANGED=$( (git diff --name-only HEAD 2>/dev/null; git diff --name-only 2>/dev/null) | sort -u || echo "")
         if echo "$CHANGED" | grep -qE '\.(kts|gradle|properties|xml)$' 2>/dev/null || [ ! -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
             echo "→ 依赖或首次构建，走全量"
             ./gradlew assembleDebug $GRADLE_FLAGS 2>&1 | tee -a "$BUILD_LOG"
@@ -167,8 +164,8 @@ else
     echo "  BUILD FAILED (${BUILD_MIN}m${BUILD_SEC}s)"
     echo ""
 
-    ERR_COUNT=$(grep -c '^e: ' "$BUILD_LOG" 2>/dev/null || echo 0)
-    if [ "$ERR_COUNT" -gt 0 ]; then
+    ERR_COUNT=$(grep -c '^e: ' "$BUILD_LOG" 2>/dev/null || true)
+    if [ "$ERR_COUNT" -gt 0 ] 2>/dev/null; then
         echo "  -- Kotlin 编译错误 ($ERR_COUNT) --"
         grep '^e: ' "$BUILD_LOG" | head -20
         [ "$ERR_COUNT" -gt 20 ] && echo "  ... 还有 $((ERR_COUNT - 20)) 个错误，查看完整日志: grep '^e: ' $BUILD_LOG"
@@ -202,5 +199,9 @@ else
     echo "  完整日志: $BUILD_LOG"
 fi
 
+echo "═══ 日志: $BUILD_LOG ═══"
 echo "═══════════════════════════════════════════"
+
+# 构建成功则清理日志，失败则保留
+[ $BUILD_EXIT -eq 0 ] && rm -f "$BUILD_LOG" 2>/dev/null || true
 exit $BUILD_EXIT

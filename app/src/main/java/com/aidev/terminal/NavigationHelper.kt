@@ -77,7 +77,7 @@ internal class NavigationHelper(private val h: FilePageHost) {
 
     fun showQuickDirs() {
         val dirs = listOf(
-            "工作目录" to File(h.hostActivity().filesDir, "home/ubuntu-rootfs/Workspace"),
+            "工作目录" to File(h.hostActivity().filesDir, "home/ubuntu-rootfs/root/Workspace"),
             "内部存储" to Environment.getExternalStorageDirectory(),
             "下载目录" to File(Environment.getExternalStorageDirectory(), "Download"),
             "AIDev Home" to File(h.hostActivity().filesDir, "home"),
@@ -99,7 +99,7 @@ internal class NavigationHelper(private val h: FilePageHost) {
     fun showRecentProjects() {
         val recent = h.hostPm().fileRecentDirs.toMutableSet()
         val roots = listOf(
-            File(h.hostActivity().filesDir, "home/ubuntu-rootfs/Workspace"),
+            File(h.hostActivity().filesDir, "home/ubuntu-rootfs/root/Workspace"),
             File(h.hostActivity().filesDir, "home/ubuntu-rootfs/root/projects"),
             File(h.hostActivity().filesDir, "home/projects"),
             File(Environment.getExternalStorageDirectory(), "Download")

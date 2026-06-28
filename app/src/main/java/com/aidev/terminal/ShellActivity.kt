@@ -274,7 +274,7 @@ class ShellActivity : Activity() {
             0 -> openTerminalCommand("ubuntu")
             1 -> openTerminalCommand("check-dev-env")
             2 -> openTerminalCommand("list-listen-ports")
-            3 -> openTerminalCommand("opencode-install")
+            3 -> openTerminalCommand("opencode-check")
             4 -> pickBackgroundImage()
             5 -> openCurrentProject("pwd && ls -la")
             6 -> openCurrentProject("git status --short --branch")

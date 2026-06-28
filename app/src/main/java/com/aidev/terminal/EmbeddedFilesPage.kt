@@ -208,13 +208,16 @@ class EmbeddedFilesPage : ShellPage, FilePageHost {
     }
 
     private fun workspaceDir(activity: Activity): File =
-        File(activity.filesDir, "home/ubuntu-rootfs/Workspace")
+        File(activity.filesDir, "home/ubuntu-rootfs/root/Workspace")
 
     override fun create(activity: Activity, ui: AIDevUi, host: ShellHost): View {
         this.activity = activity
         this.ui = ui
         gf = GestureFeedbackManager(activity, pm.sharedPreferences)
-        runCatching { workspaceDir(activity).mkdirs() }
+        runCatching {
+            workspaceDir(activity).mkdirs()
+            File(workspaceDir(activity), "Android").mkdirs()
+        }
         _state.update { it.copy(leftDir = workspaceDir(activity)) }
         val root = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL

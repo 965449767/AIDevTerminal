@@ -7,14 +7,14 @@ set -eo pipefail
 
 APP_NAME="${1:-}"
 PACKAGE="${2:-}"
-OUTPUT_DIR="${3:-/Workspace/Android}"
+OUTPUT_DIR="${3:-/root/Workspace/Android}"
 
 if [ -z "$APP_NAME" ] || [ -z "$PACKAGE" ]; then
     echo "用法: aidev-create-android-project <应用名> <包名> [输出目录]"
     echo ""
     echo "示例:"
     echo "  aidev-create-android-project MyApp com.example.myapp"
-    echo "  aidev-create-android-project MyApp com.example.myapp /Workspace/Android"
+    echo "  aidev-create-android-project MyApp com.example.myapp /root/Workspace/Android"
     exit 1
 fi
 
@@ -39,9 +39,13 @@ GRADLE_VERSION="8.14.5"
 
 # 从构建脚本所在目录上溯查找宿主项目（AdvTerminal）
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../../.." 2>/dev/null && pwd || true)"
+PROJECT_ROOT=""
+for candidate in "$SCRIPT_DIR" "$SCRIPT_DIR/.." "$SCRIPT_DIR/../.." "$SCRIPT_DIR/../../.." "$SCRIPT_DIR/../../../.."; do
+    candidate=$(cd "$candidate" 2>/dev/null && pwd || true)
+    [ -n "$candidate" ] && [ -f "$candidate/build.gradle.kts" ] && [ -f "$candidate/settings.gradle.kts" ] && { PROJECT_ROOT="$candidate"; break; }
+done
 HAS_HOST=false
-if [ -f "$PROJECT_ROOT/build.gradle.kts" ]; then
+if [ -n "$PROJECT_ROOT" ] && [ -f "$PROJECT_ROOT/build.gradle.kts" ]; then
     HAS_HOST=true
     FOUND_AGP=$(grep "com.android.application" "$PROJECT_ROOT/build.gradle.kts" 2>/dev/null | sed -n 's/.*version[[:space:]]*"\([^"]*\)".*/\1/p')
     [ -n "$FOUND_AGP" ] && AGP_VERSION="$FOUND_AGP"
@@ -146,6 +150,10 @@ fi
 
 if [ -n "$SDK_DIR" ]; then
     echo "sdk.dir=$SDK_DIR" > local.properties
+    echo "  SDK:       $SDK_DIR"
+else
+    echo "  警告: 未找到 Android SDK，需要手动创建 local.properties"
+    echo "         echo 'sdk.dir=/Android' > local.properties"
 fi
 
 # ─── Gradle Wrapper（distributionUrl 从宿主继承） ───

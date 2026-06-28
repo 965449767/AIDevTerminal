@@ -34,8 +34,8 @@ build_index() {
     mkdir -p /tmp/aidev-index-$$ 2>/dev/null || true
     local tmp="/tmp/aidev-index-$$"
 
-    # — 类 / 对象 / 接口 —
-    find "$SRC_DIR/java" -name "*.kt" -o -name "*.java" 2>/dev/null | while read -r f; do
+    # — 类 / 对象 / 接口（排除 build/ 和 generated/） —
+    find "$SRC_DIR/java" \( -name "build" -o -name "generated" -o -name ".gradle" \) -prune -o \( -name "*.kt" -o -name "*.java" \) -print 2>/dev/null | while read -r f; do
         local rel="${f#$SRC_DIR/java/}"
         local pkg=""
         pkg=$(grep "^package " "$f" 2>/dev/null | sed 's/package //;s/;//' | head -1)
@@ -92,7 +92,15 @@ build_index() {
     fi
 
     # — 合并为 JSON —
-    json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g; s/\r//g; s/\n/\\n/g'; }
+    json_escape() {
+        local s="$1"
+        s="${s//\\/\\\\}"
+        s="${s//\"/\\\"}"
+        s="${s//$'\t'/\\t}"
+        s="${s//$'\r'/}"
+        s="${s//$'\n'/\\n}"
+        printf '%s' "$s"
+    }
     echo "{" > "$tmp/index.json"
 
     # classes
@@ -145,11 +153,12 @@ build_index() {
     echo '  ]' >> "$tmp/index.json"
 
     echo "}" >> "$tmp/index.json"
-    mv "$tmp/index.json" "$INDEX_FILE"
+    local tmp_index="${INDEX_FILE}.tmp-$$"
+    cp "$tmp/index.json" "$tmp_index" && mv "$tmp_index" "$INDEX_FILE"
     rm -rf "$tmp" 2>/dev/null || true
 
     local count
-    count=$(grep -c '"name"' "$INDEX_FILE" 2>/dev/null || echo 0)
+    count=$(grep -c '"name"' "$INDEX_FILE" 2>/dev/null || true)
     echo "索引完成: $count 条记录"
 }
 

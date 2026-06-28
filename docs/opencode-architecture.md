@@ -250,10 +250,10 @@ SSE 监听器 → 检测 session.status: busy → idle → sysnotify
 
 | 组件 | 位置 | 说明 |
 |---|---|---|
-| opencode-install.sh | `assets/scripts/opencode-install.sh` | 在 PRoot Ubuntu 内安装 opencode 和命令 .md 文件 |
+| opencode-check.sh | `assets/scripts/opencode-check.sh` | 验证 OpenCode 安装与 AIDev 命令注册状态 |
 | setup-opencode.sh | `assets/scripts/setup-opencode.sh` | 安装包装脚本 |
 | command .md 文件 | `assets/opencode-commands/` → rootfs `~/.config/opencode/commands/` | aidev-* 命令的 OpenCode 集成 |
-| .aidevrc shell 函数 | `TerminalShellAssets.kt` (line 171-172) | `opencode-install()` 和 `setup-opencode()` 函数 |
+| .aidevrc shell 函数 | `TerminalShellAssets.kt` (line 171-172) | `opencode-check()` 和 `setup-opencode()` 函数 |
 | aidev-ubuntu-core 路由 | `UbuntuBootstrapScripts.kt` (line 573) | 路由到 PRoot 内的安装脚本 |
 | 路径发现 | `EmbeddedSettingsPage.kt` (line 198-204) | 检查 opencode 二进制路径 |
 | 命令面板 | `ShellActivity.kt` (line 264-277) | 命令面板中的 opencode 入口 |

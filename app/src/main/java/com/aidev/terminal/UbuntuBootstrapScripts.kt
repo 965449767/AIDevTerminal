@@ -244,7 +244,7 @@ object UbuntuBootstrapScripts {
             # Find opencode
             OC=$(command -v opencode 2>/dev/null)
             if [ -z "${'$'}OC" ]; then
-                sysnotify --priority high "OpenCode" "找不到 opencode 命令，请先运行 opencode-install" >/dev/null 2>&1
+                sysnotify --priority high "OpenCode" "找不到 opencode 命令，请先运行 opencode-check" >/dev/null 2>&1
                 exit 127
             fi
 
@@ -288,7 +288,7 @@ object UbuntuBootstrapScripts {
         if (!rootfs.isDirectory) return
         val binDir = java.io.File(rootfs, "usr/local/bin")
         binDir.mkdirs()
-        val scripts = listOf("check-dev-env.sh", "repair-dev-env.sh", "setup-dev-env.sh", "opencode-install.sh", "setup-opencode.sh", "aidev-logcat.sh", "aidev-shizuku.sh", "aidev-apk-info.sh", "aidev-build.sh", "aidev-create-android-project.sh", "aidev-gen.sh", "aidev-error-why.sh", "aidev-index.sh")
+        val scripts = listOf("check-dev-env.sh", "repair-dev-env.sh", "setup-dev-env.sh", "opencode-check.sh", "setup-opencode.sh", "aidev-logcat.sh", "aidev-shizuku.sh", "aidev-apk-info.sh", "aidev-build.sh", "aidev-create-android-project.sh", "aidev-gen.sh", "aidev-error-why.sh", "aidev-index.sh", "aidev-install.sh", "android-sh.sh", "installapk.sh", "uninstallapp.sh", "aidev-clean.sh")
         for (script in scripts) {
             val dstName = script.removeSuffix(".sh")
             val dst = java.io.File(binDir, dstName)
@@ -617,7 +617,8 @@ AIDEV_PWD_HOOK_EOF
           install-ubuntu) install_ubuntu "${'$'}@" ;;
           aidev-doctor) aidev_doctor_android ;;
           setup-dev-env) run_ubuntu_command "/usr/local/bin/setup-dev-env" ;;
-          opencode-install|setup-opencode) run_ubuntu_command "/usr/local/bin/opencode-install" ;;
+          opencode-check) run_ubuntu_command "/usr/local/bin/opencode-check" ;;
+          opencode-install|setup-opencode) run_ubuntu_command "/usr/local/bin/setup-opencode" ;;
           aidev-build) run_ubuntu_command "/usr/local/bin/aidev-build" ;;
           aidev-apk-info) run_ubuntu_command "/usr/local/bin/aidev-apk-info" ;;
           aidev-create-android-project) run_ubuntu_command "/usr/local/bin/aidev-create-android-project" ;;
@@ -625,6 +626,11 @@ AIDEV_PWD_HOOK_EOF
           aidev-error-why) run_ubuntu_command "/usr/local/bin/aidev-error-why" ;;
           aidev-index) run_ubuntu_command "/usr/local/bin/aidev-index" ;;
           aidev-opencode) run_ubuntu_command "/usr/local/bin/aidev-opencode" ;;
+          aidev-install) run_ubuntu_command "/usr/local/bin/aidev-install" ;;
+          android-sh) run_ubuntu_command "/usr/local/bin/android-sh" ;;
+          installapk) run_ubuntu_command "/usr/local/bin/installapk" ;;
+          uninstallapp) run_ubuntu_command "/usr/local/bin/uninstallapp" ;;
+          aidev-clean) run_ubuntu_command "/usr/local/bin/aidev-clean" ;;
           fix-bashrc) fix_bashrc ;;   
           aidev-auto-bootstrap)
             if has_ubuntu; then
